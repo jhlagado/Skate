@@ -6,7 +6,7 @@ Skate is a small native Scheme compiler and runtime for Z80 computers running
 CP/M. It turns `.sk8` source into NOBJ 1.0 output and linked `.COM` programs
 that can run from the CP/M prompt.
 
-The current public release is Skate 0.2.0, a work-in-progress compiler for
+The current public release is Skate 0.2.1, a work-in-progress compiler for
 small Scheme programs. It reads CP/M source, resolves package definitions and
 lexical bindings, emits native Z80 code for integer and boolean expressions,
 and publishes checked NOBJ and `.COM` files.

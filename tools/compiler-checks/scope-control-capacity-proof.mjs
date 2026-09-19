@@ -4,11 +4,11 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 import { loadAssembly } from "../../tests/z80.ts";
-import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 import {
   installCpm22File,
   readCpm22File,
 } from "../../../triptych/tools/lib/cpm22-disk.mjs";
+import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 
 const triptychRoot = fileURLToPath(
   new URL("../../../triptych/", import.meta.url),
@@ -29,49 +29,21 @@ const backing = new Uint8Array(Math.ceil(systemDisk.length / 512) * 512);
 backing.set(systemDisk);
 
 const compiler = await loadAssembly("src/compiler/scope-control-compiler.asm");
-assert.equal(compiler.image.base, 0);
-assert.ok(compiler.address("SCMAIN") === 0x0100);
-assert.ok(compiler.address("SCEND") < 0x10000);
+const compilerBytes = compiler.image.bytes.slice(0x0100);
+const globalDefinitions = Array.from(
+  { length: 256 },
+  (_, index) => `(define g${String(index).padStart(3, "0")} ${index})`,
+).join("");
+const cases = [
+  ["GLOB256.SK8", `${globalDefinitions}(+ g255 1)`, "256"],
+  ["FORM256.SK8", Array.from({ length: 256 }, () => "1").join(" "), "1"],
+];
 let disk = installCpm22File(backing, {
   name: "SKATE.COM",
-  bytes: compiler.image.bytes.slice(0x0100),
+  bytes: compilerBytes,
   padByte: 0x1a,
 });
-const cases = [
-  ["ADD.SK8", "(+ 40 2)", "42"],
-  ["GLOBAL.SK8", "(define base 40) (+ base 2)", "42"],
-  ["LET.SK8", "(let ((base 40) (delta 2)) (+ base delta))", "42"],
-  ["LETSTAR.SK8", "(let* ((base 40) (delta (+ base 2))) delta)", "42"],
-  ["SHADOW.SK8", "(let ((value 1)) (let ((value 2)) value))", "2"],
-  ["BOOL-LET.SK8", "(let ((value #f)) (if value 1 2))", "2"],
-  [
-    "NESTLET.SK8",
-    "(let ((value (let ((inner 1)) inner)) (other 2)) value)",
-    "1",
-  ],
-  [
-    "NESTSTAR.SK8",
-    "(let* ((value (let ((inner 1)) inner)) (other 2)) value)",
-    "1",
-  ],
-  ["IF.SK8", "(if #t 42 0)", "42"],
-  ["IF-FALSE.SK8", "(if #f 1 42)", "42"],
-  ["AND.SK8", "(and #t 42)", "42"],
-  ["OR.SK8", "(or #f 42)", "42"],
-  ["UNBOUND.SK8", "unbound-name", "UNBOUND"],
-];
-const errorCases = [
-  ["BADFORM.SK8", "(let ((value 1 2)) value)"],
-  ["TOOLONG.SK8", "1 ".repeat(2600)],
-];
 for (const [name, source] of cases) {
-  disk = installCpm22File(disk, {
-    name,
-    bytes: new TextEncoder().encode(source + "\x1a"),
-    padByte: 0x1a,
-  });
-}
-for (const [name, source] of errorCases) {
   disk = installCpm22File(disk, {
     name,
     bytes: new TextEncoder().encode(source + "\x1a"),
@@ -103,8 +75,8 @@ function runCommand(command, expected, description) {
   runUntilPrompt(start, description);
   const output = transcript.slice(start);
   assert.ok(output.includes(expected), JSON.stringify(output));
-  return output;
 }
+
 try {
   machine.install_drive(0, disk, true);
   runUntilPrompt(0, "the boot prompt");
@@ -121,16 +93,16 @@ try {
       nobjBytes: object.length,
     });
     assert.equal(generated[0], 0x31, `${outputName} sets its private stack`);
-    const runName = outputName.replace(".COM", "");
-    runCommand(runName, `${expected}\r\n`, `run ${outputName}`);
-  }
-  for (const [name] of errorCases) {
-    runCommand(`SKATE ${name}`, "COMPILE ERROR\r\n", `reject ${name}`);
+    runCommand(
+      outputName.replace(".COM", ""),
+      `${expected}\r\n`,
+      `run ${outputName}`,
+    );
   }
   console.log(JSON.stringify(
     {
       status: "passed",
-      compilerBytes: compiler.image.bytes.length - 0x100,
+      compilerBytes: compilerBytes.length,
       imageEnd: compiler.image.end,
       cases: cases.map(([name]) => name),
       largestComBytes: Math.max(

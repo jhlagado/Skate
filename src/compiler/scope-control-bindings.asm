@@ -7,39 +7,38 @@ SCLETF:
         RET C                      ; Preserve a local-capacity failure.
 SCLETB:
         CALL RNEXT                 ; Read another binding list or the list close.
-        RET C                      ; Preserve source failure.
+        JP C,SCLETERR              ; Unwind the saved scope cursors on source failure.
         CP 2                       ; A close ends the parallel binding list.
         JR Z,SCLETBD               ; Add the pending entries to the active scope.
         CP 1                       ; Every binding is itself a two-element list.
-        JP NZ,SCSYN                ; A bare name or scalar is not a binding.
+        JP NZ,SCLETERR             ; A bare name or scalar is not a binding.
         CALL RNEXT                 ; Read the binding name.
-        RET C                      ; Preserve source failure.
+        JP C,SCLETERR              ; Unwind the saved scope cursors on source failure.
         CP 5                       ; Names are interned symbols.
-        JP NZ,SCSYN                ; Reject literal or list binding names.
+        JP NZ,SCLETERR             ; Reject literal or list binding names.
         LD (SCID),HL               ; The pending entry receives this full identity.
-        PUSH HL                    ; Nested initializer forms may change SCID.
         CALL SCNSLOT             ; Allocate a reusable local data slot.
-        RET C                      ; Reject the first slot beyond the local bound.
+        JP C,SCLETERR              ; Reject the first slot beyond the local bound.
         LD (SCSLOT),A              ; Save the selected slot for the pending entry.
+        CALL SCPEND                ; Record the name and slot before recursive code.
+        JP C,SCLETERR              ; Pending-binding capacity is explicit.
         CALL SCEXPR                ; Initializer sees only the outer local scope.
-        RET C                      ; Preserve its syntax or capacity error.
+        JP C,SCLETERR              ; Preserve its syntax or capacity error.
+        CALL SCPREV                ; Restore this binding's slot after nested forms.
+        JP C,SCLETERR              ; The pending record must still be present.
         LD A,(SCSLOT)              ; Recover the pending slot number.
         LD L,A                     ; Pass it to the runtime store.
         LD A,1                     ; Kind one denotes a local slot.
         CALL SCSTORE               ; Emit the initialized flag update.
-        RET C                      ; A fixup failure is terminal.
+        JP C,SCLETERR              ; A fixup failure is terminal.
         CALL SCEXPECT              ; Close the individual binding list.
-        RET C                      ; Reject a missing or extra binding expression.
-        POP HL                     ; Recover the binding name after its initializer.
-        LD (SCID),HL               ; Restore the identity for the pending record.
-        CALL SCPEND              ; Append its ID and slot to the pending stack.
-        RET C                      ; Pending-binding capacity is explicit.
+        JP C,SCLETERR              ; Reject a missing or extra binding expression.
         JR SCLETB                  ; Read the next binding or the outer close.
 SCLETBD:
         CALL SCBIND                 ; Publish pending IDs in the active local scope.
-        RET C                      ; Reject a scope-stack overflow before body code.
+        JP C,SCLETERR              ; Reject a scope-stack overflow before body code.
         CALL SCBODY                ; Compile the body, then consume its close.
-        RET C                      ; Preserve body failure before restoring cursors.
+        JP C,SCLETERR              ; Preserve body failure before restoring cursors.
         JP SCLETEND                 ; Restore old local cursors and return its value.
 
 ; let* is the same syntax, but each binding becomes visible before the next one.
@@ -48,36 +47,38 @@ SCLETSF:
         RET C                      ; Preserve a local-capacity failure.
 SCLETSB:
         CALL RNEXT                 ; Read another binding or the list close.
-        RET C                      ; Preserve source failure.
+        JP C,SCLETERR              ; Unwind the saved scope cursors on source failure.
         CP 2                       ; A close ends the sequential binding list.
         JR Z,SCLETSBD              ; The body follows the final binding.
         CP 1                       ; Every binding is a two-element list.
-        JP NZ,SCSYN                ; Reject a malformed binding list.
+        JP NZ,SCLETERR             ; Reject a malformed binding list.
         CALL RNEXT                 ; Read this binding's name.
-        RET C                      ; Preserve source failure.
+        JP C,SCLETERR              ; Unwind the saved scope cursors on source failure.
         CP 5                       ; Names are interned symbols.
-        JP NZ,SCSYN                ; Reject literal or list binding names.
+        JP NZ,SCLETERR             ; Reject literal or list binding names.
         LD (SCID),HL               ; The active local receives this full identity.
-        PUSH HL                    ; Nested initializer forms may change SCID.
         CALL SCNSLOT             ; Allocate a local slot before its initializer.
-        RET C                      ; Reject the first slot beyond the local bound.
+        JP C,SCLETERR              ; Reject the first slot beyond the local bound.
         LD (SCSLOT),A              ; Save the selected slot for the store.
+        CALL SCPEND                ; Record the name and slot before recursive code.
+        JP C,SCLETERR              ; Pending-binding capacity is explicit.
         CALL SCEXPR                ; The initializer sees earlier let* bindings.
-        RET C                      ; Preserve initializer failure.
+        JP C,SCLETERR              ; Preserve initializer failure.
+        CALL SCPREV                ; Restore this binding's slot after nested forms.
+        JP C,SCLETERR              ; The pending record must still be present.
         LD A,(SCSLOT)              ; Recover the selected slot number.
         LD L,A                     ; Pass it to the runtime store.
         LD A,1                     ; Kind one denotes a local slot.
         CALL SCSTORE               ; Emit the initialized flag update.
-        RET C                      ; A fixup failure is terminal.
+        JP C,SCLETERR              ; A fixup failure is terminal.
         CALL SCEXPECT              ; Close the individual binding list.
-        RET C                      ; Reject a missing or extra initializer.
-        POP HL                     ; Recover the binding name after its initializer.
-        CALL SCADDLOC              ; Its slot is the value saved in SCSLOT.
-        RET C                      ; Reject a local-directory overflow.
+        JP C,SCLETERR              ; Reject a missing or extra initializer.
+        CALL SCADDLOC              ; Its name and slot are saved in the pending record.
+        JP C,SCLETERR              ; Reject a local-directory overflow.
         JR SCLETSB                 ; Read the next sequential binding.
 SCLETSBD:
         CALL SCBODY                ; Compile and close the sequential body.
-        RET C                      ; Preserve body failure before cursor restore.
+        JP C,SCLETERR              ; Preserve body failure before cursor restore.
         JP SCLETEND                 ; Restore outer bindings and return the value.
 
 ; Save the active local cursors and consume the opening binding-list event.
@@ -94,10 +95,24 @@ SCLETSET:
         PUSH BC                    ; A nested let can now append its own records.
         PUSH DE                    ; Restore the caller return above both markers.
         CALL RNEXT                 ; The next event must open the binding list.
-        RET C                      ; Preserve source failure.
+        JR NC,SCLETOP               ; Continue with the first binding when present.
+        POP DE                     ; Remove the saved continuation before cleanup.
+        POP BC                     ; Discard the pending-record marker.
+        POP BC                     ; Discard the saved local cursors.
+        PUSH DE                    ; Restore the caller continuation for the error return.
+        SCF                       ; Preserve the reader failure after balanced cleanup.
+        RET
+SCLETOP:
         CP 1                       ; Kind one is an opening parenthesis.
-        JP NZ,SCSYN                ; Reject a malformed let binding container.
+        JP NZ,SCLETERR             ; Reject a malformed let binding container.
         RET                        ; The caller now reads individual bindings.
+
+; Remove a let's saved marker and cursor words before returning a compile error.
+SCLETERR:
+        POP BC                     ; Discard the pending-record marker.
+        POP BC                     ; Restore neither cursor on the terminal path.
+        SCF                       ; Carry identifies the syntax or capacity error.
+        RET                        ; The original SCFORM continuation remains below.
 
 ; Restore old local cursors and the pending-record top after a let body.
 SCLETEND:
@@ -158,9 +173,44 @@ SCPEND:
         XOR A                      ; Carry clear reports success.
         RET                        ; Return to the binding-list parser.
 
+; Recover the most recent pending name and slot without changing an expression value.
+SCPREV:
+        PUSH AF                    ; Preserve the initializer's value tag and flags.
+        PUSH HL                    ; Preserve the initializer's payload.
+        LD A,(SCBNDTOP)            ; At least the current binding must be pending.
+        OR A                       ; A zero top would indicate corrupted scope state.
+        JR NZ,SCPREVGO             ; Read the last pending record when present.
+        POP HL                     ; Restore the expression payload before failing.
+        POP AF                     ; Restore the expression tag before failing.
+        SCF                       ; Report the missing pending record.
+        RET
+SCPREVGO:
+        DEC A                      ; The current record is at top minus one.
+        LD C,A                     ; Keep the record index for both table lookups.
+        LD B,0                     ; Widen the bounded byte index to a word.
+        LD L,C                     ; Address the two-byte name identity.
+        LD H,0
+        ADD HL,HL
+        LD DE,SCBINDID
+        ADD HL,DE
+        LD E,(HL)                  ; Recover the pending name's low identity byte.
+        INC HL
+        LD D,(HL)                  ; Recover the pending name's high identity byte.
+        LD (SCID),DE               ; Restore the name for a sequential binding.
+        LD L,C                     ; Address the matching one-byte slot record.
+        LD H,0
+        LD DE,SCBINDSL
+        ADD HL,DE
+        LD A,(HL)                  ; Recover the slot selected before the initializer.
+        LD (SCSLOT),A              ; Restore it for SCSTORE or SCADDLOC.
+        POP HL                     ; Restore the initializer's payload.
+        POP AF                     ; Restore the initializer's value tag.
+        OR A                       ; Clear carry without changing the value registers.
+        RET
+
 ; Add one completed let* binding directly to the active local directory.
 SCADDLOC:
-        LD (SCID),HL               ; Retain the complete binding identity across addressing.
+        LD HL,(SCID)               ; The pending record retains the complete identity.
         LD A,(SCLOCTOP)            ; The active directory has one byte per record.
         CP 128                     ; Refuse a scope that would overwrite its table.
         JP NC,SCCAP                ; The local bound is an explicit compiler limit.
@@ -365,6 +415,14 @@ SCGNEW:
         RET
 SCGHIGH:
         INC HL                     ; The high-byte mismatch is at the record end.
-        JR SCGLOOK                 ; Continue at the next record's low byte.
+        INC DE                     ; Advance the parallel slot table.
+        LD A,(SCGIDX)              ; Advance the candidate slot number.
+        INC A
+        LD (SCGIDX),A
+        DEC BC                     ; One occupied identity has been checked.
+        LD A,B                     ; Test the remaining record count.
+        OR C
+        JR NZ,SCGLOOK
+        JR SCGNEW                  ; No existing identity matched.
 
 ; Read one closing parenthesis for a fixed-arity form.

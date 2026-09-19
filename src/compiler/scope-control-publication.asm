@@ -7,11 +7,34 @@
 ;  CP/M files before installing their final names.
 ;=============================================================================
 
-; Append zeroed three-byte slots, resolve generated addresses, and build NOBJ.
+; Append zeroed four-byte slots, resolve generated addresses, and build NOBJ.
 SCFIN:
         LD HL,(SCPC)              ; Generated code ends at the current cursor.
+        PUSH HL                    ; Keep the code end while sizing slot data.
+        LD HL,(SCGCOUNT)           ; Four bytes are needed for every global slot.
+        ADD HL,HL
+        ADD HL,HL
+        LD A,(SCLOCMAX)            ; Add four bytes for every local high-water slot.
+        PUSH HL                    ; Keep the global extent while scaling locals.
+        LD L,A
+        LD H,0
+        ADD HL,HL
+        ADD HL,HL
+        EX DE,HL                   ; DE now contains four times the local count.
+        POP HL                     ; Restore the four-times-global extent.
+        ADD HL,DE
+        LD DE,32                   ; Leave room for the serialized tail and checksum.
+        ADD HL,DE
+        POP DE                     ; DE is the generated-code end address.
+        ADD HL,DE                  ; HL is the complete staged-image end estimate.
+        JP C,SCCAP                 ; A wrapped extent cannot fit in the staged region.
+        LD DE,SCGENEND             ; The final payload must end below the tail guard.
+        OR A                       ; Clear carry before the boundary comparison.
+        SBC HL,DE
+        JP NC,SCCAP                ; Reject before appending slot bytes.
+        LD HL,(SCPC)               ; Restore the generated-code cursor for slot data.
         LD (SCGBASE),HL           ; Globals follow the generated instruction bytes.
-        LD BC,(SCGCOUNT)          ; One three-byte record is reserved per global.
+        LD BC,(SCGCOUNT)          ; One four-byte record is reserved per global.
 SCGDATA:
         LD A,B                     ; Test the high count byte first.
         OR C                       ; A zero pair means all global slots are present.
@@ -20,6 +43,8 @@ SCGDATA:
         LD (HL),A                  ; Store the payload low byte.
         INC HL                     ; Advance to the payload high byte.
         LD (HL),A                  ; Store the payload high byte.
+        INC HL                     ; Advance to the stored value tag.
+        LD (HL),A                  ; A zero tag is harmless while the slot is unbound.
         INC HL                     ; Advance to the initialized flag.
         LD (HL),A                  ; A zero flag makes an unresolved load fail.
         INC HL                     ; Advance to the following global slot.
@@ -29,7 +54,7 @@ SCLDATA:
         LD (SCLBASE),HL            ; Locals follow the complete global area.
         LD A,(SCLOCMAX)            ; The local high-water mark sets its extent.
         LD C,A                     ; Widen the byte count to a normal word.
-        LD B,0                     ; Local slots also occupy three bytes each.
+        LD B,0                     ; Local slots also occupy four bytes each.
 SCLOOP:
         LD A,B                     ; Test the high count byte first.
         OR C                       ; A zero pair means all local slots are present.
@@ -38,6 +63,8 @@ SCLOOP:
         LD (HL),A                  ; Store the payload low byte.
         INC HL                     ; Advance to the payload high byte.
         LD (HL),A                  ; Store the payload high byte.
+        INC HL                     ; Advance to the stored value tag.
+        LD (HL),A                  ; A zero tag is harmless while the slot is unbound.
         INC HL                     ; Advance to the initialized flag.
         LD (HL),A                  ; A zero flag protects an uninitialized local.
         INC HL                     ; Advance to the following local slot.
@@ -49,7 +76,8 @@ SCDATAOK:
         OR A                       ; Clear carry before measuring the image.
         SBC HL,DE                  ; HL becomes runtime plus code plus slot data.
         LD (SCIMGL),HL             ; SCOUT streams this exact payload length.
-        LD DE,SCEND                ; The staged compiler region has a fixed guard.
+        LD DE,SCGENEND             ; The staged compiler region has a fixed guard.
+        LD HL,(SCPC)               ; Compare the absolute cursor with that guard.
         OR A                       ; Clear carry before the boundary subtraction.
         SBC HL,DE                  ; A carry-free result means the cursor crossed it.
         JP NC,SCCAP                ; Reject output that would overwrite compiler tables.
@@ -117,16 +145,12 @@ SCFADDR:
         JR NZ,SCFIXLP              ; Continue until every placeholder is resolved.
         RET                        ; Carry remains clear after the final patch.
 
-; Convert a staged three-byte-slot address into its absolute COM address.
+; Convert a staged four-byte-slot address into its absolute COM address.
 SCADDR:
         LD L,A                     ; Widen the slot index to a word.
         LD H,0                     ; The high byte is zero for all current slots.
         ADD HL,HL                  ; Form two times the slot number.
-        LD B,H                     ; Keep the two-times value in BC.
-        LD C,L                     ; The next addition forms three times the slot.
-        LD L,A                     ; Restore the original slot index.
-        LD H,0                     ; Clear the high byte before the third term.
-        ADD HL,BC                  ; HL now equals three times the slot number.
+        ADD HL,HL                  ; Form four times the slot number.
         ADD HL,DE                  ; Add the selected staged data base.
         JP SCABS                   ; Convert the staged pointer to COM address.
 
