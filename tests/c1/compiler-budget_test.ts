@@ -6,10 +6,10 @@ import {
   C1_STACK_TOP,
   measureC1Budget,
   renderC1Budget,
-} from "../../tools/c1/c1-budget.ts";
+} from "../../tools/c1/compiler-budget.ts";
 
 Deno.test("C1 image clears the core and initial-allocation gates", async () => {
-  const assembled = await loadAssembly("src/compiler/c1.asm");
+  const assembled = await loadAssembly("src/compiler/arithmetic-compiler.asm");
   const budget = measureC1Budget(assembled.image, assembled.address, {
     sourceBytes: 10,
     objectBytes: 2_353,
@@ -29,7 +29,7 @@ Deno.test("C1 image clears the core and initial-allocation gates", async () => {
 });
 
 Deno.test("C1 static workspace stays inside the general workspace bucket", async () => {
-  const assembled = await loadAssembly("src/compiler/c1.asm");
+  const assembled = await loadAssembly("src/compiler/arithmetic-compiler.asm");
   const budget = measureC1Budget(assembled.image, assembled.address, {
     sourceBytes: 10,
     objectBytes: 2_353,

@@ -153,7 +153,7 @@ export function renderC1Budget(budget: C1Budget): string {
 }
 
 if (import.meta.main) {
-  const assembled = await loadAssembly("src/compiler/c1.asm");
+  const assembled = await loadAssembly("src/compiler/arithmetic-compiler.asm");
   const budget = measureC1Budget(assembled.image, assembled.address, {
     sourceBytes: 10,
     objectBytes: assembled.address("N4OBLEN"),

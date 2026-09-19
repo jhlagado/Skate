@@ -1,5 +1,5 @@
 ;=============================================================================
-;  Bounded NOBJ 1.0 target proof slice
+;  Bounded NOBJ 1.0 target proof
 ;=============================================================================
 ;
 ; PUBLIC ENTRY
@@ -502,7 +502,7 @@ N1SYMPH:
         LD DE,1
         OR A
         SBC HL,DE
-        JP NZ,N1EFMT         ; This slice has one initialized section.
+        JP NZ,N1EFMT         ; This proof has one initialized section.
         CALL N1R32
         JP C,N1EIO
         LD HL,(N1VHI)

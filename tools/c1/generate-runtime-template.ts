@@ -1,4 +1,4 @@
-/** Generate the checked C1 NOBJ template from the ATOM runtime payload. */
+/** Generate the checked arithmetic-runtime NOBJ template from ATOM output. */
 
 import { assembleAtomProject, materializeAtomGeneration } from "atom-z80";
 import { encodeNobj1 } from "@jhlagado/z80-tool-services";
@@ -7,7 +7,7 @@ const payloadBase = 0x0100;
 const root = new URL("../../", import.meta.url);
 const assembled = await assembleAtomProject({
   root: root.pathname,
-  entry: "src/compiler/c1-runtime.asm",
+  entry: "src/compiler/arithmetic-runtime-image.asm",
   assembler: undefined,
   target: undefined,
   maxInstructions: 1_000_000_000,
@@ -15,7 +15,7 @@ const assembled = await assembleAtomProject({
   sink: undefined,
 });
 const image = materializeAtomGeneration(assembled.generation);
-if (!image) throw new Error("C1 runtime produced no image");
+if (!image) throw new Error("arithmetic runtime produced no image");
 const payload = image.bytes.slice(payloadBase);
 const symbols = new Map<string, number>(
   assembled.generation.symbols.map((
@@ -27,7 +27,7 @@ const symbols = new Map<string, number>(
 );
 function offset(name: string): number {
   const value = symbols.get(name.toLowerCase());
-  if (value === undefined) throw new Error(`C1 runtime has no ${name}`);
+  if (value === undefined) throw new Error(`arithmetic runtime has no ${name}`);
   return value - payloadBase;
 }
 const object = encodeNobj1({
@@ -82,10 +82,10 @@ while (cursor + 3 <= object.length) {
   cursor += 3 + length;
 }
 if (imageOffset < 0 || crcOffset < 0 || cursor !== object.length) {
-  throw new Error("generated C1 NOBJ has invalid records");
+  throw new Error("generated arithmetic NOBJ has invalid records");
 }
 const lines = [
-  "; Generated from c1-runtime.asm. C1 patches operands and recomputes CRC.",
+  "; Generated from arithmetic-runtime-image.asm. The compiler patches operands and recomputes CRC.",
   `N4OBLEN EQU ${object.length}`,
   `N4IMGOF EQU ${imageOffset}`,
   `N4IMGLN EQU ${payload.length}`,
@@ -107,9 +107,12 @@ for (let index = 0; index < object.length; index += 16) {
 }
 lines.push("N4OBJEND:");
 await Deno.writeTextFile(
-  new URL("../../src/compiler/c1-template.inc", import.meta.url),
+  new URL(
+    "../../src/compiler/arithmetic-runtime-template.inc",
+    import.meta.url,
+  ),
   lines.join("\n") + "\n",
 );
 console.log(
-  `C1 template: ${payload.length} runtime bytes, ${object.length} NOBJ bytes`,
+  `Arithmetic runtime template: ${payload.length} runtime bytes, ${object.length} NOBJ bytes`,
 );
