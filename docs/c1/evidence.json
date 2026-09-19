@@ -1,0 +1,37 @@
+{
+  "release": "0.1.1",
+  "checkpoint": "C1",
+  "status": "passed",
+  "platform": "Triptych WASM with CP/M 2.2",
+  "compiler": {
+    "load": 256,
+    "imageEnd": 10813,
+    "imageBytes": 10557,
+    "coreLimit": 16384,
+    "coreRemaining": 5827,
+    "allocationLimit": 30720,
+    "allocationRemaining": 20163,
+    "stackTop": 32768,
+    "imageToStackGap": 21955,
+    "staticWorkspace": 2981
+  },
+  "artifacts": {
+    "recordBytes": 128,
+    "sourceRecords": 1,
+    "objectBytes": 219,
+    "objectRecords": 2,
+    "comBytes": 128,
+    "comRecords": 1,
+    "objectSha256": "7aabd25ca02a82e8b9b2085beadb1435a3791866d20f54118b51b39762a86e79"
+  },
+  "checks": [
+    "input-dependent integer result",
+    "binary16 result path",
+    "overflow rejection",
+    "malformed-source rejection",
+    "source-I/O rejection",
+    "NOBJ relocation and provider link",
+    "remounted COM execution",
+    "no partial output on failure"
+  ]
+}
