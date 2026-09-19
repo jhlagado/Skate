@@ -1,0 +1,49 @@
+{
+  "release": "0.1.4",
+  "checkpoint": "arithmetic-compiler",
+  "status": "passed",
+  "platform": "Triptych WASM with CP/M 2.2",
+  "compiler": {
+    "load": 256,
+    "imageEnd": 12770,
+    "imageBytes": 12514,
+    "coreLimit": 16384,
+    "coreRemaining": 3870,
+    "allocationLimit": 30720,
+    "allocationRemaining": 18206,
+    "stackTop": 32768,
+    "imageToStackGap": 19998,
+    "templateBytes": 2353,
+    "staticWorkspace": 2846,
+    "workspaceBucket": 4096,
+    "workspaceRemaining": 1250,
+    "writableTotal": 5199,
+    "writableBucketRemaining": -1103
+  },
+  "artifacts": {
+    "recordBytes": 128,
+    "sourceRecords": 1,
+    "objectBytes": 2353,
+    "objectRecords": 19,
+    "comBytes": 2242,
+    "comRecords": 18,
+    "objectSha256": "e3fa57c6d5e0331b53534e08c4ecd91c31352119244f12de15272d216e0ab9c7"
+  },
+  "checks": [
+    "input-dependent integer result",
+    "all four arithmetic operators",
+    "binary16 result path",
+    "overflow rejection",
+    "malformed-source rejection",
+    "source-I/O rejection",
+    "NOBJ and COM byte identity",
+    "NOBJ link and linked-COM execution",
+    "post-compilation operand mutation",
+    "runtime stack guard",
+    "rejected input leaves no partial output"
+  ],
+  "measurementNotes": [
+    "The stack figure is a placement guard at $8000, not a low-water measurement.",
+    "Record counts are logical sizes rounded to 128-byte CP/M records; BDOS transfer telemetry is pending."
+  ]
+}

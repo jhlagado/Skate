@@ -1,2 +1,2 @@
 %INCLUDE "origin.asm"
-%INCLUDE "../compiler/cpm-source.asm"
+%INCLUDE "../src/compiler/cpm-source.asm"

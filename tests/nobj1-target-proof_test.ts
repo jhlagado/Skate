@@ -147,8 +147,8 @@ const written: number[] = [];
 (runtime.hardware as typeof runtime.hardware & {
   memWrite: (address: number, value: number) => void;
 }).memWrite = (p, value) => {
-  const work = p >= address("N1WORK") && p < address("N1WEND");
-  const stage = p >= address("N1STAG") && p < address("N1SEND");
+  const work = p >= address("TGWORK") && p < address("TGWEND");
+  const stage = p >= address("TGSTAG") && p < address("TGSEND");
   const target = p >= TARGET && p < TARGET + TARGET_CAPACITY;
   const stack = p >= STACK - 64 && p < STACK;
   assert.ok(
@@ -167,7 +167,7 @@ function run(bytes: Uint8Array) {
   memory.set(bytes, INPUT);
   memory[STACK] = RETURN & 0xff;
   memory[STACK + 1] = RETURN >>> 8;
-  cpu.pc = address("N1LINK");
+  cpu.pc = address("TGLINK");
   cpu.sp = STACK;
   cpu.h = INPUT >>> 8;
   cpu.l = INPUT & 0xff;
@@ -182,13 +182,13 @@ function run(bytes: Uint8Array) {
   while (cpu.pc !== RETURN) {
     assert.ok(
       ++steps < 2_000_000 && !runtime.isHalted(),
-      "N1LINK did not return",
+      "TGLINK did not return",
     );
     runtime.step();
   }
-  assert.equal(cpu.sp, STACK + 2, "N1LINK balances SP");
-  assert.equal(cpu.ix, 0x1357, "N1LINK preserves IX");
-  assert.equal(cpu.iy, 0x2468, "N1LINK preserves IY");
+  assert.equal(cpu.sp, STACK + 2, "TGLINK balances SP");
+  assert.equal(cpu.ix, 0x1357, "TGLINK preserves IX");
+  assert.equal(cpu.iy, 0x2468, "TGLINK preserves IY");
   return {
     status: cpu.a,
     carry: cpu.flags.C,
@@ -226,10 +226,10 @@ Deno.test("ATOM NOBJ1 target proof verifies and applies a real ABS16_RUN call", 
   assert.equal(cpu.a, 42);
   assert.equal(cpu.sp, STACK + 2);
 
-  const codeBytes = address("N1CEND") - address("N1CODE");
-  const workspaceBytes = address("N1WEND") - address("N1WORK");
-  const stagingBytes = address("N1SEND") - address("N1STAG");
-  const imageBytes = address("N1END") - address("N1CODE");
+  const codeBytes = address("TGCEND") - address("TGCODE");
+  const workspaceBytes = address("TGWEND") - address("TGWORK");
+  const stagingBytes = address("TGSEND") - address("TGSTAG");
+  const imageBytes = address("TGEND") - address("TGCODE");
   assert.ok(codeBytes <= 2048, `code bytes ${codeBytes}`);
   assert.ok(workspaceBytes <= 96, `workspace bytes ${workspaceBytes}`);
   assert.equal(stagingBytes, 32);

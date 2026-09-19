@@ -1,8 +1,8 @@
 %INCLUDE "origin.asm"
-%INCLUDE "../compiler/lexer.asm"
-%INCLUDE "../compiler/decimal.asm"
-%INCLUDE "../compiler/interner.asm"
-%INCLUDE "../compiler/reader.asm"
+%INCLUDE "../src/compiler/lexer.asm"
+%INCLUDE "../src/compiler/decimal.asm"
+%INCLUDE "../src/compiler/interner.asm"
+%INCLUDE "../src/compiler/reader.asm"
 ; Test input adapter. Every call destroys the permitted general registers.
 RFSOURCE:
     LD HL,(RFPTR)
