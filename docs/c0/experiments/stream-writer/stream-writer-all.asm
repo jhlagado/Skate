@@ -1,0 +1,5 @@
+%INCLUDE "../record-patch/patch.asm"
+%INCLUDE "stream-writer-api.asm"
+%INCLUDE "stream-writer-output.asm"
+%INCLUDE "stream-writer-crc.asm"
+%INCLUDE "stream-writer-state.asm"

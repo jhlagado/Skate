@@ -1,0 +1,54 @@
+{
+  "date": "2026-09-19",
+  "skateRevision": "78e42e48cad491840f34b1c8eb44dc52c0d7c249",
+  "atomRevision": "540798c59cf04404e8bb992da50d606cce405edc",
+  "fixture": "tests/cpm-reader.asm",
+  "adapter": "tests/z80.ts loadAssembly",
+  "modules": [
+    {
+      "name": "lexer",
+      "start": "LEXINIT",
+      "end": "LEXCODE",
+      "codeAndConstants": 1091,
+      "workspace": 281
+    },
+    {
+      "name": "decimal",
+      "start": "DPARSE",
+      "end": "DEND",
+      "codeAndConstants": 818,
+      "workspace": 101
+    },
+    {
+      "name": "interner",
+      "start": "IINIT",
+      "end": "IEND",
+      "codeAndConstants": 414,
+      "workspace": 11
+    },
+    {
+      "name": "reader",
+      "start": "RINIT",
+      "end": "REND",
+      "codeAndConstants": 337,
+      "workspace": 74
+    },
+    {
+      "name": "cpm-source",
+      "start": "CSOPEN",
+      "end": "CSWORK",
+      "codeAndConstants": 1118,
+      "workspace": 744
+    }
+  ],
+  "codeAndConstants": 3778,
+  "fixedWorkspace": 1211,
+  "sourceHashes": {
+    "compiler/lexer.asm": "b59826b104496fae910d7253734f47be3e51d562e771040004a82e3f04777b2f",
+    "compiler/decimal.asm": "baeb28c843e45fb98883aa173669c0f80aace48a90f4e6fcb95b0022647d6a45",
+    "compiler/interner.asm": "dfaf4dff781e52da0b64de414b00771ac1e9ee8d91cee1feefa1879c5fa44211",
+    "compiler/reader.asm": "f2046f7104a1ca23d934c904a3dcba72441753815f943380b14a8ff7638165da",
+    "compiler/cpm-source.asm": "0d46a1d3a0e9151d2617032eca5a816ee6e561c7b03bf98ebb2f44c41a18b70a"
+  },
+  "qualification": "Fresh ATOM extent measurement of preserved prototype modules, not a compact compiler build or correctness rerun. Excludes symbol/string descriptors and pools, parser/emitter, publication and generated runtime. Decimal conversion includes integer and float syntax; do not treat its full size as marginal float cost."
+}

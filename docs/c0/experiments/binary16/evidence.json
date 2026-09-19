@@ -1,0 +1,180 @@
+{
+  "status": "pass",
+  "scope": "C0 ATOM provider size comparison with binary16 included versus an integer-only ABI-compatible provider",
+  "assembler": {
+    "name": "ATOM",
+    "productionAssembler": true,
+    "origin": "0x0100",
+    "includedProviderEndExclusive": "0x2A05",
+    "integerProviderEndExclusive": "0x2496",
+    "includedProviderExtentBytes": 10501,
+    "integerProviderExtentBytes": 9110,
+    "includedMaterializedImageBytes": 10757,
+    "integerMaterializedImageBytes": 9366,
+    "payloadEndExclusive": "0x2AC4",
+    "payloadBytes": 191
+  },
+  "sizeAccounting": {
+    "included": {
+      "providerExtentBytes": 10501,
+      "privateStaticBytes": 593,
+      "immutableRemainderBytes": 9908,
+      "binary16CodeBytes": 1299,
+      "binary16WorkspaceBytes": 27,
+      "numericCodeBytes": 511,
+      "numericWorkspaceBytes": 18,
+      "payloadCodeDescriptorGlobalsBytes": 191
+    },
+    "integerOnly": {
+      "providerExtentBytes": 9110,
+      "privateStaticBytes": 570,
+      "immutableRemainderBytes": 8540,
+      "binary16CodeBytes": 0,
+      "binary16WorkspaceBytes": 0,
+      "numericCodeBytes": 442,
+      "numericWorkspaceBytes": 22,
+      "payloadCodeDescriptorGlobalsBytes": 191,
+      "retainedFixedPlacementGapBytes": 1391
+    },
+    "providerSavingBytes": 1391,
+    "fixedOriginInitializedFootprint": {
+      "includedEndExclusive": "0x2AC4",
+      "integerEndExclusive": "0x2AC4",
+      "deltaBytes": 0,
+      "reason": "The integer payload deliberately remains fixed at 0x2A05; the shorter provider gap is retained and reported."
+    },
+    "runtimeContract": {
+      "payloadWorkspaceBytes": 256,
+      "heapBytes": 32768,
+      "nativeStackCapacityBytes": 4096,
+      "integerProofObservedStackBytes": 6,
+      "includedPreparedProviderObservedStackBytes": 22,
+      "binary16LeafObservedMaximumStackBytes": 4
+    }
+  },
+  "compilerSideContext": {
+    "measurementImage": "tests/native-compiler.asm assembled with ATOM",
+    "decimalParserCodeBytes": 818,
+    "decimalParserWorkspaceBytes": 101,
+    "sharedNumericDispatcherCodeBytes": 511,
+    "sharedNumericDispatcherWorkspaceBytes": 18,
+    "binary16PlusDispatcherCodeAndWorkspaceSpanBytes": 1855,
+    "binary16FormatterPathBytes": 89,
+    "binary16FormatterBodyThroughSharedMessageEndBytes": 42,
+    "isolatedIntegerOnlyCompilerDelta": null,
+    "note": "These figures are shared/parser measurements from the float-enabled compiler image; this provider comparison does not build an integer-only compiler image."
+  },
+  "compaction": {
+    "candidate": "Change the two nearby NPREPARE conditional failure jumps from JP C,NINTTYPE to JR C,NINTTYPE.",
+    "baseline": {
+      "integerProviderExtentBytes": 9112,
+      "integerNumericCodeBytes": 444
+    },
+    "result": {
+      "integerProviderExtentBytes": 9110,
+      "integerNumericCodeBytes": 442
+    },
+    "savingBytes": 2,
+    "validation": "The linked integer proof and scoped checks pass after the change."
+  },
+  "compilerSideCosts": {
+    "decimalLiteralParser": {
+      "codeBytes": 818,
+      "workspaceBytes": 101,
+      "measurement": "DPARSE..DWORK and DWORK..DWEND in tests/native-compiler.asm",
+      "coverage": "integer and binary16 decimal spellings, special values, rounding and capacity",
+      "isolatedIntegerOnlyDelta": "unmeasured; this parser deliberately serves both literal kinds"
+    },
+    "mixedNumericDispatch": {
+      "dispatchCodeBytes": 511,
+      "dispatchWorkspaceBytes": 18,
+      "combinedBinary16AndNumericCodeBytes": 1855,
+      "measurement": "NCLASS..NEND and F16CLASS..NWEND in tests/numeric.asm",
+      "note": "The combined extent contains shared tails and is not added to the provider delta."
+    },
+    "ordinaryFloatFormatting": {
+      "compilerPathExtentBytes": 89,
+      "measurement": "N4F16..N4CRC in tests/native-compiler.asm",
+      "format": "lossless F16:hhhh output with shared CR/LF terminator",
+      "coverage": "native arithmetic and decimal tests exercise deterministic float output",
+      "isolatedIntegerOnlyDelta": "unmeasured; the integer formatter shares N4MSGEND"
+    }
+  },
+  "integerProof": {
+    "linker": "tools/link.ts and validateSkatePlacedContracts",
+    "runs": [
+      {
+        "input": "tag3(41) + tag3(1)",
+        "result": "tag3(42)",
+        "carry": false,
+        "writeCount": 32880,
+        "stackWrites": 22,
+        "stackLowWater": "0xE3FA",
+        "writesOutsideDeclaredSpans": 0,
+        "canariesIntact": true
+      },
+      {
+        "input": "tag3(100) + tag3(23)",
+        "result": "tag3(123)",
+        "carry": false,
+        "writeCount": 32880,
+        "stackWrites": 22,
+        "stackLowWater": "0xE3FA",
+        "writesOutsideDeclaredSpans": 0,
+        "canariesIntact": true
+      }
+    ],
+    "linkedRegionBytes": 58112,
+    "providerVectorContract": "All 13 ABI-2 service vector names remain present; numeric tag 0 is explicitly rejected by the integer-only NCLASS."
+  },
+  "tests": [
+    {
+      "command": "deno check --config deno.runtime.json docs/c0/experiments/binary16/*.ts",
+      "result": "pass"
+    },
+    {
+      "command": "deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../debug80-runtime,/tmp --allow-write=/tmp docs/c0/experiments/binary16/",
+      "result": "1 passed, 0 failed"
+    },
+    {
+      "command": "deno test --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services tests/binary16_test.ts",
+      "result": "5 passed, 0 failed; exhaustive scalar and operation coverage; code 1299, workspace 27"
+    },
+    {
+      "command": "deno test --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,/tmp --allow-write=/tmp tests/decimal_test.ts tests/native-arithmetic_test.ts tests/numeric_test.ts",
+      "result": "13 passed, 0 failed; decimal literals/formatting, mixed arithmetic and exact integer preservation"
+    },
+    {
+      "command": "deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../debug80-runtime,/tmp --allow-write=/tmp docs/c0/experiments/provider/",
+      "result": "2 passed, 0 failed; included prepared provider link and placement proof"
+    }
+  ],
+  "sourceLineCounts": {
+    "README.md": 91,
+    "binary16_test.ts": 107,
+    "integer_fixture.ts": 399,
+    "numeric-integer.asm": 282,
+    "payload-binary16.asm": 3,
+    "payload-integer.asm": 96,
+    "provider-binary16.asm": 3,
+    "provider-integer.asm": 8,
+    "allBelow500": true
+  },
+  "limitations": [
+    "The integer-only provider is a bounded comparison image; it intentionally omits binary16 semantics and reports NDIV unsupported.",
+    "Only integer NADD is executed through the integer-only linked payload. NSUB, NMUL, NCMP and NDIV are assembled but are not full workload proofs.",
+    "The payload retains the prepared 0x2A05 origin, so the fixed-origin complete initialized footprint has no claimed whole-image saving.",
+    "The included build relies on the existing prepared provider and its provider test; this experiment does not claim CP/M publication or compiler integration.",
+    "The host assembler, NOBJ encoder/parser, linker and Debug80 write observer are test oracles."
+  ],
+  "sha256": {
+    "README.md": "d04e585a02c8bed39e7d2af1ab25594ce245eae6fb03a4f01eef3ab137cb7d9d",
+    "binary16_test.ts": "0b4b0c9c774bf67d453a022994f5ed5c5312690ea08c7aeaa885ad411b611276",
+    "integer_fixture.ts": "6f23c1b3a4b112ac16e051e75ee74053e340eea88fbfef0093b57796b6415d76",
+    "numeric-integer.asm": "668959ce065c0a97fa3850a0cd89d4d9e5bd2146d8b07d174c4c4f8da6dbf05f",
+    "payload-binary16.asm": "42284284e35d7425231b1099294c99417c2d69272d5cd382f60a638509486fb0",
+    "payload-integer.asm": "4a235974ce113261a0ab822940b8187e6898fe424a7fe26b9ed3d1d3a5ab3e52",
+    "provider-binary16.asm": "5e04e975421e21f2ac8e1653b29fd4d87daa8cc9903c379e83b9825f48822747",
+    "provider-integer.asm": "e49bb48f99e18dbca08e67aed521c03c639974baccaee4c561c50468b866124b"
+  }
+}

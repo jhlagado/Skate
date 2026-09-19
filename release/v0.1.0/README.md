@@ -1,7 +1,9 @@
 # Skate 0.1.0
 
-This is the first public Skate product snapshot. It contains the current
-native compiler and runtime for a small, tested Scheme subset on Z80 CP/M.
+This is the first public Skate release and the C0 checkpoint for the compact
+compiler work. Skate is a work in progress, not a complete Scheme system. The
+release contains the current tested native compiler and runtime for a small
+Scheme subset on Z80 CP/M, together with the public C0 evidence package.
 
 The package includes two ready-to-run CP/M programs, their NOBJ inputs, and the
 source and tools needed to rebuild them. Both programs were compiled for the
@@ -36,9 +38,14 @@ deno task test
 
 The release artifacts and the rebuild inputs are listed in `SHA256SUMS`.
 
+The [C0 checkpoint](../../docs/c0/README.md) records the measured language,
+parser, capacity, output and numeric evidence. It establishes the direction
+and targets for the compact compiler; the replacement compiler itself is still
+under development.
+
 ## Current scope
 
 This release demonstrates native numeric evaluation, literals, pairs, bounded
-source packages, closure mutation and CP/M publication. It is an early product
-slice: general procedure generation, full list traversal, broad control flow,
-large heaps and self-hosting are still under development.
+source packages, closure mutation and CP/M publication. General procedure
+generation, full list traversal, broad control flow and large heaps are still
+incomplete; self-hosting is outside the current goals.

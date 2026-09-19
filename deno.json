@@ -8,6 +8,8 @@
     "test:runtime": "deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../debug80-runtime --allow-write=build tests/",
     "test:cpm:m12": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/m12-cpm-proof.mjs",
     "check": "deno check --config deno.runtime.json tools/*.ts && deno check --config deno.runtime.json tests/*.ts",
+    "check:c0:source": "deno run --allow-read=. tools/c0/check-source.ts",
+    "check:c0": "deno fmt --check tools/c0 docs/c0/experiments && deno lint tools/c0 docs/c0/experiments && deno task check:c0:source && deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../debug80-runtime,/tmp --allow-write=/tmp tools/c0/check-source_test.ts docs/c0/experiments/",
     "fmt": "deno fmt",
     "lint": "deno lint",
     "verify": "deno fmt --check && deno lint && deno task check && deno task test"

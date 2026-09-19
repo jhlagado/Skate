@@ -1,0 +1,397 @@
+{
+  "status": "pass: one prepared fixed-origin provider placement, shared NOBJ linker and runtime-contract validator, and two input-dependent native executions",
+  "scope": "C0 provider placement only; no compiler rewrite, streamed writer, or CP/M publication claim",
+  "revisions": {
+    "skate": "78e42e48cad491840f34b1c8eb44dc52c0d7c249",
+    "atom": "540798c59cf04404e8bb992da50d606cce405edc",
+    "z80ToolServices": "faf71b22b27e5097cca17fedfb788445ccb5e617",
+    "debug80Runtime": "0024be1d868473568984fcde5a8323e575e595bf"
+  },
+  "profile": {
+    "id": "cpm-64k",
+    "base": "0x0100",
+    "capacityBytes": 58112,
+    "exclusiveEnd": "0xE400",
+    "stackLow": "0xD400",
+    "stackTop": "0xE400",
+    "stackBytes": 4096,
+    "retainedCcp": true
+  },
+  "assembler": {
+    "name": "ATOM",
+    "productionAssembler": true,
+    "origin": "0x0100",
+    "providerEndExclusive": "0x2A05",
+    "providerImageBytes": 10501,
+    "payloadEndExclusive": "0x2AC4",
+    "payloadBytes": 191
+  },
+  "providerSizeAccounting": {
+    "privateStaticSpans": [
+      {
+        "name": "allocator state",
+        "start": "0x0247",
+        "end": "0x0253",
+        "bytes": 12
+      },
+      {
+        "name": "collector state",
+        "start": "0x060B",
+        "end": "0x073C",
+        "bytes": 305
+      },
+      {
+        "name": "binary16 state",
+        "start": "0x0C4F",
+        "end": "0x0C6A",
+        "bytes": 27
+      },
+      {
+        "name": "numeric state",
+        "start": "0x0E69",
+        "end": "0x0E7B",
+        "bytes": 18
+      },
+      {
+        "name": "execution state",
+        "start": "0x291B",
+        "end": "0x29EC",
+        "bytes": 209
+      },
+      {
+        "name": "literal scratch",
+        "start": "0x29EC",
+        "end": "0x2A02",
+        "bytes": 22
+      }
+    ],
+    "privateStaticBytes": 593,
+    "instructionAndConstantRemainderBytes": 9908,
+    "remainderIsImmutableCodeClaim": false
+  },
+  "payloadSymbols": {
+    "entry": "0x2A05",
+    "descriptor": "0x2A63",
+    "topDescriptor": "0x2A8B",
+    "runtimeConfig": "0x2A93",
+    "globalBase": "0x2AAF",
+    "globalBytes": 12,
+    "endExclusive": "0x2AC4"
+  },
+  "placement": {
+    "extents": [
+      {
+        "name": "provider image",
+        "start": "0x0100",
+        "end": "0x2A05",
+        "bytes": 10501
+      },
+      {
+        "name": "payload code, descriptor, globals",
+        "start": "0x2A05",
+        "end": "0x2AC4",
+        "bytes": 191
+      },
+      {
+        "name": "roots",
+        "start": "0x3000",
+        "end": "0x3040",
+        "bytes": 64
+      },
+      {
+        "name": "activations",
+        "start": "0x3100",
+        "end": "0x3180",
+        "bytes": 128
+      },
+      {
+        "name": "mark bitmap",
+        "start": "0x3200",
+        "end": "0x3600",
+        "bytes": 1024
+      },
+      {
+        "name": "workspace",
+        "start": "0x3600",
+        "end": "0x3700",
+        "bytes": 256
+      },
+      {
+        "name": "heap",
+        "start": "0x3700",
+        "end": "0xB700",
+        "bytes": 32768
+      },
+      {
+        "name": "guarded stack",
+        "start": "0xD400",
+        "end": "0xE400",
+        "bytes": 4096
+      }
+    ],
+    "disjoint": true,
+    "allBelowExclusiveEnd": true,
+    "derivedHeap": {
+      "workspaceEndToStackLowBytes": 40192,
+      "allocatorMaximumCells": 8192,
+      "allocatorMaximumBytes": 32768,
+      "selectedCells": 8192,
+      "selectedBytes": 32768,
+      "headroomBeforeStackBytes": 7424
+    },
+    "rejectedBoundaryCases": [
+      "workspace 0x3000..0x3100 overlaps roots",
+      "workspace 0xD301..0xD401 crosses STACKLOW by one byte while remaining inside TPA; validator reports stack allocation overlap",
+      "workspace 0xE301..0xE401 ends one byte past E400; NOBJ rejects SECTION run extent outside REGION"
+    ]
+  },
+  "runtimeContract": {
+    "key": "org.skate.runtime",
+    "version": "2.0",
+    "providerData": [0, 0, 0, 0],
+    "payloadData": [1, 0, 1, 0],
+    "descriptorBytes": 40,
+    "rootSlots": 16,
+    "activationBytes": 128,
+    "nativeStackBytes": 4096,
+    "workspaceBytes": 256,
+    "heapCells": 8192,
+    "globalBase": "0x2AAF",
+    "globalCount": 2,
+    "globalTableIsFixtureOnly": true,
+    "validator": "tools/link.ts -> tools/skate-contract.ts -> validateSkatePlacedContracts"
+  },
+  "services": [
+    {
+      "key": "numeric.classify",
+      "vector": "PVNCLS",
+      "vectorAddress": "0x0103",
+      "target": "NCLASS",
+      "targetAddress": "0x0C6A"
+    },
+    {
+      "key": "numeric.add",
+      "vector": "PVNADD",
+      "vectorAddress": "0x0106",
+      "target": "NADD",
+      "targetAddress": "0x0C71"
+    },
+    {
+      "key": "numeric.sub",
+      "vector": "PVNSUB",
+      "vectorAddress": "0x0109",
+      "target": "NSUB",
+      "targetAddress": "0x0C76"
+    },
+    {
+      "key": "numeric.mul",
+      "vector": "PVNMUL",
+      "vectorAddress": "0x010C",
+      "target": "NMUL",
+      "targetAddress": "0x0C7B"
+    },
+    {
+      "key": "numeric.div",
+      "vector": "PVNDIV",
+      "vectorAddress": "0x010F",
+      "target": "NDIV",
+      "targetAddress": "0x0C80"
+    },
+    {
+      "key": "numeric.negate",
+      "vector": "PVNNEG",
+      "vectorAddress": "0x0112",
+      "target": "NNEG",
+      "targetAddress": "0x0D5E"
+    },
+    {
+      "key": "heap.initialize",
+      "vector": "PVHINI",
+      "vectorAddress": "0x0115",
+      "target": "HINIT",
+      "targetAddress": "0x012A"
+    },
+    {
+      "key": "collector.configure",
+      "vector": "PVGCST",
+      "vectorAddress": "0x0118",
+      "target": "GCSET",
+      "targetAddress": "0x0253"
+    },
+    {
+      "key": "execution.initialize",
+      "vector": "PVRTIN",
+      "vectorAddress": "0x011B",
+      "target": "RTINIT",
+      "targetAddress": "0x2697"
+    },
+    {
+      "key": "execution.packet-new",
+      "vector": "PVPKNW",
+      "vectorAddress": "0x011E",
+      "target": "RTPKNEW",
+      "targetAddress": "0x27DD"
+    },
+    {
+      "key": "execution.invoke",
+      "vector": "PVRTIVO",
+      "vectorAddress": "0x0121",
+      "target": "RTINVOKE",
+      "targetAddress": "0x1999"
+    },
+    {
+      "key": "pairs.cons",
+      "vector": "PVCONS",
+      "vectorAddress": "0x0124",
+      "target": "RTCONSP",
+      "targetAddress": "0x14E2"
+    },
+    {
+      "key": "execution.literal-init",
+      "vector": "PVLIT",
+      "vectorAddress": "0x0127",
+      "target": "RTLIT",
+      "targetAddress": "0x250A"
+    }
+  ],
+  "payloadCallsVerified": [
+    "PVHINI",
+    "PVGCST",
+    "PVRTIN",
+    "PVNADD"
+  ],
+  "memoryWriteObservation": {
+    "hook": "debug80 hardware.memWrite",
+    "canaries": [
+      "0xD3F0..0xD400",
+      "0xE400..0xE410"
+    ],
+    "allowedSpans": [
+      "provider private static spans",
+      "payload input/result scratch",
+      "roots",
+      "activations",
+      "bitmap",
+      "heap",
+      "workspace",
+      "guarded stack"
+    ],
+    "violationsObserved": 0
+  },
+  "nativeRuns": [
+    {
+      "input": "tag3(41) + tag3(1)",
+      "result": "tag3(42)",
+      "carry": false,
+      "stackAfter": "0xE400",
+      "heapReady": true,
+      "ixAfter": "0x0000",
+      "iyAfter": "0x3000",
+      "writeCount": 32879,
+      "stackWrites": 22,
+      "stackLowWater": "0xE3FA",
+      "canariesIntact": true,
+      "writesOutsideDeclaredSpans": 0,
+      "writesBySpan": {
+        "payload input/result scratch": 9,
+        "guarded stack": 22,
+        "allocator state": 12,
+        "heap": 32764,
+        "collector state": 13,
+        "execution state": 49,
+        "numeric state": 10
+      }
+    },
+    {
+      "input": "tag3(100) + tag3(23)",
+      "result": "tag3(123)",
+      "carry": false,
+      "stackAfter": "0xE400",
+      "heapReady": true,
+      "ixAfter": "0x0000",
+      "iyAfter": "0x3000",
+      "writeCount": 32879,
+      "stackWrites": 22,
+      "stackLowWater": "0xE3FA",
+      "canariesIntact": true,
+      "writesOutsideDeclaredSpans": 0,
+      "writesBySpan": {
+        "payload input/result scratch": 9,
+        "guarded stack": 22,
+        "allocator state": 12,
+        "heap": 32764,
+        "collector state": 13,
+        "execution state": 49,
+        "numeric state": 10
+      }
+    }
+  ],
+  "sizeSimplificationReview": {
+    "candidate": "remove success-path OR A from PAYDONE in the fixture payload",
+    "baselinePayloadBytes": 192,
+    "finalPayloadBytes": 191,
+    "baselinePayloadEnd": "0x2AC5",
+    "finalPayloadEnd": "0x2AC4",
+    "savingBytes": 1,
+    "breakdown": {
+      "removedInstruction": "OR A",
+      "eligibility": "numeric.add success guarantees carry clear"
+    },
+    "decision": "retained",
+    "validation": "both native inputs and scoped/full compact checks pass",
+    "binary16Separation": "unproved; no binary16 removal is claimed"
+  },
+  "hostOracleTraversals": {
+    "positiveProof": {
+      "atomMaterializations": 2,
+      "localNobjEncodeParsePairs": 2,
+      "linkInputParses": 2,
+      "debug80ImageCopies": 2
+    },
+    "nativeNobjStreamingTraversalsClaimed": 0,
+    "cpmPublicationTraversalsClaimed": 0
+  },
+  "tests": [
+    {
+      "command": "deno check --config deno.runtime.json docs/c0/experiments/provider/*.ts",
+      "result": "pass"
+    },
+    {
+      "command": "deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../debug80-runtime,/tmp --allow-write=/tmp docs/c0/experiments/provider/",
+      "result": "2 passed, 0 failed"
+    },
+    {
+      "command": "deno task check:c0",
+      "result": "76 passed, 0 failed; 73 compact source files, 0 above 500 or 1000 lines"
+    }
+  ],
+  "sha256": {
+    "origin-payload.asm": "0758b1a78721344614e695279c28e26acfd2007cb6590edb7dfc279fb3fee06e",
+    "origin-provider.asm": "43fa1778f17832b1cd9f7ec10d514ef5d78a2ee8569bb12579dc9eb0326019f5",
+    "payload.asm": "6577afa23f743f3b427f6ae849f48a9626be387d8ca8cb38d9f61af3eb6dc41c",
+    "provider-tail.asm": "c6d9094ec4bb4f8e60801b8f95446b032e99db9f3259d511151e9bdf49a4883a",
+    "provider-vector.asm": "ff70987cc7e743441b7bc8795ff656e324a5fafe5add519e046590f3af467101",
+    "provider.asm": "d0a0126bbaa6eb0decec132774f58b7b901aaed04630966b50d90131c4e02000",
+    "provider_boundary_test.ts": "79f1f2a4953db92936f227ffde4dcfd4dcbc67eb7d053efae57a52d9719fe824",
+    "provider_fixture.ts": "b2020b783d6b50477b20490b9c6765abf774df23f509a4d2550d7184e926842d",
+    "provider_memory.ts": "a2d045979761e8240baa8cc3f83c7d00c859fac0a135b369a8f2acbdc3574559",
+    "provider_test.ts": "afca2d9161e88e2e74942915cb901ad8eaf03fac457c4ece1cf822665e6850ef",
+    "runtime/allocator.asm": "c14daaf9ce6aec4aa1be44ccd3a451b672a5186e1226fe5814be0249571272af",
+    "runtime/collector.asm": "e971354cd065a05c671875addd6b6390557dc3c85d174033feb0a110cebc8c4e",
+    "runtime/binary16.asm": "0bb84aad1af7d2b30c36b5ce8826ca931d07b0f3c4aebbdd28fcf0c0551def9c",
+    "runtime/numeric.asm": "247ea04ec618ab14d74cc752a98fee79b9fd617fbcdafdb9e94b5e305b9711ec",
+    "runtime/execution.asm": "680464debfbe8e75d661712a956d1d76cb8a40b410dfdc3a013c980a2240a351",
+    "tools/link.ts": "a353b645bb5f4d200f6e863a0164cbc4b26983af55a4a092a15208bffd87e389",
+    "tools/skate-contract.ts": "d5f81f8bdd7a96a049f0bef47e6bd3053c367bfcd1ee79e6187b839dcc6ed8d8",
+    "tools/m7-compiler.ts": "daad751e3368e003af3f77d7a797ad9cf1eaa8f08e1f485e377c3effe010fa63"
+  },
+  "limitations": [
+    "The provider is fixed-origin and does not prove generalized internal relocation.",
+    "Only integer-tagged numeric.add is executed; integer versus binary16 separation remains unproved.",
+    "The full vector is address-checked, but uncalled services are not workload proofs.",
+    "The host materializer and debug80 runtime are test oracles, not native streaming or CP/M publication.",
+    "The two-entry global table is a placement fixture and is not a weather-runtime capacity claim.",
+    "The write observer covers the two exercised inputs; it does not qualify unexecuted provider services.",
+    "Compiler 30,720-byte allocation and C1 behavior are separate work."
+  ]
+}
