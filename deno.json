@@ -1,22 +1,14 @@
 {
   "tasks": {
     "compile": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services --allow-write=build tools/compile.ts",
-    "read": "deno run --allow-read tools/read-source.ts",
-    "measure:c1": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services tools/compiler-checks/compiler-budget.ts",
-    "test:c1": "deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../debug80-runtime tests/compiler-checks/compiler-budget_test.ts",
-    "test:cpm:c1": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/compiler-cpm-proof.mjs",
-    "check:c1": "deno fmt --check tools/compiler-checks tests/compiler-checks && deno lint tools/compiler-checks tests/compiler-checks && deno check --config deno.runtime.json tools/compiler-checks/compiler-budget.ts tests/compiler-checks/compiler-budget_test.ts && deno task test:c1",
-    "test": "deno task check:c1 && deno task test:cpm:c1",
+    "measure:c2": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services tools/compiler-checks/scope-control-budget.ts",
+    "test:c2": "deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../debug80-runtime tests/compiler-checks/scope-control-budget_test.ts",
+    "test:cpm:c2": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/scope-control-cpm-proof.mjs",
+    "check:c2": "deno fmt --check tools/compiler-checks tests/compiler-checks && deno lint tools/compiler-checks tests/compiler-checks && deno check --config deno.runtime.json tools/compiler-checks/scope-control-budget.ts tests/compiler-checks/scope-control-budget_test.ts && deno task test:c2",
+    "test": "deno task check:c2 && deno task test:cpm:c2",
     "fmt": "deno fmt",
     "lint": "deno lint"
   },
-  "fmt": {
-    "exclude": [
-      "**/*.md"
-    ]
-  },
-  "exclude": [
-    "work",
-    "build"
-  ]
+  "fmt": { "exclude": ["**/*.md"] },
+  "exclude": ["work", "build"]
 }
