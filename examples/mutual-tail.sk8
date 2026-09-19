@@ -1,0 +1,6 @@
+; Exact counters keep this indirect mutual tail call above binary16's 2048 limit.
+(define (even count)
+  (if (= count 30000) 42 (odd (+ count 1))))
+(define (odd count)
+  (if (= count 30000) 0 (even (+ count 1))))
+(even 0)

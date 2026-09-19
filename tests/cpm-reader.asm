@@ -1,0 +1,7 @@
+%INCLUDE "cpm-reader-main.asm"
+%INCLUDE "../compiler/cpm-source.asm"
+%INCLUDE "../compiler/lexer.asm"
+%INCLUDE "../compiler/decimal.asm"
+%INCLUDE "../compiler/interner.asm"
+%INCLUDE "../compiler/reader.asm"
+%INCLUDE "cpm-reader-end.asm"

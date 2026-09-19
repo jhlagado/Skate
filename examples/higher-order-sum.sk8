@@ -1,0 +1,10 @@
+; A bounded higher-order sum keeps arithmetic exact and passes procedures as values.
+(define (sum term next current limit)
+  (if (> current limit)
+      0
+      (+ (term current) (sum term next (next current) limit))))
+(define (increment value)
+  (+ value 1))
+(define (square value)
+  (* value value))
+(sum square increment 1 5)

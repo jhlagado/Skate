@@ -1,0 +1,24 @@
+{
+  "tasks": {
+    "compile": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services --allow-write=build tools/compile.ts",
+    "read": "deno run --allow-read tools/read-source.ts",
+    "measure:native": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services tools/native-budget.ts",
+    "test": "deno task test:host && deno task test:runtime",
+    "test:host": "deno test tools/",
+    "test:runtime": "deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../debug80-runtime --allow-write=build tests/",
+    "test:cpm:m12": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/m12-cpm-proof.mjs",
+    "check": "deno check --config deno.runtime.json tools/*.ts && deno check --config deno.runtime.json tests/*.ts",
+    "fmt": "deno fmt",
+    "lint": "deno lint",
+    "verify": "deno fmt --check && deno lint && deno task check && deno task test"
+  },
+  "fmt": {
+    "exclude": [
+      "**/*.md"
+    ]
+  },
+  "exclude": [
+    "work",
+    "build"
+  ]
+}

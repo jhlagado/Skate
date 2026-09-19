@@ -1,0 +1,6 @@
+; Exercise both proper list links and an escaped pair with an integer CDR.
+(define proper
+  (+ (car (list 40 1)) (car (cdr (list 1 2 3)))))
+(define improper
+  (+ (car (cons 40 41)) (cdr (cons 1 2))))
+(+ proper improper)

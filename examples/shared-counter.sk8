@@ -1,0 +1,10 @@
+; Two closures share the same mutable binding in the surrounding let frame.
+(define (make-counter)
+  (let ((count 0))
+    (cons
+      (lambda () (begin (set! count (+ count 1)) count))
+      (lambda () count))))
+(define counter (make-counter))
+((car counter))
+((car counter))
+((cdr counter))

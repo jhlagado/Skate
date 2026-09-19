@@ -1,0 +1,9 @@
+{
+  "extends": "./deno.json",
+  "imports": {
+    "atom-z80": "../atom/src/host/index.mjs",
+    "@jhlagado/debug80-runtime": "../atom/node_modules/@jhlagado/debug80-runtime/dist/index.js",
+    "@jhlagado/z80-tool-services": "../atom/node_modules/@jhlagado/z80-tool-services/dist/index.js",
+    "@jhlagado/z80-tool-services/source-preparation": "../atom/node_modules/@jhlagado/z80-tool-services/source-preparation/index.mjs"
+  }
+}
