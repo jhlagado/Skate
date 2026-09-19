@@ -44,7 +44,9 @@ checksums.
 
 ## Scope
 
-Skate is an early, working product slice. General procedure generation, full
-list traversal, broad control flow, larger heaps and self-hosting remain future
-work. The public source is organized around the compiler, runtime, examples,
-tests and the tools needed to rebuild the released programs.
+Skate is a work in progress under active development. The current code does
+not yet implement the complete system, but the repository includes tests for
+the parts currently in place. General procedure generation, full list traversal,
+broad control flow and larger heaps are still incomplete; self-hosting is outside
+the current goals. The public source is organized around the compiler, runtime,
+examples, tests and the tools needed to rebuild the released programs.
