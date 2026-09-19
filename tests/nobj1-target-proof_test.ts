@@ -138,7 +138,7 @@ function overlappingRelocations(first: number, second: number): Uint8Array {
   return bytes;
 }
 
-const setup = await loadAssembly("tests/nobj1-target-slice.asm");
+const setup = await loadAssembly("tests/nobj1-target-proof.asm");
 const { runtime, image, address } = setup;
 const memory = runtime.hardware.memory;
 const cpu = runtime.cpu;
@@ -198,7 +198,7 @@ function run(bytes: Uint8Array) {
   };
 }
 
-Deno.test("ATOM NOBJ1 target slice verifies and applies a real ABS16_RUN call", () => {
+Deno.test("ATOM NOBJ1 target proof verifies and applies a real ABS16_RUN call", () => {
   const bytes = object();
   const outcome = run(bytes);
   assert.deepEqual(

@@ -8,7 +8,7 @@ import { loadAssembly } from "../../tests/z80.ts";
 import { parseNobj1 } from "@jhlagado/z80-tool-services";
 import { linkTargetStreams, toPhysicalNobjRecords } from "../target-linker.ts";
 import { SKATE_TPA_PROFILES } from "../m7-compiler.ts";
-import { measureC1Budget } from "./c1-budget.ts";
+import { measureC1Budget } from "./compiler-budget.ts";
 import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 import {
   installCpm22File,
@@ -34,7 +34,7 @@ systemDisk.set(firmware.bios, 0x1600);
 const backing = new Uint8Array(Math.ceil(systemDisk.length / 512) * 512);
 backing.set(systemDisk);
 
-const compiler = await loadAssembly("src/compiler/c1.asm");
+const compiler = await loadAssembly("src/compiler/arithmetic-compiler.asm");
 assert.equal(compiler.image.base, 0);
 assert.ok(compiler.address("N4OBJEND") < 0x8000);
 const compilerBytes = compiler.image.bytes.slice(0x0100);
@@ -72,7 +72,7 @@ const machine = new TriptychCpu(firmware.bootRom);
 let transcript = "";
 const decoder = new TextDecoder("ascii");
 function runUntilPrompt(offset, description) {
-  for (let slice = 0; slice < 1800; slice += 1) {
+  for (let attempt = 0; attempt < 1800; attempt += 1) {
     const status = machine.run_slice(50_000, 500_000);
     transcript += decoder.decode(machine.take_serial_output());
     assert.notEqual(status, 0, `CP/M halted while waiting for ${description}`);
@@ -186,7 +186,7 @@ try {
     const stackSentinel = new Uint8Array(0x1000).fill(0xa5);
     mutateMachine.write_ram(0x7000, stackSentinel);
     let output = "";
-    for (let slice = 0; slice < 1800; slice += 1) {
+    for (let attempt = 0; attempt < 1800; attempt += 1) {
       const status = mutateMachine.run_slice(50_000, 500_000);
       output += decoder.decode(mutateMachine.take_serial_output());
       assert.notEqual(status, 0);
@@ -196,7 +196,7 @@ try {
     assert.ok(
       mutateMachine.enqueue_serial_input(new TextEncoder().encode("MUTATE\r")),
     );
-    for (let slice = 0; slice < 1800; slice += 1) {
+    for (let attempt = 0; attempt < 1800; attempt += 1) {
       const status = mutateMachine.run_slice(50_000, 500_000);
       output += decoder.decode(mutateMachine.take_serial_output());
       assert.notEqual(status, 0);
@@ -222,7 +222,7 @@ try {
   try {
     linkedMachine.install_drive(0, linkedDisk, true);
     let output = "";
-    for (let slice = 0; slice < 1800; slice += 1) {
+    for (let attempt = 0; attempt < 1800; attempt += 1) {
       const status = linkedMachine.run_slice(50_000, 500_000);
       output += decoder.decode(linkedMachine.take_serial_output());
       assert.notEqual(status, 0);
@@ -232,7 +232,7 @@ try {
     assert.ok(
       linkedMachine.enqueue_serial_input(new TextEncoder().encode("LINKED\r")),
     );
-    for (let slice = 0; slice < 1800; slice += 1) {
+    for (let attempt = 0; attempt < 1800; attempt += 1) {
       const status = linkedMachine.run_slice(50_000, 500_000);
       output += decoder.decode(linkedMachine.take_serial_output());
       assert.notEqual(status, 0);

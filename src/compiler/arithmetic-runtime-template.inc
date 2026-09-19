@@ -1,4 +1,4 @@
-; Generated from c1-runtime.asm. C1 patches operands and recomputes CRC.
+; Generated from arithmetic-runtime-image.asm. The compiler patches operands and recomputes CRC.
 N4OBLEN EQU 2353
 N4IMGOF EQU 79
 N4IMGLN EQU 2242

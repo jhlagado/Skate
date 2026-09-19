@@ -1,12 +1,15 @@
 ;=============================================================================
-;  C1 direct compiler command
+;  Arithmetic compiler command front end
 ;=============================================================================
 ;
-;  The C1 entry owns the first production parser in src/.  It reads one flat
-;  arithmetic form from the CP/M FCB, retains only the two operand values and
-;  asks the shared ABI-2 numeric services for the result.  N4-prefixed storage
-;  and publication routines are preserved contracts from the prototype; C1's
-;  parser and command state use the C1-prefixed control labels below.
+;  The command reads one flat arithmetic form from the CP/M FCB, retains the
+;  two operand values, and asks the shared ABI-2 numeric services to validate
+;  the operation.  The result is not written here: the emitter records the
+;  operator and operands in the generated runtime image.
+;
+;  The parser, numeric services and publication routines meet the measured
+;  contracts imported by this command.  Their assembly labels remain stable
+;  so the host budget and CP/M proof can inspect the same interfaces.
 ;=============================================================================
 
 C1MAIN:
@@ -128,7 +131,7 @@ C1ARGS:
         RET
 
 ; Numeric dispatch validates the literal operands during compilation.  The
-; result is deliberately discarded: N4PATCH embeds the operands and the
+; result is deliberately discarded: the emitter embeds the operands and the
 ; generated COM/NOBJ image performs this operation when it runs.
 C1NUMRET:
         JR C,C1PNUM

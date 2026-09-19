@@ -1,11 +1,11 @@
 ;=============================================================================
-;  C1 runtime-payload emitter
+;  NOBJ arithmetic-output emitter
 ;=============================================================================
 ;
-;  C1 publishes one checked NOBJ object whose image is also the standalone COM
-;  program.  The image contains the numeric dispatcher and formatter; this
-;  module patches only the operator and the two source operands.  The answer
-;  is therefore produced by the generated program after compilation.
+;  The compiler publishes one checked NOBJ object whose image is also the
+;  standalone COM program.  The image contains the numeric dispatcher and
+;  formatter; this module patches only the operator and two source operands.
+;  The generated program therefore produces the answer after compilation.
 ;=============================================================================
 
 ; Stream BC bytes from HL through the CP/M transport.  CTWRITE clobbers BC,
@@ -133,7 +133,7 @@ N4CRCNOX:
         DEC BC
         JR N4CRBY
 
-; Absolute addresses inside the serialized NOBJ image.  N4IMGOF points at the
+; Absolute addresses inside the serialized NOBJ image.  The image offset points at the
 ; six-byte IMAGE header's payload, so the same bytes stream directly to COM.
 C1ROPA EQU N4OBJ+N4IMGOF+C1ROPOF
 C1RLTA EQU N4OBJ+N4IMGOF+C1RLTOF
@@ -153,7 +153,7 @@ N4LEFT:   DW 0
 N4BITS:   DB 0
 N4FCB:    DS 36
 
-; Reader contexts and diagnostics retained by the C1 command contract.
+; Reader contexts and diagnostics retained by the current command contract.
 N4SYMCXT:
           DW N4SYMS,16,N4SYMPL,512,0,0
           DB 0,0
