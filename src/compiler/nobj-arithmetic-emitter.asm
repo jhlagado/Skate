@@ -10,163 +10,163 @@
 
 ; Stream BC bytes from HL through the CP/M transport.  CTWRITE clobbers BC,
 ; so the pointer and remaining count live in private words.
-N4STREAM:
-        LD (N4PTR),HL
-        LD (N4LEFT),BC
-N4STLOOP:
-        LD BC,(N4LEFT)
-        LD A,B
-        OR C
-        JR Z,N4STDONE
-        LD HL,(N4PTR)
-        LD A,(HL)
-        INC HL
-        LD (N4PTR),HL
-        CALL CTWRITE
-        RET C
-        LD HL,(N4LEFT)
-        DEC HL
-        LD (N4LEFT),HL
-        JR N4STLOOP
-N4STDONE:
-        XOR A
-        RET
+ARSTREAM:
+        LD (ARPTR),HL              ; Save the image pointer while CTWRITE uses HL.
+        LD (ARLEFT),BC             ; Save the remaining byte count across each write.
+ARSTLOOP:
+        LD BC,(ARLEFT)             ; Load the count for the end-of-stream test.
+        LD A,B                     ; Test the high count byte first.
+        OR C                       ; Combine both count bytes into one zero test.
+        JR Z,ARSTDONE              ; Return success when every byte has been written.
+        LD HL,(ARPTR)              ; Load the next image byte address.
+        LD A,(HL)                  ; Pass that byte to the transport routine.
+        INC HL                     ; Advance the saved pointer before the call.
+        LD (ARPTR),HL              ; Preserve the advanced pointer.
+        CALL CTWRITE               ; Write one byte through the CP/M transport.
+        RET C                      ; Propagate a transport failure unchanged.
+        LD HL,(ARLEFT)             ; Reload the remaining count.
+        DEC HL                     ; Account for the byte just written.
+        LD (ARLEFT),HL             ; Save the decremented count.
+        JR ARSTLOOP                ; Stream the next byte.
+ARSTDONE:
+        XOR A                      ; Clear carry to report a complete stream.
+        RET                        ; Return to the publication state machine.
 
 ; Build the final NOBJ and COM FCBs from the command-tail basename.
-N4FCBN:
-        LD HL,005CH
-        LD DE,N4FCB
-        LD BC,9
-        LDIR
-        LD HL,N4FCB+9
-        LD (HL),'N'
-        INC HL
-        LD (HL),'O'
-        INC HL
-        LD (HL),'B'
-        RET
-N4FCBC:
-        LD HL,N4FCB+9
-        LD (HL),'C'
-        INC HL
-        LD (HL),'O'
-        INC HL
-        LD (HL),'M'
-        RET
+ARFCBN:
+        LD HL,005CH                ; Point at the command-tail FCB basename.
+        LD DE,ARFCB                ; Point at the working NOBJ FCB.
+        LD BC,9                    ; Copy drive and eight-character basename fields.
+        LDIR                       ; Preserve the user's selected source name.
+        LD HL,ARFCB+9              ; Point at the three-character extension.
+        LD (HL),'N'                ; Set the first NOBJ extension character.
+        INC HL                     ; Advance to the second extension character.
+        LD (HL),'O'                ; Set the second NOBJ extension character.
+        INC HL                     ; Advance to the third extension character.
+        LD (HL),'B'                ; Set the final NOBJ extension character.
+        RET                        ; Return with the NOBJ FCB prepared.
+ARFCBC:
+        LD HL,ARFCB+9              ; Point at the three-character extension.
+        LD (HL),'C'                ; Set the first COM extension character.
+        INC HL                     ; Advance to the second extension character.
+        LD (HL),'O'                ; Set the second COM extension character.
+        INC HL                     ; Advance to the third extension character.
+        LD (HL),'M'                ; Set the final COM extension character.
+        RET                        ; Return with the COM FCB prepared.
 
 ; Patch the generated image with the parsed expression.  Numeric services use
 ; tag 3 for exact integers and tag 0 for binary16 values.  The operator byte is
 ; compacted from its source character so the image has no parser dependency.
-N4PATCH:
-        LD A,(N4OP)
-        CP '-'
-        JR Z,N4PSUB
-        CP '*'
-        JR Z,N4PMUL
-        CP '/'
-        JR Z,N4PDIV
-        XOR A
-        JR N4POK
-N4PSUB:
-        LD A,1
-        JR N4POK
-N4PMUL:
-        LD A,2
-        JR N4POK
-N4PDIV:
-        LD A,3
-N4POK:
-        LD (C1ROPA),A
-        LD A,(N4LTAG)
-        LD (C1RLTA),A
-        LD HL,(N4LVAL)
-        LD (C1RLVA),HL
-        LD A,(N4RTAG)
-        LD (C1RRTA),A
-        LD HL,(N4RVAL)
-        LD (C1RRVA),HL
-        RET
+ARPATCH:
+        LD A,(AROP)                ; Load the validated source operator character.
+        CP '-'                    ; Test the subtraction operator.
+        JR Z,ARPSUB                ; Select operation code one.
+        CP '*'                    ; Test the multiplication operator.
+        JR Z,ARPMUL                ; Select operation code two.
+        CP '/'                    ; Test the division operator.
+        JR Z,ARPDIV                ; Select operation code three.
+        XOR A                      ; Addition is operation code zero.
+        JR ARPOK                   ; Store the common operation field.
+ARPSUB:
+        LD A,1                      ; Encode subtraction as operation code one.
+        JR ARPOK                    ; Store the common operation field.
+ARPMUL:
+        LD A,2                      ; Encode multiplication as operation code two.
+        JR ARPOK                    ; Store the common operation field.
+ARPDIV:
+        LD A,3                      ; Encode division as operation code three.
+ARPOK:
+        LD (ARROPA),A              ; Patch the runtime operation byte.
+        LD A,(ARLTAG)               ; Load the validated left representation tag.
+        LD (ARRLTA),A               ; Patch the runtime left tag.
+        LD HL,(ARLVAL)              ; Load the validated left payload.
+        LD (ARRLVA),HL              ; Patch the runtime left payload.
+        LD A,(ARRTAG)               ; Load the validated right representation tag.
+        LD (ARRRTA),A               ; Patch the runtime right tag.
+        LD HL,(ARRVAL)              ; Load the validated right payload.
+        LD (ARRRVA),HL              ; Patch the runtime right payload.
+        RET                         ; Return with the generated image complete.
 
 ; CRC-16/CCITT-FALSE covers every byte through the COMMIT header and payload,
 ; excluding only the two checksum bytes at the end of the generated object.
-N4CRC:
-        LD HL,N4OBJ
-        LD DE,0FFFFH
-        LD BC,N4CRCLN
-        CALL N4CRSEG
-        PUSH DE
-        LD HL,N4OBJ
-        LD BC,N4CRCOF
-        ADD HL,BC
-        POP DE
-        LD (HL),E
-        INC HL
-        LD (HL),D
-        RET
+ARCRC:
+        LD HL,AROBJ                ; Start the CRC at the serialized object header.
+        LD DE,0FFFFH               ; CRC-16/CCITT-FALSE initial value.
+        LD BC,ARCRCLN              ; Cover every byte except the checksum itself.
+        CALL ARCRSEG               ; Accumulate the object bytes.
+        PUSH DE                    ; Preserve the completed CRC while locating its field.
+        LD HL,AROBJ                ; Restart at the object base.
+        LD BC,ARCRCOF              ; Offset of the two-byte checksum field.
+        ADD HL,BC                  ; Point at the checksum bytes.
+        POP DE                     ; Restore the computed CRC.
+        LD (HL),E                  ; Store the low checksum byte first.
+        INC HL                     ; Advance to the high checksum byte.
+        LD (HL),D                  ; Store the high checksum byte.
+        RET                        ; Return with the serialized checksum installed.
 
-N4CRSEG:
-N4CRBY:
-        LD A,B
-        OR C
-        RET Z
-        LD A,(HL)
-        INC HL
-        XOR D
-        LD D,A
-        LD A,8
-        LD (N4BITS),A
-N4CRCBIT:
-        SLA E
-        RL D
-        JR NC,N4CRCNOX
-        LD A,D
-        XOR 10H
-        LD D,A
-        LD A,E
-        XOR 21H
-        LD E,A
-N4CRCNOX:
-        LD A,(N4BITS)
-        DEC A
-        LD (N4BITS),A
-        JR NZ,N4CRCBIT
-        DEC BC
-        JR N4CRBY
+ARCRSEG:
+ARCRBY:
+        LD A,B                     ; Test the high byte of the remaining length.
+        OR C                       ; Include the low byte in the zero test.
+        RET Z                      ; Return when all bytes have been covered.
+        LD A,(HL)                  ; Load the next serialized object byte.
+        INC HL                     ; Advance to the following object byte.
+        XOR D                      ; Mix the byte into the high CRC register.
+        LD D,A                     ; Keep the mixed high CRC byte.
+        LD A,8                     ; Process all eight bits of this object byte.
+        LD (ARBITS),A              ; Store the inner-loop bit count.
+ARCRCBIT:
+        SLA E                      ; Shift the low CRC byte toward the high byte.
+        RL D                       ; Shift the high CRC byte and expose the carry.
+        JR NC,ARCRCNOX             ; No polynomial reduction when the carry is clear.
+        LD A,D                     ; Load the high CRC byte for the polynomial XOR.
+        XOR 10H                    ; Apply the high polynomial byte.
+        LD D,A                     ; Store the reduced high CRC byte.
+        LD A,E                     ; Load the low CRC byte for the polynomial XOR.
+        XOR 21H                    ; Apply the low polynomial byte.
+        LD E,A                     ; Store the reduced low CRC byte.
+ARCRCNOX:
+        LD A,(ARBITS)              ; Load the remaining bit count.
+        DEC A                      ; Account for the bit just processed.
+        LD (ARBITS),A              ; Preserve the updated bit count.
+        JR NZ,ARCRCBIT             ; Continue until all eight bits are shifted.
+        DEC BC                     ; Account for the object byte just processed.
+        JR ARCRBY                  ; Process the next object byte.
 
 ; Absolute addresses inside the serialized NOBJ image.  The image offset points at the
 ; six-byte IMAGE header's payload, so the same bytes stream directly to COM.
-C1ROPA EQU N4OBJ+N4IMGOF+C1ROPOF
-C1RLTA EQU N4OBJ+N4IMGOF+C1RLTOF
-C1RLVA EQU N4OBJ+N4IMGOF+C1RLVOF
-C1RRTA EQU N4OBJ+N4IMGOF+C1RRTOF
-C1RRVA EQU N4OBJ+N4IMGOF+C1RRVOF
+ARROPA EQU AROBJ+ARIMGOF+ARROPOF ; Absolute operation-byte address in the image.
+ARRLTA EQU AROBJ+ARIMGOF+ARRLTOF ; Absolute left-tag address in the image.
+ARRLVA EQU AROBJ+ARIMGOF+ARRLVOF ; Absolute left-payload address in the image.
+ARRRTA EQU AROBJ+ARIMGOF+ARRRTOF ; Absolute right-tag address in the image.
+ARRRVA EQU AROBJ+ARIMGOF+ARRRVOF ; Absolute right-payload address in the image.
 
-N4CODE:   DB 0
-N4OPEN:   DB 0
-N4OP:     DB 0
-N4LTAG:   DB 0
-N4RTAG:   DB 0
-N4LVAL:   DW 0
-N4RVAL:   DW 0
-N4PTR:    DW 0
-N4LEFT:   DW 0
-N4BITS:   DB 0
-N4FCB:    DS 36
+ARCODE:   DB 0                    ; Parser diagnostic code returned to the command.
+AROPEN:   DB 0                    ; Non-zero while the source FCB remains open.
+AROP:     DB 0                    ; Validated source operator character.
+ARLTAG:   DB 0                    ; Parsed left operand representation tag.
+ARRTAG:   DB 0                    ; Parsed right operand representation tag.
+ARLVAL:   DW 0                    ; Parsed left operand payload.
+ARRVAL:   DW 0                    ; Parsed right operand payload.
+ARPTR:    DW 0                    ; Current stream or object-image pointer.
+ARLEFT:   DW 0                    ; Remaining stream byte count.
+ARBITS:   DB 0                    ; CRC inner-loop bit count.
+ARFCB:    DS 36                   ; Working NOBJ/COM CP/M file-control block.
 
 ; Reader contexts and diagnostics retained by the current command contract.
-N4SYMCXT:
-          DW N4SYMS,16,N4SYMPL,512,0,0
-          DB 0,0
-N4STRCXT:
-          DW N4STRS,16,N4STRPL,512,0,0
-          DB 1,0
-N4SYMS:   DS 48
-N4STRS:   DS 64
-N4SYMPL:  DS 512
-N4STRPL:  DS 512
+ARSYMCXT:                         ; Symbol interner context: table, count, arena, size.
+          DW ARSYMS,16,ARSYMPL,512,0,0 ; Six words plus type and flags bytes.
+          DB 0,0                   ; Symbol context kind and reserved flags.
+ARSTRCXT:                         ; String interner context with an independent arena.
+          DW ARSTRS,16,ARSTRPL,512,0,0 ; Six words plus type and flags bytes.
+          DB 1,0                   ; String context kind and reserved flags.
+ARSYMS:   DS 48                   ; Fixed symbol directory used by the reader.
+ARSTRS:   DS 64                   ; Fixed string directory used by the reader.
+ARSYMPL:  DS 512                  ; Symbol spelling arena.
+ARSTRPL:  DS 512                  ; String spelling arena.
 
-N4OKTXT:  DB "COMPILED",13,10,"$"
-N4BADTXT: DB "COMPILE ERROR",13,10,"$"
-N4IOTXT:  DB "SOURCE I/O ERROR",13,10,"$"
-N4OUTTXT: DB "OUTPUT ERROR",13,10,"$"
-N4MEMTXT: DB "INSUFFICIENT MEMORY",13,10,"$"
+AROKTXT:  DB "COMPILED",13,10,"$"        ; Successful command message.
+ARBADTXT: DB "COMPILE ERROR",13,10,"$"   ; Parser or numeric diagnostic.
+ARIOTXT:  DB "SOURCE I/O ERROR",13,10,"$" ; Source open/read/close diagnostic.
+AROUTTXT: DB "OUTPUT ERROR",13,10,"$"     ; NOBJ/COM write diagnostic.
+ARMEMTXT: DB "INSUFFICIENT MEMORY",13,10,"$" ; Guard failure diagnostic.

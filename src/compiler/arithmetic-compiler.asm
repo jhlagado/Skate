@@ -18,17 +18,17 @@
 ;  incrementally, and the output path refuses to commit an incomplete object.
 ;=============================================================================
 
-%INCLUDE "../../compiler/origin.asm"
-%INCLUDE "arithmetic-compiler-command.asm"
-%INCLUDE "../../compiler/native-common.asm"
-%INCLUDE "arithmetic-runtime-template.inc"
-%INCLUDE "nobj-arithmetic-emitter.asm"
-%INCLUDE "../../compiler/cpm-source.asm"
-%INCLUDE "../../compiler/cpm-transport.asm"
-%INCLUDE "../../compiler/lexer.asm"
-%INCLUDE "../../compiler/decimal.asm"
-%INCLUDE "../../compiler/interner.asm"
-%INCLUDE "../../compiler/reader.asm"
-%INCLUDE "../../runtime/binary16.asm"
-%INCLUDE "../../runtime/numeric.asm"
-%INCLUDE "../../compiler/native-publication-control.asm"
+%INCLUDE "origin.asm"                    ; Establish the CP/M load origin.
+%INCLUDE "arithmetic-compiler-command.asm" ; Own the command parser and dispatch.
+%INCLUDE "native-common.asm"             ; Shared error and register helpers.
+%INCLUDE "arithmetic-runtime-template.inc" ; Checked serialized runtime image.
+%INCLUDE "nobj-arithmetic-emitter.asm"   ; Patch, checksum and stream output.
+%INCLUDE "cpm-source.asm"                ; Source FCB byte reader.
+%INCLUDE "cpm-transport.asm"             ; CP/M file and console transport.
+%INCLUDE "lexer.asm"                     ; Tokenization for the reader.
+%INCLUDE "decimal.asm"                   ; Signed integer and binary16 parsing.
+%INCLUDE "interner.asm"                  ; Symbol and string storage.
+%INCLUDE "reader.asm"                    ; Structural datum reader.
+%INCLUDE "../../runtime/binary16.asm"   ; Binary16 arithmetic primitives.
+%INCLUDE "../../runtime/numeric.asm"    ; ABI-2 numeric dispatch.
+%INCLUDE "native-publication-control.asm" ; Staged NOBJ/COM publication.

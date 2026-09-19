@@ -4,7 +4,7 @@
 ;
 ; PUBLIC ENTRY
 ;
-; N1LINK
+; TGLINK
 ;   HL points to one serialized object; BC gives its byte length (1..512).
 ;   Success validates the stream and publishes one linked section.
 ;
@@ -32,495 +32,495 @@
 ; This is a measured feasibility prototype, not a production NOBJ linker.
 ;=============================================================================
 
-N1MAXO EQU 0200H
-N1MAXB EQU 32
-N1MAXI EQU 4
-N1MAXS EQU 4
-N1MAXR EQU 4
-N1BASE EQU 4000H
-N1CAP  EQU 0100H
+TGMAXO EQU 0200H
+TGMAXB EQU 32
+TGMAXI EQU 4
+TGMAXS EQU 4
+TGMAXR EQU 4
+TGBASE EQU 4000H
+TGCAP  EQU 0100H
 
 ORG 0100H
-N1CODE:
+TGCODE:
 ; Validate one bounded object, then publish the staged initialized section.
-N1LINK:
-        LD (N1IN),HL         ; Retain the object-spool start address.
-        LD (N1LEFT),BC       ; Retain its exact byte length.
+TGLINK:
+        LD (TGIN),HL         ; Retain the object-spool start address.
+        LD (TGLEFT),BC       ; Retain its exact byte length.
         XOR A                ; Start at BEGIN with empty declaration counts.
-        LD (N1PHASE),A       ; Record order is tracked as one bounded state.
-        LD (N1IMGC),A        ; No IMAGE payload has been staged yet.
-        LD (N1SYMC),A        ; The local symbol table starts empty.
-        LD (N1RELC),A        ; No relocation site has been claimed.
-        LD (N1LAYM),A        ; Retain module mode for the COMMIT check.
+        LD (TGPHASE),A       ; Record order is tracked as one bounded state.
+        LD (TGIMGC),A        ; No IMAGE payload has been staged yet.
+        LD (TGSYMC),A        ; The local symbol table starts empty.
+        LD (TGRELC),A        ; No relocation site has been claimed.
+        LD (TGLAYM),A        ; Retain module mode for the COMMIT check.
         LD HL,0              ; Clear record and previous-record counters.
-        LD (N1RECS),HL       ; COMMIT must repeat the final record count.
-        LD (N1IMGE),HL       ; The first IMAGE may begin at offset zero.
-        LD (N1SYMP),HL       ; Remember the last ID for ordered checks.
+        LD (TGRECS),HL       ; COMMIT must repeat the final record count.
+        LD (TGIMGE),HL       ; The first IMAGE may begin at offset zero.
+        LD (TGSYMP),HL       ; Remember the last ID for ordered checks.
         LD HL,0FFFFH         ; CRC-16/CCITT-FALSE starts at FFFFH.
-        LD (N1CRCW),HL       ; Include every byte through COMMIT's entry ID.
-        LD HL,(N1LEFT)       ; Empty input cannot contain a complete BEGIN.
+        LD (TGCRCW),HL       ; Include every byte through COMMIT's entry ID.
+        LD HL,(TGLEFT)       ; Empty input cannot contain a complete BEGIN.
         LD A,H
         OR L
-        JP Z,N1EIO
-        LD DE,N1MAXO         ; Compare input length with the 512-byte limit.
+        JP Z,TGEIO
+        LD DE,TGMAXO         ; Compare input length with the 512-byte limit.
         OR A
         SBC HL,DE
-        JP C,N1SIZEOK        ; A shorter object fits the limit.
-        JP Z,N1SIZEOK        ; Exactly 512 bytes also fits.
-        JP N1ECAP            ; Reject before reading or writing target memory.
+        JP C,TGSIZEOK        ; A shorter object fits the limit.
+        JP Z,TGSIZEOK        ; Exactly 512 bytes also fits.
+        JP TGECAP            ; Reject before reading or writing target memory.
 ; Reject a source extent that wraps around the 16-bit address space.
-N1SIZEOK:
-        LD HL,(N1IN)         ; Rebuild the half-open source end.
-        LD DE,(N1LEFT)
+TGSIZEOK:
+        LD HL,(TGIN)         ; Rebuild the half-open source end.
+        LD DE,(TGLEFT)
         ADD HL,DE
-        JP NC,N1LOOP         ; A nonwrapped endpoint is a valid memory extent.
+        JP NC,TGLOOP         ; A nonwrapped endpoint is a valid memory extent.
         LD A,H               ; A wrapped zero is the permitted endpoint 65536.
         OR L
-        JP NZ,N1EADDR        ; Other wrapped extents exceed target memory.
+        JP NZ,TGEADDR        ; Other wrapped extents exceed target memory.
 
 ; Read the next record header and dispatch only the supported NOBJ1 subset.
-N1LOOP:
-        CALL N1RCRC          ; Record kind contributes to the CRC.
-        JP C,N1EIO           ; A short spool cannot contain another record.
-        LD (N1KIND),A        ; Retain kind across length decoding.
-        CALL N1R16           ; Read the little-endian payload length.
-        JP C,N1EIO
-        LD (N1PLEN),HL       ; Hand the bounded payload size to its decoder.
-        LD HL,(N1RECS)       ; Count this header, including COMMIT.
+TGLOOP:
+        CALL TGRCRC          ; Record kind contributes to the CRC.
+        JP C,TGEIO           ; A short spool cannot contain another record.
+        LD (TGKIND),A        ; Retain kind across length decoding.
+        CALL TGR16           ; Read the little-endian payload length.
+        JP C,TGEIO
+        LD (TGPLEN),HL       ; Hand the bounded payload size to its decoder.
+        LD HL,(TGRECS)       ; Count this header, including COMMIT.
         INC HL
-        LD (N1RECS),HL
-        LD A,(N1KIND)
+        LD (TGRECS),HL
+        LD A,(TGKIND)
         CP 1
-        JP Z,N1BEGIN         ; BEGIN must lead the stream.
+        JP Z,TGBEGIN         ; BEGIN must lead the stream.
         CP 3
-        JP Z,N1REG           ; REGION selects the single fixed target view.
+        JP Z,TGREG           ; REGION selects the single fixed target view.
         CP 4
-        JP Z,N1SECT          ; SECTION declares the staged output extent.
+        JP Z,TGSECT          ; SECTION declares the staged output extent.
         CP 6
-        JP Z,N1IMG           ; IMAGE bytes are copied into private staging.
+        JP Z,TGIMG           ; IMAGE bytes are copied into private staging.
         CP 8
-        JP Z,N1SYM           ; Only local definitions fit this proof table.
+        JP Z,TGSYM           ; Only local definitions fit this proof table.
         CP 9
-        JP Z,N1REL           ; Resolve one supported ABS16_RUN site at a time.
+        JP Z,TGREL           ; Resolve one supported ABS16_RUN site at a time.
         CP 11
-        JP Z,N1LAY           ; LAYOUT names the local executable entry.
+        JP Z,TGLAY           ; LAYOUT names the local executable entry.
         CP 12
-        JP Z,N1COM           ; COMMIT checks count, layout, CRC and EOF.
-        JP N1EFMT            ; Reject kinds outside this proof subset.
+        JP Z,TGCOM           ; COMMIT checks count, layout, CRC and EOF.
+        JP TGEFMT            ; Reject kinds outside this proof subset.
 
 ; BEGIN is the exact NOBJ 1.0 Z80-target marker, not a legacy NOBJ version.
-N1BEGIN:
-        LD A,(N1PHASE)
+TGBEGIN:
+        LD A,(TGPHASE)
         OR A
-        JP NZ,N1EFMT         ; A second or misplaced BEGIN is invalid.
-        LD HL,(N1RECS)
+        JP NZ,TGEFMT         ; A second or misplaced BEGIN is invalid.
+        LD HL,(TGRECS)
         LD DE,1
         OR A
         SBC HL,DE
-        JP NZ,N1EFMT         ; BEGIN must be the first record.
+        JP NZ,TGEFMT         ; BEGIN must be the first record.
         LD DE,9              ; NOBJ1 BEGIN has a nine-byte payload.
-        CALL N1LEN
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        CALL TGLEN
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 4EH               ; First magic byte is ASCII N.
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 4FH               ; Second magic byte is ASCII O.
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 42H               ; Third magic byte is ASCII B.
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 4AH               ; Fourth magic byte is ASCII J.
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 1                 ; Only major version 1 is supported.
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         OR A
-        JP NZ,N1EFMT         ; This proof implements minor version zero.
-        CALL N1R16
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; This proof implements minor version zero.
+        CALL TGR16
+        JP C,TGEIO
         LD DE,1
         OR A
         SBC HL,DE
-        JP NZ,N1EFMT         ; Target ID one names the 16-bit Z80.
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; Target ID one names the 16-bit Z80.
+        CALL TGRCRC
+        JP C,TGEIO
         OR A
-        JP NZ,N1EFMT         ; Reserved BEGIN flags must be zero.
+        JP NZ,TGEFMT         ; Reserved BEGIN flags must be zero.
         LD A,1
-        LD (N1PHASE),A       ; REGION is the only next declaration class.
-        JP N1LOOP
+        LD (TGPHASE),A       ; REGION is the only next declaration class.
+        JP TGLOOP
 
 ; REGION must match the one physical view provided by this target profile.
-N1REG:
-        LD A,(N1PHASE)
+TGREG:
+        LD A,(TGPHASE)
         CP 1
-        JP NZ,N1EFMT
+        JP NZ,TGEFMT
         LD DE,27             ; Both canonical keys are seven ASCII bytes.
-        CALL N1LEN
-        JP NZ,N1EFMT
-        CALL N1R16
-        JP C,N1EIO
+        CALL TGLEN
+        JP NZ,TGEFMT
+        CALL TGR16
+        JP C,TGEIO
         LD DE,1
         OR A
         SBC HL,DE
-        JP NZ,N1EFMT         ; The single accepted region has object ID one.
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; The single accepted region has object ID one.
+        CALL TGRCRC
+        JP C,TGEIO
         CP 7
-        JP NZ,N1EFMT         ; Address-space key length is exactly seven.
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; Address-space key length is exactly seven.
+        CALL TGRCRC
+        JP C,TGEIO
         CP 7AH               ; Match z80.cpu byte by byte.
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 38H
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 30H
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 2EH
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 63H
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 70H
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 75H
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 7                 ; Storage-key length is also seven.
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 63H               ; Match cpm.ram byte by byte.
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 70H
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 6DH
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 2EH
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 72H
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 61H
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         CP 6DH
-        JP NZ,N1EFMT
-        CALL N1R16
-        JP C,N1EIO
-        LD DE,N1BASE
+        JP NZ,TGEFMT
+        CALL TGR16
+        JP C,TGEIO
+        LD DE,TGBASE
         OR A
         SBC HL,DE
-        JP NZ,N1EFMT         ; The fixed memory window begins at 4000H.
-        CALL N1R32            ; The capacity is a u32 in the wire format.
-        JP C,N1EIO
-        LD HL,(N1VHI)
+        JP NZ,TGEFMT         ; The fixed memory window begins at 4000H.
+        CALL TGR32            ; The capacity is a u32 in the wire format.
+        JP C,TGEIO
+        LD HL,(TGVHI)
         LD A,H
         OR L
-        JP NZ,N1ECAP         ; Profile capacity fits one word.
-        LD HL,(N1VLO)
-        LD DE,N1CAP
+        JP NZ,TGECAP         ; Profile capacity fits one word.
+        LD HL,(TGVLO)
+        LD DE,TGCAP
         OR A
         SBC HL,DE
-        JP NZ,N1EFMT         ; REGION must match profile capacity.
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; REGION must match profile capacity.
+        CALL TGRCRC
+        JP C,TGEIO
         OR A
-        JP NZ,N1EFMT         ; The selected image fill is zero.
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; The selected image fill is zero.
+        CALL TGRCRC
+        JP C,TGEIO
         CP 7
-        JP NZ,N1EFMT         ; This view permits read, write and execute.
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; This view permits read, write and execute.
+        CALL TGRCRC
+        JP C,TGEIO
         OR A
-        JP NZ,N1EFMT         ; This target profile is not banked.
+        JP NZ,TGEFMT         ; This target profile is not banked.
         LD A,2
-        LD (N1PHASE),A       ; SECTION declarations now follow REGION.
-        JP N1LOOP
+        LD (TGPHASE),A       ; SECTION declarations now follow REGION.
+        JP TGLOOP
 
 ; SECTION selects one small initialized extent with identical LOAD and RUN.
-N1SECT:
-        LD A,(N1PHASE)
+TGSECT:
+        LD A,(TGPHASE)
         CP 2
-        JP NZ,N1EFMT
+        JP NZ,TGEFMT
         LD DE,25             ; Initialized SECTION carries eight extra bytes.
-        CALL N1LEN
-        JP NZ,N1EFMT
-        CALL N1R16
-        JP C,N1EIO
+        CALL TGLEN
+        JP NZ,TGEFMT
+        CALL TGR16
+        JP C,TGEIO
         LD DE,1
         OR A
         SBC HL,DE
-        JP NZ,N1EFMT         ; The proof accepts one section with ID one.
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; The proof accepts one section with ID one.
+        CALL TGRCRC
+        JP C,TGEIO
         CP 1
-        JP NZ,N1EFMT         ; Storage kind one means initialized bytes.
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; Storage kind one means initialized bytes.
+        CALL TGRCRC
+        JP C,TGEIO
         CP 5
-        JP NZ,N1EFMT         ; Require readable executable storage.
-        CALL N1R16
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; Require readable executable storage.
+        CALL TGR16
+        JP C,TGEIO
         LD DE,1
         OR A
         SBC HL,DE
-        JP NZ,N1EFMT         ; Alignment one needs no rounding.
-        CALL N1R32            ; Decode the declared section length.
-        JP C,N1EIO
-        LD HL,(N1VHI)
+        JP NZ,TGEFMT         ; Alignment one needs no rounding.
+        CALL TGR32            ; Decode the declared section length.
+        JP C,TGEIO
+        LD HL,(TGVHI)
         LD A,H
         OR L
-        JP NZ,N1ECAP         ; The proof's section length is at most 32 bytes.
-        LD HL,(N1VLO)
+        JP NZ,TGECAP         ; The proof's section length is at most 32 bytes.
+        LD HL,(TGVLO)
         LD A,H
         OR A
-        JP NZ,N1ECAP
+        JP NZ,TGECAP
         LD A,L
         OR A
-        JP Z,N1EFMT          ; NOBJ sections cannot be empty.
-        CP N1MAXB+1
-        JP NC,N1ECAP         ; Refuse a section larger than the stage buffer.
-        LD (N1SLEN),HL       ; Retain the proven nonzero section length.
-        CALL N1R16
-        JP C,N1EIO
+        JP Z,TGEFMT          ; NOBJ sections cannot be empty.
+        CP TGMAXB+1
+        JP NC,TGECAP         ; Refuse a section larger than the stage buffer.
+        LD (TGSLEN),HL       ; Retain the proven nonzero section length.
+        CALL TGR16
+        JP C,TGEIO
         LD DE,1
         OR A
         SBC HL,DE
-        JP NZ,N1EFMT         ; RUN region one is the only supported region.
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; RUN region one is the only supported region.
+        CALL TGRCRC
+        JP C,TGEIO
         OR A
-        JP NZ,N1EFMT         ; This proof requires a fixed RUN placement.
-        CALL N1R32            ; Read fixed RUN offset from region base.
-        JP C,N1EIO
-        LD HL,(N1VHI)
+        JP NZ,TGEFMT         ; This proof requires a fixed RUN placement.
+        CALL TGR32            ; Read fixed RUN offset from region base.
+        JP C,TGEIO
+        LD HL,(TGVHI)
         LD A,H
         OR L
-        JP NZ,N1EADDR        ; Address offsets must fit a Z80 word.
-        LD HL,(N1VLO)
-        LD (N1SOFF),HL       ; Retain the offset for bounds and final address.
-        LD DE,(N1SLEN)
+        JP NZ,TGEADDR        ; Address offsets must fit a Z80 word.
+        LD HL,(TGVLO)
+        LD (TGSOFF),HL       ; Retain the offset for bounds and final address.
+        LD DE,(TGSLEN)
         ADD HL,DE            ; Compute the section's exclusive region end.
-        JP C,N1EADDR
-        LD DE,N1CAP+1        ; End 256 is valid; end 257 is not.
+        JP C,TGEADDR
+        LD DE,TGCAP+1        ; End 256 is valid; end 257 is not.
         OR A
         SBC HL,DE
-        JP NC,N1EADDR
-        LD DE,(N1SOFF)       ; Recover the validated section-relative offset.
-        LD HL,N1BASE         ; Translate the relative offset to RUN address.
+        JP NC,TGEADDR
+        LD DE,(TGSOFF)       ; Recover the validated section-relative offset.
+        LD HL,TGBASE         ; Translate the relative offset to RUN address.
         ADD HL,DE
-        JP C,N1EADDR
-        LD (N1RUN),HL        ; Retain the section's absolute RUN address.
-        CALL N1RCRC
-        JP C,N1EIO
+        JP C,TGEADDR
+        LD (TGRUN),HL        ; Retain the section's absolute RUN address.
+        CALL TGRCRC
+        JP C,TGEIO
         OR A
-        JP NZ,N1EFMT         ; LOAD placement zero means identical to RUN.
-        CALL N1R16
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; LOAD placement zero means identical to RUN.
+        CALL TGR16
+        JP C,TGEIO
         LD DE,1
         OR A
         SBC HL,DE
-        JP NZ,N1EFMT         ; The same region supplies LOAD and RUN.
-        CALL N1R32            ; Same placement requires a zero load offset.
-        JP C,N1EIO
-        LD HL,(N1VHI)
+        JP NZ,TGEFMT         ; The same region supplies LOAD and RUN.
+        CALL TGR32            ; Same placement requires a zero load offset.
+        JP C,TGEIO
+        LD HL,(TGVHI)
         LD A,H
         OR L
-        JP NZ,N1EFMT
-        LD HL,(N1VLO)
+        JP NZ,TGEFMT
+        LD HL,(TGVLO)
         LD A,H
         OR L
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
-        LD (N1FILL),A        ; SECTION fill seeds bytes not supplied by IMAGE.
-        LD HL,N1STAG
-        LD BC,(N1SLEN)
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
+        LD (TGFILL),A        ; SECTION fill seeds bytes not supplied by IMAGE.
+        LD HL,TGSTAG
+        LD BC,(TGSLEN)
         LD B,C               ; Section length is one byte and never zero here.
-        LD A,(N1FILL)
-N1SFILL:
+        LD A,(TGFILL)
+TGSFILL:
         LD (HL),A            ; Initialize one private staged byte.
         INC HL
-        DJNZ N1SFILL         ; Finish fill before applying any IMAGE record.
+        DJNZ TGSFILL         ; Finish fill before applying any IMAGE record.
         LD A,3
-        LD (N1PHASE),A       ; IMAGE, SYMBOL or later declarations may follow.
-        JP N1LOOP
+        LD (TGPHASE),A       ; IMAGE, SYMBOL or later declarations may follow.
+        JP TGLOOP
 
 ; IMAGE ranges are copied only into the bounded private staging area.
-N1IMG:
-        LD A,(N1PHASE)
+TGIMG:
+        LD A,(TGPHASE)
         CP 3
-        JP Z,N1IGPH          ; No IMAGE has been accepted since SECTION.
+        JP Z,TGIGPH          ; No IMAGE has been accepted since SECTION.
         CP 4
-        JP NZ,N1EFMT         ; IMAGE records cannot follow SYMBOL or RELOC.
-N1IGPH:
-        LD A,(N1IMGC)
-        CP N1MAXI
-        JP NC,N1ECAP         ; Retain at most four ordered IMAGE records.
-        LD HL,(N1PLEN)
+        JP NZ,TGEFMT         ; IMAGE records cannot follow SYMBOL or RELOC.
+TGIGPH:
+        LD A,(TGIMGC)
+        CP TGMAXI
+        JP NC,TGECAP         ; Retain at most four ordered IMAGE records.
+        LD HL,(TGPLEN)
         LD DE,7
         OR A
         SBC HL,DE
-        JP C,N1EFMT          ; The IMAGE payload needs an ID, offset and byte.
-        LD HL,(N1PLEN)
+        JP C,TGEFMT          ; The IMAGE payload needs an ID, offset and byte.
+        LD HL,(TGPLEN)
         LD DE,39
         OR A
         SBC HL,DE
-        JP NC,N1ECAP         ; One IMAGE record carries at most 32 data bytes.
-        CALL N1R16
-        JP C,N1EIO
+        JP NC,TGECAP         ; One IMAGE record carries at most 32 data bytes.
+        CALL TGR16
+        JP C,TGEIO
         LD DE,1
         OR A
         SBC HL,DE
-        JP NZ,N1EFMT         ; IMAGE belongs to section one.
-        CALL N1R32
-        JP C,N1EIO
-        LD HL,(N1VHI)
+        JP NZ,TGEFMT         ; IMAGE belongs to section one.
+        CALL TGR32
+        JP C,TGEIO
+        LD HL,(TGVHI)
         LD A,H
         OR L
-        JP NZ,N1EADDR        ; The proof stage uses 16-bit section offsets.
-        LD HL,(N1VLO)
-        LD (N1IMGS),HL       ; Remember the first byte's section offset.
-        LD DE,(N1IMGE)
+        JP NZ,TGEADDR        ; The proof stage uses 16-bit section offsets.
+        LD HL,(TGVLO)
+        LD (TGIMGS),HL       ; Remember the first byte's section offset.
+        LD DE,(TGIMGE)
         OR A
         SBC HL,DE
-        JP C,N1EFMT          ; IMAGE ranges increase and cannot overlap.
-        LD HL,(N1PLEN)
+        JP C,TGEFMT          ; IMAGE ranges increase and cannot overlap.
+        LD HL,(TGPLEN)
         LD DE,6
         OR A
         SBC HL,DE             ; Remove section ID and the four-byte offset.
-        LD (N1DATA),HL       ; The remainder is the number of image bytes.
-        LD HL,(N1IMGS)
-        LD DE,(N1DATA)
+        LD (TGDATA),HL       ; The remainder is the number of image bytes.
+        LD HL,(TGIMGS)
+        LD DE,(TGDATA)
         ADD HL,DE            ; Compute the IMAGE range's exclusive end.
-        JP C,N1EADDR
-        LD (N1IMGE),HL       ; Retain the end for the next ordered IMAGE.
-        LD DE,(N1SLEN)
+        JP C,TGEADDR
+        LD (TGIMGE),HL       ; Retain the end for the next ordered IMAGE.
+        LD DE,(TGSLEN)
         OR A
         SBC HL,DE
-        JP C,N1IGOK          ; An end below SECTION.length is valid.
-        JP Z,N1IGOK          ; Exact equality is also a valid exclusive end.
-        JP N1EADDR
-N1IGOK:
-        LD HL,N1STAG
-        LD DE,(N1IMGS)
+        JP C,TGIGOK          ; An end below SECTION.length is valid.
+        JP Z,TGIGOK          ; Exact equality is also a valid exclusive end.
+        JP TGEADDR
+TGIGOK:
+        LD HL,TGSTAG
+        LD DE,(TGIMGS)
         ADD HL,DE
-        LD (N1DST),HL        ; Save the destination across CRC-byte reads.
-N1IGCOPY:
-        CALL N1RCRC
-        JP C,N1EIO
-        LD HL,(N1DST)
+        LD (TGDST),HL        ; Save the destination across CRC-byte reads.
+TGIGCOPY:
+        CALL TGRCRC
+        JP C,TGEIO
+        LD HL,(TGDST)
         LD (HL),A            ; Replace the staged fill with this IMAGE byte.
         INC HL
-        LD (N1DST),HL
-        LD HL,(N1DATA)
+        LD (TGDST),HL
+        LD HL,(TGDATA)
         DEC HL
-        LD (N1DATA),HL
+        LD (TGDATA),HL
         LD A,H
         OR L
-        JP NZ,N1IGCOPY       ; Copy exactly the record's declared data length.
-        LD A,(N1IMGC)
+        JP NZ,TGIGCOPY       ; Copy exactly the record's declared data length.
+        LD A,(TGIMGC)
         INC A
-        LD (N1IMGC),A
+        LD (TGIMGC),A
         LD A,4
-        LD (N1PHASE),A       ; More IMAGE records may follow before symbols.
-        JP N1LOOP
+        LD (TGPHASE),A       ; More IMAGE records may follow before symbols.
+        JP TGLOOP
 
 ; SYMBOL records add bounded local definitions to a compact five-byte table.
-N1SYM:
-        LD A,(N1PHASE)
+TGSYM:
+        LD A,(TGPHASE)
         CP 3
-        JP Z,N1SYMPH         ; A module may omit all IMAGE records.
+        JP Z,TGSYMPH         ; A module may omit all IMAGE records.
         CP 4
-        JP Z,N1SYMPH
+        JP Z,TGSYMPH
         CP 5
-        JP NZ,N1EFMT         ; Symbols follow all IMAGE bytes, before RELOC.
-N1SYMPH:
-        LD A,(N1SYMC)
-        CP N1MAXS
-        JP NC,N1ECAP         ; Four entries bound the target lookup table.
+        JP NZ,TGEFMT         ; Symbols follow all IMAGE bytes, before RELOC.
+TGSYMPH:
+        LD A,(TGSYMC)
+        CP TGMAXS
+        JP NC,TGECAP         ; Four entries bound the target lookup table.
         LD DE,10
-        CALL N1LEN
-        JP NZ,N1EFMT         ; Local definitions have a ten-byte payload.
-        CALL N1R16
-        JP C,N1EIO
-        LD (N1NEWID),HL      ; IDs are local to this one bounded object.
+        CALL TGLEN
+        JP NZ,TGEFMT         ; Local definitions have a ten-byte payload.
+        CALL TGR16
+        JP C,TGEIO
+        LD (TGNEWID),HL      ; IDs are local to this one bounded object.
         LD A,H
         OR L
-        JP Z,N1EFMT          ; Symbol ID zero is reserved.
-        LD DE,(N1SYMP)
+        JP Z,TGEFMT          ; Symbol ID zero is reserved.
+        LD DE,(TGSYMP)
         OR A
         SBC HL,DE             ; IDs must be strictly increasing and unique.
-        JP C,N1EFMT
-        JP Z,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        JP C,TGEFMT
+        JP Z,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         OR A
-        JP NZ,N1EFMT         ; Binding zero is a local definition.
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; Binding zero is a local definition.
+        CALL TGRCRC
+        JP C,TGEIO
         CP 1
-        JP C,N1EFMT
+        JP C,TGEFMT
         CP 4
-        JP NC,N1EFMT         ; Value kind is CODE, ADDRESS or BOUNDARY.
-        LD (N1KNEW),A        ; Retain kind while the offset is decoded.
-        CALL N1R16
-        JP C,N1EIO
+        JP NC,TGEFMT         ; Value kind is CODE, ADDRESS or BOUNDARY.
+        LD (TGKNEW),A        ; Retain kind while the offset is decoded.
+        CALL TGR16
+        JP C,TGEIO
         LD DE,1
         OR A
         SBC HL,DE
-        JP NZ,N1EFMT         ; This proof has one initialized section.
-        CALL N1R32
-        JP C,N1EIO
-        LD HL,(N1VHI)
+        JP NZ,TGEFMT         ; This proof has one initialized section.
+        CALL TGR32
+        JP C,TGEIO
+        LD HL,(TGVHI)
         LD A,H
         OR L
-        JP NZ,N1EADDR        ; Definition offsets fit the bounded section.
-        LD HL,(N1VLO)
-        LD (N1SVAL),HL       ; Retain the section-relative value.
-        LD DE,(N1SLEN)
+        JP NZ,TGEADDR        ; Definition offsets fit the bounded section.
+        LD HL,(TGVLO)
+        LD (TGSVAL),HL       ; Retain the section-relative value.
+        LD DE,(TGSLEN)
         OR A
         SBC HL,DE
-        JP C,N1SVOK          ; Every value below the end is in-section.
-        JP NZ,N1EADDR        ; A greater value is never a valid definition.
-        LD A,(N1KNEW)
+        JP C,TGSVOK          ; Every value below the end is in-section.
+        JP NZ,TGEADDR        ; A greater value is never a valid definition.
+        LD A,(TGKNEW)
         CP 3
-        JP NZ,N1EADDR        ; Only BOUNDARY may name the exclusive end.
-N1SVOK:
-        LD A,(N1SYMC)        ; Convert the symbol index to a five-byte offset.
+        JP NZ,TGEADDR        ; Only BOUNDARY may name the exclusive end.
+TGSVOK:
+        LD A,(TGSYMC)        ; Convert the symbol index to a five-byte offset.
         LD L,A
         LD H,0
         LD D,H
@@ -528,496 +528,496 @@ N1SVOK:
         ADD HL,HL            ; Two bytes per symbol index.
         ADD HL,HL            ; Four bytes per symbol index.
         ADD HL,DE            ; Five bytes per symbol index.
-        LD DE,N1STAB
+        LD DE,TGSTAB
         ADD HL,DE
-        LD (N1DST),HL        ; Save this entry's table address.
-        LD HL,(N1DST)
-        LD DE,(N1NEWID)
+        LD (TGDST),HL        ; Save this entry's table address.
+        LD HL,(TGDST)
+        LD DE,(TGNEWID)
         LD (HL),E            ; Store the local ID, low byte first.
         INC HL
         LD (HL),D
         INC HL
-        LD DE,(N1SVAL)
+        LD DE,(TGSVAL)
         LD (HL),E            ; Store the section-relative offset.
         INC HL
         LD (HL),D
         INC HL
-        LD A,(N1KNEW)
+        LD A,(TGKNEW)
         LD (HL),A            ; Store CODE, ADDRESS or BOUNDARY kind.
-        LD HL,(N1NEWID)
-        LD (N1SYMP),HL       ; Retain the last ID for the next ordering check.
-        LD A,(N1SYMC)
+        LD HL,(TGNEWID)
+        LD (TGSYMP),HL       ; Retain the last ID for the next ordering check.
+        LD A,(TGSYMC)
         INC A
-        LD (N1SYMC),A
+        LD (TGSYMC),A
         LD A,5
-        LD (N1PHASE),A       ; Symbols, relocations or layout may follow.
-        JP N1LOOP
+        LD (TGPHASE),A       ; Symbols, relocations or layout may follow.
+        JP TGLOOP
 
 ; RELOC resolves one local ABS16_RUN reference into staged bytes.
-N1REL:
-        LD A,(N1PHASE)
+TGREL:
+        LD A,(TGPHASE)
         CP 5
-        JP Z,N1RELPH         ; At least one definition must precede RELOC.
+        JP Z,TGRELPH         ; At least one definition must precede RELOC.
         CP 6
-        JP NZ,N1EFMT         ; RELOC records follow all symbols.
-N1RELPH:
-        LD A,(N1SYMC)
+        JP NZ,TGEFMT         ; RELOC records follow all symbols.
+TGRELPH:
+        LD A,(TGSYMC)
         OR A
-        JP Z,N1EFMT
-        LD A,(N1RELC)
-        CP N1MAXR
-        JP NC,N1ECAP         ; Four entries bound the overlap-check table.
+        JP Z,TGEFMT
+        LD A,(TGRELC)
+        CP TGMAXR
+        JP NC,TGECAP         ; Four entries bound the overlap-check table.
         LD DE,14
-        CALL N1LEN
-        JP NZ,N1EFMT         ; RELOC payload length is fourteen bytes.
-        CALL N1R16
-        JP C,N1EIO
+        CALL TGLEN
+        JP NZ,TGEFMT         ; RELOC payload length is fourteen bytes.
+        CALL TGR16
+        JP C,TGEIO
         LD DE,1
         OR A
         SBC HL,DE
-        JP NZ,N1EFMT         ; This proof has one relocation source section.
-        CALL N1R32
-        JP C,N1EIO
-        LD HL,(N1VHI)
+        JP NZ,TGEFMT         ; This proof has one relocation source section.
+        CALL TGR32
+        JP C,TGEIO
+        LD HL,(TGVHI)
         LD A,H
         OR L
-        JP NZ,N1EADDR        ; Site offsets fit the 32-byte staging buffer.
-        LD HL,(N1VLO)
-        LD (N1SITE),HL       ; Retain the operand's first byte.
+        JP NZ,TGEADDR        ; Site offsets fit the 32-byte staging buffer.
+        LD HL,(TGVLO)
+        LD (TGSITE),HL       ; Retain the operand's first byte.
         INC HL
         INC HL
-        JP C,N1EADDR
-        LD DE,(N1SLEN)
+        JP C,TGEADDR
+        LD DE,(TGSLEN)
         OR A
         SBC HL,DE
-        JP C,N1RSOK          ; The complete word site is within the section.
-        JP Z,N1RSOK
-        JP N1EADDR
-N1RSOK:
-        CALL N1RCRC
-        JP C,N1EIO
+        JP C,TGRSOK          ; The complete word site is within the section.
+        JP Z,TGRSOK
+        JP TGEADDR
+TGRSOK:
+        CALL TGRCRC
+        JP C,TGEIO
         CP 1
-        JP NZ,N1EFMT         ; Relocation kind one is ABS16_RUN.
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; Relocation kind one is ABS16_RUN.
+        CALL TGRCRC
+        JP C,TGEIO
         CP 1
-        JP Z,N1USEOK         ; Control transfer requires a CODE target.
+        JP Z,TGUSEOK         ; Control transfer requires a CODE target.
         CP 2
-        JP NZ,N1EFMT         ; Use two is an ordinary data pointer.
-N1USEOK:
-        LD (N1USE),A
-        CALL N1R16
-        JP C,N1EIO
-        LD (N1TID),HL        ; Resolve only against this object's local table.
+        JP NZ,TGEFMT         ; Use two is an ordinary data pointer.
+TGUSEOK:
+        LD (TGUSE),A
+        CALL TGR16
+        JP C,TGEIO
+        LD (TGTID),HL        ; Resolve only against this object's local table.
         LD A,H
         OR L
-        JP Z,N1EFMT
-        CALL N1R32            ; Read the signed i32 byte addend.
-        JP C,N1EIO
-        LD HL,(N1VLO)
-        LD (N1ADLO),HL
-        LD HL,(N1VHI)
-        LD (N1ADHI),HL
-        CALL N1FIND
-        JP C,N1EFMT          ; Imports and undefined IDs are unsupported.
-        LD A,(N1USE)
+        JP Z,TGEFMT
+        CALL TGR32            ; Read the signed i32 byte addend.
+        JP C,TGEIO
+        LD HL,(TGVLO)
+        LD (TGADLO),HL
+        LD HL,(TGVHI)
+        LD (TGADHI),HL
+        CALL TGFIND
+        JP C,TGEFMT          ; Imports and undefined IDs are unsupported.
+        LD A,(TGUSE)
         CP 1
-        JP NZ,N1RDATA
-        LD A,(N1FKND)
+        JP NZ,TGRDATA
+        LD A,(TGFKND)
         CP 1
-        JP NZ,N1EFMT         ; Direct control transfers require CODE.
-        JP N1RADD
-N1RDATA:
-        LD A,(N1FKND)
+        JP NZ,TGEFMT         ; Direct control transfers require CODE.
+        JP TGRADD
+TGRDATA:
+        LD A,(TGFKND)
         CP 2
-        JP Z,N1RADD          ; ADDRESS symbols are valid data pointers.
+        JP Z,TGRADD          ; ADDRESS symbols are valid data pointers.
         CP 3
-        JP NZ,N1EFMT         ; BOUNDARY is the other valid pointer kind.
-N1RADD:
-        LD HL,(N1ADHI)
+        JP NZ,TGEFMT         ; BOUNDARY is the other valid pointer kind.
+TGRADD:
+        LD HL,(TGADHI)
         LD DE,0
         OR A
         SBC HL,DE
-        JP Z,N1RPOS          ; Positive i32 addends have a zero high word.
-        LD HL,(N1ADHI)
+        JP Z,TGRPOS          ; Positive i32 addends have a zero high word.
+        LD HL,(TGADHI)
         LD DE,0FFFFH
         OR A
         SBC HL,DE
-        JP Z,N1RNEG          ; Negative i32 addends have an FFFFH high word.
-        JP N1EADDR            ; Larger addends cannot fit this section.
-N1RPOS:
-        LD HL,(N1FOFF)
-        LD DE,(N1ADLO)
+        JP Z,TGRNEG          ; Negative i32 addends have an FFFFH high word.
+        JP TGEADDR            ; Larger addends cannot fit this section.
+TGRPOS:
+        LD HL,(TGFOFF)
+        LD DE,(TGADLO)
         ADD HL,DE
-        JP C,N1EADDR         ; Reject arithmetic wrap before checking the end.
-        JP N1RADJ
-N1RNEG:
-        LD HL,(N1ADLO)
+        JP C,TGEADDR         ; Reject arithmetic wrap before checking the end.
+        JP TGRADJ
+TGRNEG:
+        LD HL,(TGADLO)
         LD A,H
         OR L
-        JP Z,N1EADDR         ; FFFF:0000 is -65536, outside this section.
+        JP Z,TGEADDR         ; FFFF:0000 is -65536, outside this section.
         LD HL,0
-        LD DE,(N1ADLO)
+        LD DE,(TGADLO)
         OR A
         SBC HL,DE            ; Negate the low word to obtain the magnitude.
-        LD DE,(N1FOFF)
+        LD DE,(TGFOFF)
         EX DE,HL             ; HL=offset; DE=negative magnitude.
         OR A
         SBC HL,DE
-        JP C,N1EADDR         ; The adjusted offset cannot be negative.
-N1RADJ:
-        LD (N1ADJ),HL        ; Retain symbol offset plus the signed addend.
-        LD DE,(N1SLEN)
+        JP C,TGEADDR         ; The adjusted offset cannot be negative.
+TGRADJ:
+        LD (TGADJ),HL        ; Retain symbol offset plus the signed addend.
+        LD DE,(TGSLEN)
         OR A
         SBC HL,DE
-        JP C,N1RADOK         ; Any value below the end names a section byte.
-        JP Z,N1RADEND        ; Equality is allowed only for BOUNDARY symbols.
-        JP N1EADDR
-N1RADEND:
-        LD A,(N1FKND)
+        JP C,TGRADOK         ; Any value below the end names a section byte.
+        JP Z,TGRADEND        ; Equality is allowed only for BOUNDARY symbols.
+        JP TGEADDR
+TGRADEND:
+        LD A,(TGFKND)
         CP 3
-        JP NZ,N1EADDR
-N1RADOK:
-        LD HL,(N1RUN)        ; Add the checked offset to the RUN base.
-        LD DE,(N1ADJ)
+        JP NZ,TGEADDR
+TGRADOK:
+        LD HL,(TGRUN)        ; Add the checked offset to the RUN base.
+        LD DE,(TGADJ)
         ADD HL,DE
-        JP C,N1EADDR         ; Address 65536 cannot be encoded in ABS16.
-        LD (N1ABS),HL        ; Retain the final little-endian operand.
-        CALL N1OVLAP         ; Two-byte sites must not overlap one another.
-        JP C,N1EADDR
-        LD HL,N1STAG         ; Apply the operand to the private image.
-        LD DE,(N1SITE)
+        JP C,TGEADDR         ; Address 65536 cannot be encoded in ABS16.
+        LD (TGABS),HL        ; Retain the final little-endian operand.
+        CALL TGOVLAP         ; Two-byte sites must not overlap one another.
+        JP C,TGEADDR
+        LD HL,TGSTAG         ; Apply the operand to the private image.
+        LD DE,(TGSITE)
         ADD HL,DE
-        LD DE,(N1ABS)
+        LD DE,(TGABS)
         LD (HL),E
         INC HL
         LD (HL),D
-        CALL N1RSAVE         ; Remember this site for later overlap checks.
-        LD A,(N1RELC)
+        CALL TGRSAVE         ; Remember this site for later overlap checks.
+        LD A,(TGRELC)
         INC A
-        LD (N1RELC),A
+        LD (TGRELC),A
         LD A,6
-        LD (N1PHASE),A
-        JP N1LOOP
+        LD (TGPHASE),A
+        JP TGLOOP
 
-; Find the local definition named by N1TID; return its kind and offset.
-N1FIND:
-        LD A,(N1SYMC)
+; Find the local definition named by TGTID; return its kind and offset.
+TGFIND:
+        LD A,(TGSYMC)
         OR A
-        JP Z,N1FNMISS        ; An empty table cannot resolve an ID.
+        JP Z,TGFNMISS        ; An empty table cannot resolve an ID.
         LD B,A               ; Bound the linear search to four entries.
-        LD HL,N1STAB
-        LD (N1SCAN),HL       ; Begin with symbol ID one in the packed table.
-N1FLOOP:
-        LD HL,(N1SCAN)
-        LD A,(N1TID)
+        LD HL,TGSTAB
+        LD (TGSCAN),HL       ; Begin with symbol ID one in the packed table.
+TGFLOOP:
+        LD HL,(TGSCAN)
+        LD A,(TGTID)
         CP (HL)
-        JP NZ,N1FNEXT
+        JP NZ,TGFNEXT
         INC HL
-        LD A,(N1TID+1)
+        LD A,(TGTID+1)
         CP (HL)
-        JP NZ,N1FNEXT
+        JP NZ,TGFNEXT
         INC HL
         LD A,(HL)
-        LD (N1FOFF),A
+        LD (TGFOFF),A
         INC HL
         LD A,(HL)
-        LD (N1FOFF+1),A
+        LD (TGFOFF+1),A
         INC HL
         LD A,(HL)
-        LD (N1FKND),A
+        LD (TGFKND),A
         OR A
         RET                  ; Return the definition with carry clear.
-N1FNEXT:
-        LD HL,(N1SCAN)
+TGFNEXT:
+        LD HL,(TGSCAN)
         LD DE,5
         ADD HL,DE            ; Each compact table entry occupies five bytes.
-        LD (N1SCAN),HL
-        DJNZ N1FLOOP         ; Inspect no more than the declared symbol count.
-N1FNMISS:
+        LD (TGSCAN),HL
+        DJNZ TGFLOOP         ; Inspect no more than the declared symbol count.
+TGFNMISS:
         SCF
         RET                  ; Carry reports an undefined or unsupported ID.
 
 ; Compare a record's declared payload length with DE.
-N1LEN:
-        LD HL,(N1PLEN)
+TGLEN:
+        LD HL,(TGPLEN)
         OR A
         SBC HL,DE
         RET
 
 ; Decode one little-endian u16 through the CRC-accounted byte reader.
-N1R16:
-        CALL N1RCRC
+TGR16:
+        CALL TGRCRC
         RET C
         LD E,A               ; Save the byte across CRC shifts.
-        CALL N1RCRC
+        CALL TGRCRC
         RET C
         LD H,A               ; Assemble high then low into the returned word.
         LD L,E
         RET
 
-; Decode two little-endian u16 values into N1VLO and N1VHI.
-N1R32:
-        CALL N1R16
+; Decode two little-endian u16 values into TGVLO and TGVHI.
+TGR32:
+        CALL TGR16
         RET C
-        LD (N1VLO),HL
-        CALL N1R16
+        LD (TGVLO),HL
+        CALL TGR16
         RET C
-        LD (N1VHI),HL
+        LD (TGVHI),HL
         RET
 
 ; Read one byte and update CRC-16/CCITT-FALSE with polynomial 1021H.
-N1RCRC:
-        CALL N1GET
+TGRCRC:
+        CALL TGGET
         RET C
         LD C,A               ; Preserve the byte during CRC shifts.
-        LD HL,(N1CRCW)
+        LD HL,(TGCRCW)
         XOR H
         LD H,A
         LD B,8               ; Shift input bits, most significant first.
-N1CRCLP:
+TGCRCLP:
         ADD HL,HL
-        JR NC,N1CRCNX        ; A shifted-out one selects the polynomial XOR.
+        JR NC,TGCRCNX        ; A shifted-out one selects the polynomial XOR.
         LD A,H
         XOR 10H
         LD H,A
         LD A,L
         XOR 21H
         LD L,A
-N1CRCNX:
-        DJNZ N1CRCLP
-        LD (N1CRCW),HL
+TGCRCNX:
+        DJNZ TGCRCLP
+        LD (TGCRCW),HL
         LD A,C
         OR A                 ; Return the byte while clearing carry.
         RET
 
 ; Read one byte from the bounded in-memory object spool.
-N1GET:
-        LD HL,(N1LEFT)
+TGGET:
+        LD HL,(TGLEFT)
         LD A,H
         OR L
-        JP Z,N1GEOF          ; No read may pass the caller's exact extent.
+        JP Z,TGGEOF          ; No read may pass the caller's exact extent.
         DEC HL
-        LD (N1LEFT),HL
-        LD HL,(N1IN)
+        LD (TGLEFT),HL
+        LD HL,(TGIN)
         LD A,(HL)
         INC HL
-        LD (N1IN),HL
+        LD (TGIN),HL
         OR A                 ; Zero is valid; carry still indicates success.
         RET
-N1GEOF:
+TGGEOF:
         LD A,1
         SCF
         RET                  ; Carry identifies a truncated record or stream.
 
 ; Reject any previously claimed two-byte site that intersects this site.
-N1OVLAP:
-        LD A,(N1RELC)
+TGOVLAP:
+        LD A,(TGRELC)
         OR A
-        JR Z,N1OVOK          ; The first relocation has nothing to compare.
+        JR Z,TGOVOK          ; The first relocation has nothing to compare.
         LD B,A
-        LD HL,N1RTAB
-N1OVLP:
-        LD A,(N1SITE)
+        LD HL,TGRTAB
+TGOVLP:
+        LD A,(TGSITE)
         CP (HL)
-        JR Z,N1OVBAD         ; Identical starts always overlap.
-        JR C,N1OVLO          ; Reverse subtraction for a positive distance.
+        JR Z,TGOVBAD         ; Identical starts always overlap.
+        JR C,TGOVLO          ; Reverse subtraction for a positive distance.
         SUB (HL)
         CP 2
-        JR C,N1OVBAD         ; Starts one byte apart share an operand byte.
-        JR N1OVNX
-N1OVLO:
-        LD A,(N1SITE)
+        JR C,TGOVBAD         ; Starts one byte apart share an operand byte.
+        JR TGOVNX
+TGOVLO:
+        LD A,(TGSITE)
         LD C,A
         LD A,(HL)
         SUB C
         CP 2
-        JR C,N1OVBAD
-N1OVNX:
+        JR C,TGOVBAD
+TGOVNX:
         INC HL
         INC HL               ; Advance past this two-byte site.
-        DJNZ N1OVLP
-N1OVOK:
+        DJNZ TGOVLP
+TGOVOK:
         OR A
         RET                  ; Clear carry after every site is disjoint.
-N1OVBAD:
+TGOVBAD:
         SCF
         RET
 
 ; Append the current site to the four-entry overlap table.
-N1RSAVE:
-        LD A,(N1RELC)
+TGRSAVE:
+        LD A,(TGRELC)
         LD L,A
         LD H,0
         ADD HL,HL            ; Each retained site is two bytes.
-        LD DE,N1RTAB
+        LD DE,TGRTAB
         ADD HL,DE
-        LD A,(N1SITE)
+        LD A,(TGSITE)
         LD (HL),A
         INC HL
-        LD A,(N1SITE+1)
+        LD A,(TGSITE+1)
         LD (HL),A
         RET
 
 ; LAYOUT must name a local CODE definition and agree with COMMIT.
-N1LAY:
-        LD A,(N1PHASE)
+TGLAY:
+        LD A,(TGPHASE)
         CP 5
-        JP Z,N1LYPH          ; LAYOUT follows definitions and optional relocs.
+        JP Z,TGLYPH          ; LAYOUT follows definitions and optional relocs.
         CP 6
-        JP NZ,N1EFMT
-N1LYPH:
-        LD A,(N1SYMC)
+        JP NZ,TGEFMT
+TGLYPH:
+        LD A,(TGSYMC)
         OR A
-        JP Z,N1EFMT
+        JP Z,TGEFMT
         LD DE,4
-        CALL N1LEN
-        JP NZ,N1EFMT
-        CALL N1RCRC
-        JP C,N1EIO
+        CALL TGLEN
+        JP NZ,TGEFMT
+        CALL TGRCRC
+        JP C,TGEIO
         OR A
-        JP NZ,N1EFMT         ; Layout mode zero means an unlinked module.
-        LD (N1LAYM),A
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; Layout mode zero means an unlinked module.
+        LD (TGLAYM),A
+        CALL TGRCRC
+        JP C,TGEIO
         OR A
-        JP NZ,N1EFMT         ; LAYOUT flags are reserved and must be zero.
-        CALL N1R16
-        JP C,N1EIO
-        LD (N1ENTR),HL       ; Save the entry for COMMIT's repeated fields.
+        JP NZ,TGEFMT         ; LAYOUT flags are reserved and must be zero.
+        CALL TGR16
+        JP C,TGEIO
+        LD (TGENTR),HL       ; Save the entry for COMMIT's repeated fields.
         LD A,H
         OR L
-        JP Z,N1EFMT          ; A runnable proof object needs a nonzero entry.
-        LD (N1TID),HL
-        CALL N1FIND
-        JP C,N1EFMT
-        LD A,(N1FKND)
+        JP Z,TGEFMT          ; A runnable proof object needs a nonzero entry.
+        LD (TGTID),HL
+        CALL TGFIND
+        JP C,TGEFMT
+        LD A,(TGFKND)
         CP 1
-        JP NZ,N1EFMT         ; The module entry must be CODE.
+        JP NZ,TGEFMT         ; The module entry must be CODE.
         LD A,7
-        LD (N1PHASE),A       ; Only the terminal COMMIT may follow LAYOUT.
-        JP N1LOOP
+        LD (TGPHASE),A       ; Only the terminal COMMIT may follow LAYOUT.
+        JP TGLOOP
 
 ; COMMIT closes the object; publish only after count, CRC and EOF checks pass.
-N1COM:
-        LD A,(N1PHASE)
+TGCOM:
+        LD A,(TGPHASE)
         CP 7
-        JP NZ,N1EFMT
+        JP NZ,TGEFMT
         LD DE,9
-        CALL N1LEN
-        JP NZ,N1EFMT
-        CALL N1R32            ; COMMIT record count is a u32.
-        JP C,N1EIO
-        LD HL,(N1VHI)
+        CALL TGLEN
+        JP NZ,TGEFMT
+        CALL TGR32            ; COMMIT record count is a u32.
+        JP C,TGEIO
+        LD HL,(TGVHI)
         LD A,H
         OR L
-        JP NZ,N1EFMT         ; This bounded stream count fits one word.
-        LD HL,(N1VLO)
-        LD DE,(N1RECS)
+        JP NZ,TGEFMT         ; This bounded stream count fits one word.
+        LD HL,(TGVLO)
+        LD DE,(TGRECS)
         OR A
         SBC HL,DE
-        JP NZ,N1EFMT         ; Count includes the terminal COMMIT record.
-        CALL N1RCRC
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; Count includes the terminal COMMIT record.
+        CALL TGRCRC
+        JP C,TGEIO
         LD B,A
-        LD A,(N1LAYM)
+        LD A,(TGLAYM)
         CP B
-        JP NZ,N1EFMT         ; COMMIT repeats LAYOUT mode exactly.
-        CALL N1R16
-        JP C,N1EIO
-        LD DE,(N1ENTR)
+        JP NZ,TGEFMT         ; COMMIT repeats LAYOUT mode exactly.
+        CALL TGR16
+        JP C,TGEIO
+        LD DE,(TGENTR)
         OR A
         SBC HL,DE
-        JP NZ,N1EFMT         ; COMMIT repeats the selected entry ID.
-        CALL N1GET
-        JP C,N1EIO
+        JP NZ,TGEFMT         ; COMMIT repeats the selected entry ID.
+        CALL TGGET
+        JP C,TGEIO
         LD E,A               ; Read the stored CRC without folding it again.
-        CALL N1GET
-        JP C,N1EIO
+        CALL TGGET
+        JP C,TGEIO
         LD D,A
-        LD HL,(N1CRCW)
+        LD HL,(TGCRCW)
         OR A
         SBC HL,DE
-        JP NZ,N1ECRC         ; CRC covers BEGIN through COMMIT entrySymbolId.
-        LD HL,(N1LEFT)
+        JP NZ,TGECRC         ; CRC covers BEGIN through COMMIT entrySymbolId.
+        LD HL,(TGLEFT)
         LD A,H
         OR L
-        JP NZ,N1EFMT         ; COMMIT must be the final record and end at EOF.
-        JP N1PUBL
+        JP NZ,TGEFMT         ; COMMIT must be the final record and end at EOF.
+        JP TGPUBL
 
 ; Copy the verified and relocated section into its requested target address.
-N1PUBL:
-        LD HL,N1STAG
-        LD DE,(N1RUN)
-        LD BC,(N1SLEN)
+TGPUBL:
+        LD HL,TGSTAG
+        LD DE,(TGRUN)
+        LD BC,(TGSLEN)
         LDIR                 ; Publish only after complete validation.
         XOR A
         RET                  ; Success is A=0 with carry clear.
 
 ; Failure codes are stable; staged output is not published.
-N1EIO:
+TGEIO:
         LD A,1               ; Input ended before its declared record bytes.
         SCF
         RET
-N1EFMT:
+TGEFMT:
         LD A,2               ; The record is malformed or outside the subset.
         SCF
         RET
-N1ECAP:
+TGECAP:
         LD A,3               ; Object, section or table exceeds its budget.
         SCF
         RET
-N1ECRC:
+TGECRC:
         LD A,4               ; Terminal checksum does not match the stream.
         SCF
         RET
-N1EADDR:
+TGEADDR:
         LD A,5               ; Invalid extent, overlap or final address.
         SCF
         RET
-N1CEND:
+TGCEND:
 
 ; Fixed-size workspace: four five-byte symbols and four two-byte sites.
-N1WORK:
-N1IN:    DW 0                 ; Next input byte in the caller-owned spool.
-N1LEFT:  DW 0                 ; Input bytes not yet consumed.
-N1PLEN:  DW 0                 ; Declared payload byte count for this record.
-N1RECS:  DW 0                 ; Record count, including the current header.
-N1CRCW:  DW 0                 ; Running CRC-16/CCITT-FALSE.
-N1VLO:   DW 0                 ; Low word of the most recently decoded u32.
-N1VHI:   DW 0                 ; High word of the most recently decoded u32.
-N1SOFF:  DW 0                 ; Fixed section offset from REGION base.
-N1SLEN:  DW 0                 ; Initialized section length, at most 32 bytes.
-N1RUN:   DW 0                 ; Absolute RUN and LOAD start of the section.
-N1IMGE:  DW 0                 ; End of the previous IMAGE range.
-N1IMGS:  DW 0                 ; Start offset of the current IMAGE range.
-N1DATA:  DW 0                 ; IMAGE payload bytes not yet copied.
-N1DST:   DW 0                 ; Current staging or table destination.
-N1SYMP:  DW 0                 ; Previous SYMBOL ID for ordered uniqueness.
-N1NEWID: DW 0                 ; SYMBOL ID currently being validated.
-N1SVAL:  DW 0                 ; Current SYMBOL section-relative offset.
-N1TID:   DW 0                 ; Symbol ID requested by entry or relocation.
-N1FOFF:  DW 0                 ; Resolved local symbol section-relative offset.
-N1ADLO:  DW 0                 ; Low word of the signed relocation addend.
-N1ADHI:  DW 0                 ; High word of the signed relocation addend.
-N1ADJ:   DW 0                 ; Checked symbol offset plus addend.
-N1SITE:  DW 0                 ; First byte of the current relocation operand.
-N1ABS:   DW 0                 ; Final 16-bit RUN address written at the site.
-N1SCAN:  DW 0                 ; Current symbol-table entry during lookup.
-N1KIND:  DB 0                 ; Current record kind.
-N1PHASE: DB 0                 ; Highest record phase accepted so far.
-N1IMGC:  DB 0                 ; Number of ordered IMAGE records, at most four.
-N1SYMC:  DB 0                 ; Number of local symbols, at most four.
-N1RELC:  DB 0                 ; Number of relocation sites, at most four.
-N1LAYM:  DB 0                 ; LAYOUT mode repeated by COMMIT.
-N1ENTR:  DW 0                 ; LAYOUT entry SYMBOL ID repeated by COMMIT.
-N1FILL:  DB 0                 ; SECTION fill for bytes missing from IMAGE.
-N1USE:   DB 0                 ; Relocation use: control or data pointer.
-N1FKND:  DB 0                 ; Resolved kind: CODE, ADDRESS or BOUNDARY.
-N1KNEW:  DB 0                 ; Kind of the SYMBOL currently being decoded.
-N1STAB:  DS 20                ; Four entries: ID, offset and value kind.
-N1RTAB:  DS 8                 ; Four two-byte relocation-site offsets.
-N1WEND:
-N1STAG:  DS 32                ; Private image, committed after validation.
-N1SEND:
-N1END:
+TGWORK:
+TGIN:    DW 0                 ; Next input byte in the caller-owned spool.
+TGLEFT:  DW 0                 ; Input bytes not yet consumed.
+TGPLEN:  DW 0                 ; Declared payload byte count for this record.
+TGRECS:  DW 0                 ; Record count, including the current header.
+TGCRCW:  DW 0                 ; Running CRC-16/CCITT-FALSE.
+TGVLO:   DW 0                 ; Low word of the most recently decoded u32.
+TGVHI:   DW 0                 ; High word of the most recently decoded u32.
+TGSOFF:  DW 0                 ; Fixed section offset from REGION base.
+TGSLEN:  DW 0                 ; Initialized section length, at most 32 bytes.
+TGRUN:   DW 0                 ; Absolute RUN and LOAD start of the section.
+TGIMGE:  DW 0                 ; End of the previous IMAGE range.
+TGIMGS:  DW 0                 ; Start offset of the current IMAGE range.
+TGDATA:  DW 0                 ; IMAGE payload bytes not yet copied.
+TGDST:   DW 0                 ; Current staging or table destination.
+TGSYMP:  DW 0                 ; Previous SYMBOL ID for ordered uniqueness.
+TGNEWID: DW 0                 ; SYMBOL ID currently being validated.
+TGSVAL:  DW 0                 ; Current SYMBOL section-relative offset.
+TGTID:   DW 0                 ; Symbol ID requested by entry or relocation.
+TGFOFF:  DW 0                 ; Resolved local symbol section-relative offset.
+TGADLO:  DW 0                 ; Low word of the signed relocation addend.
+TGADHI:  DW 0                 ; High word of the signed relocation addend.
+TGADJ:   DW 0                 ; Checked symbol offset plus addend.
+TGSITE:  DW 0                 ; First byte of the current relocation operand.
+TGABS:   DW 0                 ; Final 16-bit RUN address written at the site.
+TGSCAN:  DW 0                 ; Current symbol-table entry during lookup.
+TGKIND:  DB 0                 ; Current record kind.
+TGPHASE: DB 0                 ; Highest record phase accepted so far.
+TGIMGC:  DB 0                 ; Number of ordered IMAGE records, at most four.
+TGSYMC:  DB 0                 ; Number of local symbols, at most four.
+TGRELC:  DB 0                 ; Number of relocation sites, at most four.
+TGLAYM:  DB 0                 ; LAYOUT mode repeated by COMMIT.
+TGENTR:  DW 0                 ; LAYOUT entry SYMBOL ID repeated by COMMIT.
+TGFILL:  DB 0                 ; SECTION fill for bytes missing from IMAGE.
+TGUSE:   DB 0                 ; Relocation use: control or data pointer.
+TGFKND:  DB 0                 ; Resolved kind: CODE, ADDRESS or BOUNDARY.
+TGKNEW:  DB 0                 ; Kind of the SYMBOL currently being decoded.
+TGSTAB:  DS 20                ; Four entries: ID, offset and value kind.
+TGRTAB:  DS 8                 ; Four two-byte relocation-site offsets.
+TGWEND:
+TGSTAG:  DS 32                ; Private image, committed after validation.
+TGSEND:
+TGEND:

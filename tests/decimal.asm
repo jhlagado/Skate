@@ -1,2 +1,2 @@
 %INCLUDE "origin.asm"
-%INCLUDE "../compiler/decimal.asm"
+%INCLUDE "../src/compiler/decimal.asm"

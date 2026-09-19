@@ -1,5 +1,5 @@
 %INCLUDE "origin.asm"
-%INCLUDE "../compiler/lexer.asm"
+%INCLUDE "../src/compiler/lexer.asm"
 ; Memory-backed callback deliberately destroys every allowed register pair.
 LSOURCE:
         LD HL,(LSPTR)

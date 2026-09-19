@@ -1,16 +1,27 @@
 ; Generated from arithmetic-runtime-image.asm. The compiler patches operands and recomputes CRC.
-N4OBLEN EQU 2353
-N4IMGOF EQU 79
-N4IMGLN EQU 2242
-N4CRCLN EQU 2351
-N4CRCOF EQU 2351
-C1ROPOF EQU 342
-C1RLTOF EQU 343
-C1RLVOF EQU 344
-C1RRTOF EQU 346
-C1RRVOF EQU 347
-C1RSTOF EQU 0
-N4OBJ:
+; The bytes below are a serialized NOBJ record followed by the runtime image.
+; Keep the layout constants in step with the generator: ARIMGOF points at the
+; six-byte IMAGE header's payload, and the five *OF values identify the fields
+; patched by ARPATCH. The code bytes are deliberately kept as data here so the
+; compiler can copy one checked image to both NOBJ and COM output.
+;
+; Header order: NOBJ magic/version, one IMAGE record, source-name fields,
+; image length, image offset, checksum and the generated runtime payload.
+; The final two bytes are reserved for CRC-16/CCITT-FALSE and are excluded from
+; ARCRCLN while ARCRC is calculating the checksum.
+AROBLEN EQU 2353
+ARIMGOF EQU 79
+ARIMGLN EQU 2242
+ARCRCLN EQU 2351
+ARCRCOF EQU 2351
+ARROPOF EQU 342
+ARRLTOF EQU 343
+ARRLVOF EQU 344
+ARRRTOF EQU 346
+ARRRVOF EQU 347
+ARRSTOF EQU 0
+; NOBJ header and IMAGE record. The first 79 bytes end at ARIMGOF.
+AROBJ:
         DB $01,$09,$00,$4e,$4f,$42,$4a,$01,$00,$01,$00,$00,$03,$1b,$00,$01
         DB $00,$07,$7a,$38,$30,$2e,$63,$70,$75,$07,$63,$70,$6d,$2e,$72,$61
         DB $6d,$00,$01,$00,$e3,$00,$00,$00,$07,$00,$04,$19,$00,$01,$00,$01
@@ -159,4 +170,5 @@ N4OBJ:
         DB $00,$08,$0a,$00,$01,$00,$00,$01,$01,$00,$00,$00,$00,$00,$0b,$04
         DB $00,$00,$00,$01,$00,$0c,$09,$00,$07,$00,$00,$00,$00,$01,$00,$7d
         DB $84
-N4OBJEND:
+; Runtime image and its trailing symbol/relocation records end here.
+AROBJEND:

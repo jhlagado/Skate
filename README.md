@@ -6,11 +6,10 @@ Skate is a small native Scheme compiler and runtime for Z80 computers running
 CP/M. It turns `.sk8` source into NOBJ 1.0 output and linked `.COM` programs
 that can run from the CP/M prompt.
 
-The current public release is Skate 0.1.2 (C1), a reviewed work-in-progress
-compiler checkpoint. It reads a small arithmetic form from CP/M source,
-computes the result at runtime and publishes checked NOBJ and `.COM` files.
-The compact compiler is not yet complete. Every byte is measured against the
-available CP/M memory map.
+The current public release is Skate 0.1.4, a work-in-progress compiler for a
+small arithmetic language. It reads a source form from CP/M, computes the
+result at runtime and publishes checked NOBJ and `.COM` files. Every byte is
+measured against the available CP/M memory map.
 
 ```scheme
 (define (make-counter start)
@@ -48,7 +47,8 @@ deno task test:cpm:c1
 deno task measure:c1
 ```
 
-The [C1 checkpoint](docs/c1/README.md) describes what those checks cover.
+The [arithmetic compiler notes](docs/arithmetic-compiler/README.md) describe
+what those checks cover.
 
 The `release/` directory contains the first tested CP/M artifacts and their
 checksums.

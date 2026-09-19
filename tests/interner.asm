@@ -1,2 +1,2 @@
 %INCLUDE "origin.asm"
-%INCLUDE "../compiler/interner.asm"
+%INCLUDE "../src/compiler/interner.asm"
