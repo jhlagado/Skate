@@ -6,15 +6,18 @@ export const SCOPE_LOAD = 0x0100;
 export const SCOPE_CORE_LIMIT = 16_384;
 export const SCOPE_ALLOCATION_LIMIT = 30_720;
 export const SCOPE_STACK_TOP = 0xe000;
+export const SCOPE_STACK_RESERVE = 2_048;
 
 export interface ScopeControlBudget {
   readonly imageEnd: number;
   readonly imageBytes: number;
   readonly coreRemaining: number;
   readonly allocationRemaining: number;
+  readonly allocationBytes: number;
   readonly stackGap: number;
   readonly stagedOutputLimit: number;
   readonly stagedOutputGuard: number;
+  readonly fixedTableBytes: number;
   readonly globalSlotCapacity: number;
   readonly localSlotCapacity: number;
   readonly fixupCapacity: number;
@@ -30,14 +33,20 @@ export function measureScopeControlBudget(
     throw new RangeError(`scope compiler entry is $${entry.toString(16)}`);
   }
   const imageBytes = image.end - entry;
+  const stagedOutputLimit = address("SCEND") - address("SCSTAGE");
+  const fixedTableBytes = address("SCWEND") - address("SCGKEYS");
+  const allocationBytes = imageBytes + stagedOutputLimit + fixedTableBytes +
+    SCOPE_STACK_RESERVE;
   return {
     imageEnd: image.end,
     imageBytes,
     coreRemaining: SCOPE_CORE_LIMIT - imageBytes,
-    allocationRemaining: SCOPE_ALLOCATION_LIMIT - imageBytes,
+    allocationRemaining: SCOPE_ALLOCATION_LIMIT - allocationBytes,
+    allocationBytes,
     stackGap: SCOPE_STACK_TOP - image.end,
-    stagedOutputLimit: address("SCEND") - address("SCSTAGE"),
+    stagedOutputLimit,
     stagedOutputGuard: address("SCEND"),
+    fixedTableBytes,
     globalSlotCapacity: 256,
     localSlotCapacity: 128,
     fixupCapacity: 320,
@@ -57,7 +66,8 @@ export function renderScopeControlBudget(
       hex(budget.imageEnd)
     } exclusive (${budget.imageBytes} B)`,
     `Core gate: ${SCOPE_CORE_LIMIT} B; remaining ${budget.coreRemaining} B`,
-    `Initial-allocation gate: ${SCOPE_ALLOCATION_LIMIT} B; remaining ${budget.allocationRemaining} B`,
+    `Fixed tables: ${budget.fixedTableBytes} B; guarded stack: ${SCOPE_STACK_RESERVE} B`,
+    `Live allocation: ${budget.allocationBytes} B; gate ${SCOPE_ALLOCATION_LIMIT} B; remaining ${budget.allocationRemaining} B`,
     `Native stack: top ${hex(SCOPE_STACK_TOP)}; image gap ${budget.stackGap} B`,
     `Staged output: ${budget.stagedOutputLimit} B below ${
       hex(budget.stagedOutputGuard)

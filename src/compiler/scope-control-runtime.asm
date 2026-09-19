@@ -20,31 +20,38 @@ SRTCALL:
         CALL SRTPRINT             ; Print the final value returned by the program.
         JP 0                      ; Return to CP/M through the warm start.
 
-; Load a three-byte slot addressed by HL.  The third byte is the initialized
-; flag, so a forward reference fails at execution time until its definition runs.
+; Load a four-byte slot addressed by HL.  The final byte is the initialized
+; flag; the preceding byte preserves the value tag for booleans.
 SRTLOAD:
         LD E,(HL)                 ; Read the value's low byte.
         INC HL                    ; Advance to the high value byte.
         LD D,(HL)                 ; Read the value's high byte.
+        INC HL                    ; Advance to the stored value tag.
+        LD A,(HL)                 ; Recover the stored scalar tag.
+        LD (SRTTAG),A             ; Preserve it while testing initialization.
         INC HL                    ; Advance to the initialized flag.
         LD A,(HL)                 ; A zero flag means the binding is unbound.
         OR A                      ; Set Z for the unbound case.
         JP Z,SRTUNBD           ; Never return a fabricated value.
         EX DE,HL                  ; Return the stored payload in HL.
-        LD A,3                    ; Every stored value in this increment is exact.
+        LD A,(SRTTAG)             ; Restore the stored value tag.
         RET                       ; Return the value to generated code.
 
-; Store the integer in HL into the three-byte slot addressed by DE.
+; Store A:HL into the four-byte slot addressed by DE.
 SRTSTORE:
+        LD (SRTTAG),A             ; Preserve the value tag while writing payload bytes.
         LD A,L                    ; Copy the payload low byte to the slot.
         LD (DE),A                 ; Publish the low byte first.
         INC DE                    ; Advance to the high payload byte.
         LD A,H                    ; Copy the payload high byte.
         LD (DE),A                 ; Publish the complete payload.
+        INC DE                    ; Advance to the stored value tag.
+        LD A,(SRTTAG)             ; Copy the caller's tag into the slot.
+        LD (DE),A                 ; Publish the tag after both payload bytes.
         INC DE                    ; Advance to the initialized flag.
-        LD A,1                    ; Mark the slot initialized after both bytes.
+        LD A,1                    ; Mark the slot initialized after all value bytes.
         LD (DE),A                 ; A later load can now observe the value.
-        LD A,3                    ; Definitions and lets retain integer value type.
+        LD A,(SRTTAG)             ; Return the stored value tag to generated code.
         RET                       ; Return with the stored value still in HL.
 
 ; Return Z exactly when the value is #f, preserving A and HL for short-circuit

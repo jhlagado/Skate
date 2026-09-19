@@ -13,7 +13,8 @@
 SCSTAGE EQU 06000H               ; Object staging, including the image payload.
 SCIMG   EQU SCSTAGE+79           ; NOBJ image payload begins after its header.
 SCCODE  EQU SCIMG+SRTLEN         ; Generated program follows the runtime image.
-SCEND   EQU 09000H               ; Keep staged output below the slot tables.
+SCEND   EQU 07B80H               ; Keep the bounded staged image below the gap.
+SCGENEND EQU SCEND-32             ; Leave room for the fixed NOBJ tail and CRC.
 
 SCGKEYS  EQU 09000H              ; Two-byte interner IDs for package globals.
 SCGSLOTS EQU 09200H              ; One-byte slot number for each global ID.
@@ -23,12 +24,13 @@ SCBINDID EQU 09480H              ; Two-byte IDs for pending let bindings.
 SCBINDSL EQU 09580H              ; Pending let binding slot numbers.
 SCFIXTAB EQU 09600H              ; Four-byte address/kind/slot fixup records.
 SCNAMEDS EQU 09C00H              ; Symbol descriptor table for the reader.
-SCNAMEPL EQU 0A000H              ; Symbol spelling pool for the reader.
-SCSTRDS  EQU 0C000H              ; String descriptor table required by RINIT.
-SCSTRPL  EQU 0C100H              ; Small string pool; strings are rejected here.
-SCBRANCH EQU 0C300H              ; Generic short-circuit branch patch stack.
-SCIFALSE EQU 0C400H              ; False-branch patch words for nested if forms.
-SCIFEND  EQU 0C480H              ; End-branch patch words for nested if forms.
+SCNAMEPL EQU 0A000H              ; 5,120-byte symbol spelling pool.
+SCSTRDS  EQU 0B400H              ; String descriptor table required by RINIT.
+SCSTRPL  EQU 0B500H              ; Small string pool; strings are rejected here.
+SCBRANCH EQU 0B700H              ; Generic short-circuit branch patch stack.
+SCIFALSE EQU 0B800H              ; False-branch patch words for nested if forms.
+SCIFEND  EQU 0B880H              ; End-branch patch words for nested if forms.
+SCWEND   EQU 0B900H              ; End of all fixed high-memory compiler tables.
 
 ; Compiler entry and terminal paths.
 SCMAIN:
@@ -71,6 +73,7 @@ SCSETUP:
         LD (SCLNEXT),A            ; Local slot zero is the first available slot.
         LD (SCLOCMAX),A           ; No local data extent has been observed yet.
         LD (SCFORMN),A            ; No package-level result exists at setup.
+        LD (SCFORMN+1),A          ; The form count is a complete little-endian word.
         LD (SCFIXN),A             ; No address fixups have been recorded.
         LD (SCFIXN+1),A           ; The count is wide enough for the global target.
         LD (SCBRTOP),A            ; No short-circuit branch is pending.
@@ -116,15 +119,16 @@ SCTOPLP:
         JP NC,SCEVGOOD              ; Continue after a complete top-level form.
         RET                        ; Stop at the first syntax or capacity error.
 SCEVGOOD:
-        LD A,(SCFORMN)             ; Count successful top-level forms.
-        INC A                      ; An empty package has no value to return.
-        LD (SCFORMN),A             ; Keep the count bounded by the source contract.
+        LD HL,(SCFORMN)            ; Count successful top-level forms as a word.
+        INC HL                     ; An empty package has no value to return.
+        LD (SCFORMN),HL            ; Do not wrap after 256 definitions.
         JR SCTOPLP               ; Continue until the reader returns EOF.
 
 ; Finish a nonempty package with the return instruction used by SRTCALL.
 SCENDPK:
-        LD A,(SCFORMN)             ; Reject an empty source before publication.
-        OR A                       ; A zero count has no result for SRTPRINT.
+        LD HL,(SCFORMN)            ; Reject an empty source before publication.
+        LD A,H                     ; Test both bytes of the form count.
+        OR L                       ; A zero count has no result for SRTPRINT.
         JP Z,SCSYN                 ; Report the same syntax error as other empties.
         JP SCRET                   ; Append RET and return to the command driver.
 
@@ -399,7 +403,7 @@ SCOP:       DB 0                   ; Selected binary operation 0, 1 or 2.
 SCALLOW:    DB 0                   ; Package-level permission for define.
 SCTOP:      DB 0                   ; Saved define permission for SCFORM.
 SCBODYN:    DB 0                   ; Body expression count.
-SCFORMN:    DB 0                   ; Number of complete package-level forms.
+SCFORMN:    DW 0                   ; Number of complete package-level forms.
 SCGCOUNT:   DW 0                   ; Number of allocated package-global slots.
 SCLOCTOP:   DB 0                   ; Number of active local binding records.
 SCLNEXT:    DB 0                   ; Next reusable local slot number.
@@ -415,7 +419,7 @@ SCBTARG:    DW 0                   ; Temporary absolute branch target.
 SCFOUND:    DB 0                   ; Last matching local slot.
 SCFOUNDK:   DB 0                   ; Nonzero after a local match.
 SCERR:      DB 0                   ; Reserved diagnostic selector.
-SCNCTX:     DW SCNAMEDS,320,SCNAMEPL,8192,0,0
+SCNCTX:     DW SCNAMEDS,320,SCNAMEPL,5120,0,0
             DB 0,0                  ; Symbol context kind and ready flag.
 SCSCTX:     DW SCSTRDS,64,SCSTRPL,512,0,0
             DB 1,0                  ; String context kind and ready flag.
