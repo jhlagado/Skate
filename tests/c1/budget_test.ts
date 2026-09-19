@@ -12,8 +12,8 @@ Deno.test("C1 image clears the core and initial-allocation gates", async () => {
   const assembled = await loadAssembly("src/compiler/c1.asm");
   const budget = measureC1Budget(assembled.image, assembled.address, {
     sourceBytes: 10,
-    objectBytes: 219,
-    comBytes: 128,
+    objectBytes: 2_353,
+    comBytes: 2_242,
   });
   assert.equal(budget.entry, 0x0100);
   assert.ok(budget.imageBytes < C1_CORE_LIMIT);
@@ -23,8 +23,8 @@ Deno.test("C1 image clears the core and initial-allocation gates", async () => {
   assert.equal(budget.coreLimit, 16_384);
   assert.equal(budget.allocationLimit, 30_720);
   assert.ok(budget.spans.every((item) => item.bytes >= 0));
-  assert.equal(budget.objectRecords, 2);
-  assert.equal(budget.comRecords, 1);
+  assert.equal(budget.objectRecords, 19);
+  assert.equal(budget.comRecords, 18);
   assert.match(renderC1Budget(budget), /generated NOBJ template/);
 });
 
@@ -32,11 +32,13 @@ Deno.test("C1 static workspace stays inside the general workspace bucket", async
   const assembled = await loadAssembly("src/compiler/c1.asm");
   const budget = measureC1Budget(assembled.image, assembled.address, {
     sourceBytes: 10,
-    objectBytes: 219,
-    comBytes: 128,
+    objectBytes: 2_353,
+    comBytes: 2_242,
   });
   assert.ok(budget.staticWorkspace < 4096);
   assert.ok(budget.workspaceRemaining > 0);
-  assert.equal(budget.imageBytes, 10_557);
-  assert.equal(budget.staticWorkspace, 2_981);
+  assert.equal(budget.imageBytes, 12_514);
+  assert.equal(budget.staticWorkspace, 2_846);
+  assert.equal(budget.writableTotal, 5_199);
+  assert.equal(budget.writableBucketRemaining, -1_103);
 });

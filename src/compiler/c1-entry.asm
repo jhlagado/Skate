@@ -127,11 +127,11 @@ C1ARGS:
         LD A,(N4LTAG)               ; A carries the left representation tag.
         RET
 
-; Numeric dispatch returns the result tag in A and payload in HL, or carry.
+; Numeric dispatch validates the literal operands during compilation.  The
+; result is deliberately discarded: N4PATCH embeds the operands and the
+; generated COM/NOBJ image performs this operation when it runs.
 C1NUMRET:
         JR C,C1PNUM
-        LD (N4RTAG),A
-        LD (N4RVAL),HL
         CALL RNEXT                  ; Close the arithmetic list.
         JP C,C1PREAD
         CP 2

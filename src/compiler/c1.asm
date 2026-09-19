@@ -2,12 +2,14 @@
 ;  Skate compact compiler C1 entry
 ;=============================================================================
 ;
-;  C1 is the first direct compact compiler slice.  It reads one CP/M source
-;  file, accepts a bounded arithmetic form, evaluates it with the ABI-2
+;  C1 is the first direct compact compiler checkpoint.  It reads one CP/M source
+;  file, accepts a bounded arithmetic form, validates it with the ABI-2
 ;  numeric services and publishes a committed NOBJ plus a runnable COM image.
+;  The generated image carries the numeric services and computes its result at
+;  runtime; the compiler never formats the answer into the output.
 ;
 ;  The front-end and publication entry points are the measured N4 contracts
-;  reused from the preserved prototype for this first vertical slice.  This
+;  reused from the preserved prototype for this first checkpoint.  This
 ;  entry owns the production include boundary: later C1 increments can replace
 ;  one imported module at a time without changing the CP/M command contract.
 ;
@@ -21,8 +23,8 @@
 %INCLUDE "../../compiler/origin.asm"
 %INCLUDE "c1-entry.asm"
 %INCLUDE "../../compiler/native-common.asm"
-%INCLUDE "../../compiler/native-emitter.asm"
-%INCLUDE "../../compiler/native-template.inc"
+%INCLUDE "c1-template.inc"
+%INCLUDE "c1-emitter.asm"
 %INCLUDE "../../compiler/cpm-source.asm"
 %INCLUDE "../../compiler/cpm-transport.asm"
 %INCLUDE "../../compiler/lexer.asm"

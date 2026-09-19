@@ -27,6 +27,9 @@ export interface C1Budget {
   readonly imageToStackGap: number;
   readonly staticWorkspace: number;
   readonly workspaceRemaining: number;
+  readonly writableTotal: number;
+  readonly writableBucketRemaining: number;
+  readonly template: C1Span;
   readonly spans: readonly C1Span[];
   readonly recordBytes: number;
   readonly sourceRecords: number;
@@ -69,17 +72,31 @@ export function measureC1Budget(
   if (image.end <= entry || image.end >= C1_STACK_TOP) {
     throw new RangeError("C1 image overlaps its guarded native stack");
   }
+  const template = span(
+    address,
+    "generated NOBJ template",
+    "N4OBJ",
+    "N4OBJEND",
+  );
   const spans = [
     span(address, "compiler state and symbol pools", "N4CODE", "N4OKTXT"),
-    span(address, "generated NOBJ template", "N4OBJ", "N4OBJEND"),
     span(address, "CP/M source adapter", "CSWORK", "CSWEND"),
     span(address, "CP/M transport", "CTREERR", address("CTWBUF") + 128),
     span(address, "lexer workspace", "LEXWORK", "LEXWEND"),
     span(address, "decimal workspace", "DWORK", "DWEND"),
     span(address, "interner workspace", "IWORK", "IWEND"),
     span(address, "reader workspace", "RWORK", "RWEND"),
+    span(address, "binary16 workspace", "F16WORK", "F16WEND"),
+    span(address, "numeric workspace", "NWORK", "NWEND"),
+    span(
+      address,
+      "publication flags and recovery FCB",
+      ".BN",
+      address(".F2") + 36,
+    ),
   ];
   const staticWorkspace = spans.reduce((total, item) => total + item.bytes, 0);
+  const writableTotal = staticWorkspace + template.bytes;
   return {
     entry,
     imageEnd: image.end,
@@ -92,6 +109,9 @@ export function measureC1Budget(
     imageToStackGap: C1_STACK_TOP - image.end,
     staticWorkspace,
     workspaceRemaining: 4096 - staticWorkspace,
+    writableTotal,
+    writableBucketRemaining: 4096 - writableTotal,
+    template,
     spans,
     recordBytes: C1_RECORD_BYTES,
     sourceRecords: records(generated.sourceBytes),
@@ -115,11 +135,16 @@ export function renderC1Budget(budget: C1Budget): string {
     `Native stack: top ${
       hex(budget.stackTop)
     }; image gap ${budget.imageToStackGap} B`,
-    `Named static workspace: ${budget.staticWorkspace} B; 4,096-B bucket remaining ${budget.workspaceRemaining} B`,
+    `Generated NOBJ template: ${budget.template.bytes} B (mutable output staging charged to the core image)`,
+    `Named writable workspace: ${budget.staticWorkspace} B; 4,096-B general bucket remaining ${budget.workspaceRemaining} B`,
+    `All fixed writable bytes including staging: ${budget.writableTotal} B; bucket reconciliation ${budget.writableBucketRemaining} B`,
     `CP/M records: ${budget.recordBytes} B; source ${budget.sourceRecords}, NOBJ ${budget.objectRecords}, COM ${budget.comRecords}`,
     "",
     "| Span | Start | End | Bytes |",
     "| --- | ---: | ---: | ---: |",
+    `| ${budget.template.name} | ${hex(budget.template.start)} | ${
+      hex(budget.template.end)
+    } | ${budget.template.bytes} |`,
     ...budget.spans.map((item) =>
       `| ${item.name} | ${hex(item.start)} | ${hex(item.end)} | ${item.bytes} |`
     ),
@@ -131,8 +156,8 @@ if (import.meta.main) {
   const assembled = await loadAssembly("src/compiler/c1.asm");
   const budget = measureC1Budget(assembled.image, assembled.address, {
     sourceBytes: 10,
-    objectBytes: 219,
-    comBytes: 128,
+    objectBytes: assembled.address("N4OBLEN"),
+    comBytes: assembled.address("N4IMGLN"),
   });
   console.log(renderC1Budget(budget));
 }

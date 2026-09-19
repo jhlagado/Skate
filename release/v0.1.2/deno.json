@@ -1,0 +1,24 @@
+{
+  "tasks": {
+    "compile": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services --allow-write=build tools/compile.ts",
+    "read": "deno run --allow-read tools/read-source.ts",
+    "measure:c1": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services tools/c1/c1-budget.ts",
+    "test:c1": "deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../debug80-runtime tests/c1/budget_test.ts",
+    "test:cpm:c1": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/c1/c1-cpm-proof.mjs",
+    "check:c1": "deno fmt --check tools/c1 tests/c1 && deno lint tools/c1 tests/c1 && deno check --config deno.runtime.json tools/c1/c1-budget.ts tests/c1/budget_test.ts && deno task test:c1",
+    "test": "deno task test:host && deno task test:runtime",
+    "test:host": "deno test tools/",
+    "test:runtime": "deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../debug80-runtime --allow-write=build tests/",
+    "fmt": "deno fmt",
+    "lint": "deno lint"
+  },
+  "fmt": {
+    "exclude": [
+      "**/*.md"
+    ]
+  },
+  "exclude": [
+    "work",
+    "build"
+  ]
+}

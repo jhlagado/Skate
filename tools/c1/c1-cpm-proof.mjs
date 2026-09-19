@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadAssembly } from "../../tests/z80.ts";
-import { encodeNobj1, parseNobj1 } from "@jhlagado/z80-tool-services";
+import { parseNobj1 } from "@jhlagado/z80-tool-services";
 import { linkTargetStreams, toPhysicalNobjRecords } from "../target-linker.ts";
 import { SKATE_TPA_PROFILES } from "../m7-compiler.ts";
 import { measureC1Budget } from "./c1-budget.ts";
@@ -52,6 +52,9 @@ disk = installCpm22File(disk, {
 for (
   const [name, text] of [
     ["EXACT.SK8", "(+ 2048 1)"],
+    ["SUB.SK8", "(- 40 2)"],
+    ["MUL.SK8", "(* 6 7)"],
+    ["DIV.SK8", "(/ 84 2)"],
     ["MIXED.SK8", "(+ 2049 0.0)"],
     ["LARGE.SK8", "(+ 30000 0)"],
     ["OVER.SK8", "(+ 32767 1)"],
@@ -104,6 +107,9 @@ try {
   for (
     const [sourceName, outputName, expected] of [
       ["EXACT.SK8", "EXACT.COM", "2049\r\n"],
+      ["SUB.SK8", "SUB.COM", "38\r\n"],
+      ["MUL.SK8", "MUL.COM", "42\r\n"],
+      ["DIV.SK8", "DIV.COM", "F16:5140\r\n"],
       ["MIXED.SK8", "MIXED.COM", "F16:6800\r\n"],
       ["LARGE.SK8", "LARGE.COM", "30000\r\n"],
     ]
@@ -115,9 +121,12 @@ try {
     );
     const image = machine.export_drive(0);
     const generated = readCpm22File(image, outputName);
-    assert.ok(generated.includes(0x24), outputName);
-    const marker = new TextDecoder("ascii").decode(generated);
-    assert.ok(marker.includes(expected), marker);
+    assert.ok(generated.length > 2000, `${outputName} runtime image`);
+    assert.equal(generated[0], 0x31, `${outputName} sets its private stack`);
+    assert.equal(generated[1], 0x00, `${outputName} stack low byte`);
+    assert.equal(generated[2], 0x80, `${outputName} stack high byte`);
+    const command = outputName.slice(0, -4);
+    runCommand(command, expected, `${command}.COM runtime execution`);
   }
   runCommand("SKATE OVER.SK8", "COMPILE ERROR\r\n", "overflow rejection");
   assertAbsent(machine.export_drive(0), "OVER.COM");
@@ -134,124 +143,109 @@ try {
     disk = machine.export_drive(0),
     "ADD.NOB",
   );
-  // The command uses the three-character NOBJ extension; the CP/M helper
-  // canonicalizes it as ADD.NOB because CP/M permits only three letters.
+  // CP/M canonicalizes the three-character NOBJ extension as ADD.NOB.
   const objectBytes = committed(objectPhysical);
   const object = parseNobj1(objectBytes);
   assert.equal(object.layout.entrySymbolId, 1);
-  assert.equal(object.relocations.length, 1);
-  const providerBytes = encodeNobj1({
-    begin: { targetId: 1 },
-    contracts: [{
-      id: 1,
-      key: "org.skate.runtime",
-      majorVersion: 2,
-      minorVersion: 0,
-      data: new Uint8Array(4),
-    }],
-    regions: [{
-      id: 1,
-      addressSpaceKey: "z80.cpu",
-      storageKey: "cpm.ram",
-      base: 0x0100,
-      capacity: 0xe300,
-      imageFill: 0,
-      permissions: 7,
-      banked: false,
-    }],
-    sections: [{
-      id: 1,
-      storageKind: 1,
-      permissions: 7,
-      alignment: 1,
-      length: 1,
-      runRegionId: 1,
-      runPlacement: "fixed",
-      runOffset: 0x300,
-      loadPlacement: "same",
-      loadRegionId: 1,
-      loadOffset: 0,
-      fill: 0,
-    }],
-    ranges: [],
-    images: [{ sectionId: 1, offset: 0, bytes: Uint8Array.of(0xc9) }],
-    patches: [],
-    symbols: [{
-      id: 1,
-      binding: "local",
-      valueKind: 1,
-      sectionId: 1,
-      offset: 0,
-    }],
-    relocations: [],
-    metadata: [],
-    layout: { mode: "module", entrySymbolId: 0 },
-  });
+  assert.equal(object.contracts.length, 0);
+  assert.equal(object.relocations.length, 0);
+  const addCom = readCpm22File(disk, "ADD.COM");
+  const addImage = addCom.slice(0, object.images[0].bytes.length);
+  assert.deepEqual([...addImage], [...object.images[0].bytes]);
+
+  // Link the checked NOBJ through the same CP/M TPA linker and execute the
+  // materialized image.  No provider is needed: C1's generated image carries
+  // its numeric services, so a linked COM cannot hide a dead service call.
   const linked = linkTargetStreams(
-    [
-      { id: "native", records: toPhysicalNobjRecords(objectBytes) },
-      { id: "provider", records: toPhysicalNobjRecords(providerBytes) },
-    ],
+    [{ id: "native", records: toPhysicalNobjRecords(objectBytes) }],
     {
       mainObjectId: "native",
       profile: SKATE_TPA_PROFILES["cpm-64k"],
-      providers: [{
-        id: "native-provider",
-        objectId: "provider",
-        supports: [{
-          key: "org.skate.runtime",
-          majorVersion: 2,
-          minorVersion: 0,
-        }],
-        services: [{
-          contract: {
-            key: "org.skate.runtime",
-            majorVersion: 2,
-            minorVersion: 0,
-          },
-          key: "numeric.classify",
-          symbolId: 1,
-        }],
-      }],
+      providers: [],
     },
   );
-  assert.equal(linked.objects.length, 2);
+  assert.equal(linked.objects.length, 1);
   assert.equal(linked.linked.entry?.address, 0x0100);
-  assert.equal(linked.comBytes[4], 0x00);
-  assert.equal(linked.comBytes[5], 0x04);
-  assert.deepEqual(
-    [...linked.comBytes.slice(7, 32)],
-    [...object.images[0].bytes.slice(7, 32)],
-  );
-  runCommand("ADD", "42\r\n", "generated ADD.COM");
-  const remounted = machine.export_drive(0);
-  const firstRun = readCpm22File(remounted, "ADD.COM");
-  const remount = new TriptychCpu(firmware.bootRom);
+  assert.deepEqual([...linked.comBytes], [...addImage]);
+
+  // Change only the embedded left operand.  Re-running the same generated
+  // machine code must change 40+2 to 41+2, proving the arithmetic is runtime
+  // work rather than a compiler-preformatted answer.
+  const mutated = Uint8Array.from(addImage);
+  // C1RLV is generated at payload offset 344; changing it proves runtime work.
+  mutated[344] = 41;
+  mutated[345] = 0;
+  const mutatedDisk = installCpm22File(disk, {
+    name: "MUTATE.COM",
+    bytes: mutated,
+    padByte: 0x1a,
+  });
+  const mutateMachine = new TriptychCpu(firmware.bootRom);
   try {
-    remount.install_drive(0, remounted, true);
-    let second = "";
+    mutateMachine.install_drive(0, mutatedDisk, true);
+    const stackSentinel = new Uint8Array(0x1000).fill(0xa5);
+    mutateMachine.write_ram(0x7000, stackSentinel);
+    let output = "";
     for (let slice = 0; slice < 1800; slice += 1) {
-      const status = remount.run_slice(50_000, 500_000);
-      second += decoder.decode(remount.take_serial_output());
+      const status = mutateMachine.run_slice(50_000, 500_000);
+      output += decoder.decode(mutateMachine.take_serial_output());
       assert.notEqual(status, 0);
-      if (second.endsWith("A>")) break;
+      if (output.endsWith("A>")) break;
     }
-    const start = second.length;
-    assert.ok(remount.enqueue_serial_input(new TextEncoder().encode("ADD\r")));
+    const start = output.length;
+    assert.ok(
+      mutateMachine.enqueue_serial_input(new TextEncoder().encode("MUTATE\r")),
+    );
     for (let slice = 0; slice < 1800; slice += 1) {
-      const status = remount.run_slice(50_000, 500_000);
-      second += decoder.decode(remount.take_serial_output());
+      const status = mutateMachine.run_slice(50_000, 500_000);
+      output += decoder.decode(mutateMachine.take_serial_output());
       assert.notEqual(status, 0);
-      if (second.length > start && second.endsWith("A>")) break;
+      if (output.length > start && output.endsWith("A>")) break;
     }
-    assert.ok(second.slice(start).includes("42\r\n"), second);
+    assert.ok(output.slice(start).includes("43\r\n"), output);
+    // The runtime stack is capped at $8000. Leave a 256-byte live-stack band
+    // and require the lower $7000..$7EFF guard to remain untouched.
+    assert.ok(
+      mutateMachine.read_ram(0x7000, 0x0f00).every((byte) => byte === 0xa5),
+      "generated runtime stayed above the stack guard",
+    );
   } finally {
-    remount.free();
+    mutateMachine.free();
+  }
+
+  const linkedDisk = installCpm22File(disk, {
+    name: "LINKED.COM",
+    bytes: linked.comBytes,
+    padByte: 0x1a,
+  });
+  const linkedMachine = new TriptychCpu(firmware.bootRom);
+  try {
+    linkedMachine.install_drive(0, linkedDisk, true);
+    let output = "";
+    for (let slice = 0; slice < 1800; slice += 1) {
+      const status = linkedMachine.run_slice(50_000, 500_000);
+      output += decoder.decode(linkedMachine.take_serial_output());
+      assert.notEqual(status, 0);
+      if (output.endsWith("A>")) break;
+    }
+    const start = output.length;
+    assert.ok(
+      linkedMachine.enqueue_serial_input(new TextEncoder().encode("LINKED\r")),
+    );
+    for (let slice = 0; slice < 1800; slice += 1) {
+      const status = linkedMachine.run_slice(50_000, 500_000);
+      output += decoder.decode(linkedMachine.take_serial_output());
+      assert.notEqual(status, 0);
+      if (output.length > start && output.endsWith("A>")) break;
+    }
+    assert.ok(output.slice(start).includes("42\r\n"), output);
+  } finally {
+    linkedMachine.free();
   }
   const budget = measureC1Budget(compiler.image, compiler.address, {
     sourceBytes: sourceBytes.length,
     objectBytes: objectBytes.length,
-    comBytes: firstRun.length,
+    comBytes: addImage.length,
   });
   console.log(JSON.stringify(
     {
@@ -271,7 +265,7 @@ try {
       comRecords: budget.comRecords,
       objectBytes: objectBytes.length,
       objectSha256: createHash("sha256").update(objectBytes).digest("hex"),
-      comBytes: firstRun.length,
+      comBytes: addImage.length,
       transcript,
       platform: "Triptych WASM with CP/M 2.2",
     },
