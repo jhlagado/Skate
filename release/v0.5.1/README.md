@@ -20,7 +20,7 @@ object file. Each program's final value is printed automatically.
 
 ## Try the examples
 
-[Launch Skate in Triptych](https://jhlagado.github.io/triptych/?recipe=skate&revision=26ab95deb027855a3cbd593119fc8976736d521af7aa2b2a79b41e288d0aeb8d). Choose **Use this setup** to start.
+[Launch Skate in Triptych](https://jhlagado.github.io/Skate/). The image boots automatically; no installation or setup confirmation is needed.
 
 The Triptych library package provides a protected reference disk on A and a
 personal writable copy on B. Select B before editing or compiling:
