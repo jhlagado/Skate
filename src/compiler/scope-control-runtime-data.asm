@@ -620,7 +620,7 @@ SRTWRNUM:
         XOR A
         SUB L
         LD L,A
-        XOR A
+        LD A,0                    ; Preserve the low-byte borrow for negating H.
         SBC A,H
         LD H,A
 SRTWNP:
@@ -659,10 +659,24 @@ SRTWDOUT:
         ADD A,'0'
         JP SRTCH
 
+; Preserve the caller's numeric remainder and procedure continuation across BDOS.
 SRTCH:
-        LD E,A
-        LD C,2
-        JP 5
+        PUSH AF                    ; Retain the value tag and flags.
+        PUSH BC                    ; Retain loop counters.
+        PUSH DE                    ; Retain the decimal divisor or data pointer.
+        PUSH HL                    ; Retain the decimal remainder or literal cursor.
+        PUSH IX                    ; Retain the primitive return continuation.
+        PUSH IY                    ; Retain any active indexed runtime state.
+        LD E,A                     ; BDOS function two takes the character in E.
+        LD C,2                     ; Console character output.
+        CALL 5                     ; BDOS may overwrite general registers.
+        POP IY                     ; Restore the caller's indexed state.
+        POP IX                     ; Restore the primitive continuation.
+        POP HL                     ; Restore the numeric remainder.
+        POP DE                     ; Restore the divisor or data pointer.
+        POP BC                     ; Restore loop counters.
+        POP AF                     ; Restore the original flags and value tag.
+        RET                        ; Continue formatting or return to the primitive.
 
 SRTWQF:    DB "#f$"
 SRTWQT:    DB "#t$"

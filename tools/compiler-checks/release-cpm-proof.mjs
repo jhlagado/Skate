@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadAssembly } from "../../tests/z80.ts";
@@ -12,6 +12,12 @@ import {
 } from "../../../triptych/tools/lib/cpm22-disk.mjs";
 
 const skateRoot = fileURLToPath(new URL("../../", import.meta.url));
+const imageArgument = Deno.args.find((argument) =>
+  argument.startsWith("--image=")
+);
+const imagePath = imageArgument
+  ? resolve(skateRoot, imageArgument.slice("--image=".length))
+  : null;
 const triptychRoot = fileURLToPath(
   new URL("../../../triptych/", import.meta.url),
 );
@@ -246,6 +252,7 @@ const heapPointerAddress = provider.address("SRTHEAPP");
 const lowStackAddress = provider.address("SRTLOWSP");
 const records = {};
 let stableImage = disk;
+let releaseImage = null;
 let machine = newMachine(firmware, disk);
 try {
   const first = session(machine);
@@ -266,6 +273,7 @@ try {
   const heapEnd = readWord(machine, heapPointerAddress);
   assert.ok(lowSp >= 0xd400, "generated program crossed the stack guard");
   assert.ok(heapEnd < lowSp, "heap and native stack collided");
+  releaseImage = Uint8Array.from(stableImage);
   records.initial = {
     sourceBytes: sourceTotal,
     comBytes: com.length,
@@ -365,6 +373,12 @@ try {
   machine.free();
 }
 
+if (imagePath) {
+  assert.ok(releaseImage, "release image was not produced");
+  await Deno.mkdir(dirname(imagePath), { recursive: true });
+  await Deno.writeFile(imagePath, releaseImage);
+}
+
 console.log(JSON.stringify(
   {
     status: "passed",
@@ -374,6 +388,16 @@ console.log(JSON.stringify(
     outputBytes: records.initial.comBytes,
     objectBytes: records.initial.nobjBytes,
     disk: diskStats(stableImage),
+    ...(imagePath
+      ? {
+        image: {
+          path: imagePath,
+          bytes: releaseImage.length,
+          sha256: sha256(releaseImage),
+          disk: diskStats(releaseImage),
+        },
+      }
+      : {}),
     records,
   },
   null,

@@ -1,0 +1,15 @@
+; Shop receipt: each item has a name, quantity and price in cents.
+(define basket (list (list "Apples" 3 45) (list "Bread" 2 180) (list "Milk" 1 125)))
+(define receipt
+  (lambda (items total)
+    (if (null? items)
+        (begin (display "Total (cents): ") total)
+        (let* ((item (car items))
+               (quantity (car (cdr item)))
+               (price (car (cdr (cdr item)))))
+          (display (car item))
+          (display " x ") (display quantity)
+          (display " = ") (display (* quantity price)) (newline)
+          (receipt (cdr items) (+ total (* quantity price)))))))
+(display "Village shop receipt") (newline)
+(receipt basket 0)

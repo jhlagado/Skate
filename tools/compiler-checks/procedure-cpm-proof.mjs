@@ -50,6 +50,21 @@ disk = installCpm22File(disk, {
 });
 
 const dataCases = [
+  [
+    "DIGITS.SK8",
+    '(begin (display 45) (display " ") (display -123) 7)',
+    "45 -1237",
+  ],
+  [
+    "LETINIT.SK8",
+    "(define f (lambda (xs) (let ((x (car xs))) (+ x 1)))) (f (quote (41)))",
+    "42",
+  ],
+  [
+    "LETSINIT.SK8",
+    "(define f (lambda (xs) (let* ((x (car xs)) (y (+ x 1))) (+ y 1)))) (f (quote (40)))",
+    "42",
+  ],
   ["QUOTE0.SK8", "(quote ())", "()"],
   ["QUOTE1.SK8", "(quote (1 2))", "(1 2)"],
   ["DOT.SK8", "(quote (1 2 . 3))", "(1 2 . 3)"],

@@ -21,7 +21,7 @@ Deno.test("scope compiler stays below its core and allocation gates", async () =
   assert.equal(budget.localSlotCapacity, 128);
   assert.equal(budget.fixupCapacity, 320);
   assert.equal(budget.symbolCapacity, 320);
-  assert.equal(budget.imageBytes, 12_706);
+  assert.equal(budget.imageBytes, 12_726);
   assert.equal(budget.coreRemaining, SCOPE_CORE_LIMIT - budget.imageBytes);
   assert.equal(
     budget.allocationRemaining,
@@ -29,6 +29,6 @@ Deno.test("scope compiler stays below its core and allocation gates", async () =
   );
   assert.equal(budget.stagedOutputLimit, 12_160);
   assert.equal(budget.fixedTableBytes, 17_920);
-  assert.equal(budget.allocationBytes, 44_834);
+  assert.equal(budget.allocationBytes, 44_854);
   assert.match(renderScopeControlBudget(budget), /256 globals/);
 });

@@ -7,8 +7,15 @@
     "test:cpm:release": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/release-cpm-proof.mjs",
     "measure": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services tools/compiler-checks/scope-control-budget.ts",
     "fmt": "deno fmt",
-    "lint": "deno lint"
+    "lint": "deno lint",
+    "disk:cpm:examples": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/examples-cpm-proof.mjs --image=build/skate-examples-cpm.img"
   },
-  "fmt": { "exclude": ["**/*.md"] },
-  "exclude": ["build"]
+  "fmt": {
+    "exclude": [
+      "**/*.md"
+    ]
+  },
+  "exclude": [
+    "build"
+  ]
 }

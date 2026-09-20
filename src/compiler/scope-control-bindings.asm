@@ -22,7 +22,7 @@ SCLETB:
         LD (SCSLOT),A              ; Save the selected slot for the pending entry.
         CALL SCPEND                ; Record the name and slot before recursive code.
         JP C,SCLETERR              ; Pending-binding capacity is explicit.
-        CALL SCEXPR                ; Initializer sees only the outer local scope.
+        CALL SCINIT                ; Initializer sees only the outer local scope.
         JP C,SCLETERR              ; Preserve its syntax or capacity error.
         CALL SCPREV                ; Restore this binding's slot after nested forms.
         JP C,SCLETERR              ; The pending record must still be present.
@@ -62,7 +62,7 @@ SCLETSB:
         LD (SCSLOT),A              ; Save the selected slot for the store.
         CALL SCPEND                ; Record the name and slot before recursive code.
         JP C,SCLETERR              ; Pending-binding capacity is explicit.
-        CALL SCEXPR                ; The initializer sees earlier let* bindings.
+        CALL SCINIT                ; The initializer sees earlier let* bindings.
         JP C,SCLETERR              ; Preserve initializer failure.
         CALL SCPREV                ; Restore this binding's slot after nested forms.
         JP C,SCLETERR              ; The pending record must still be present.
@@ -672,3 +672,18 @@ SCPMN:
         RET
 
 ; Read one closing parenthesis for a fixed-arity form.
+
+; Initializers must return for the binding store, even inside a tail-position let.
+SCINIT:
+        LD A,(SCTCTX)              ; Save the enclosing body's tail position.
+        PUSH AF                    ; Nested initializers need independent saved state.
+        XOR A                      ; The store and body still follow this expression.
+        LD (SCTCTX),A              ; Emit an ordinary call for the initializer.
+        CALL SCEXPR                ; Compile the value with the outer lexical scope.
+        PUSH AF                    ; Preserve its result tag and failure carry.
+        POP BC                     ; Hold the result while recovering the context.
+        POP AF                     ; Recover the enclosing tail flag.
+        LD (SCTCTX),A              ; The let body retains its original tail position.
+        PUSH BC                    ; Restore the expression's tag and flags.
+        POP AF                     ; Keep syntax failures visible to the caller.
+        RET                        ; HL still holds the expression result.

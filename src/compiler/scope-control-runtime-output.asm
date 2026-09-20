@@ -38,7 +38,7 @@ SRTNUMPR:
         XOR A                     ; Clear A before the low-byte negation.
         SUB L                     ; Negate the low payload byte.
         LD L,A                    ; Retain the low magnitude byte.
-        XOR A                     ; Clear A before propagating the borrow.
+        LD A,0                    ; Preserve the low-byte borrow for negating H.
         SBC A,H                    ; Negate the high payload byte with borrow.
         LD H,A                    ; Retain the complete magnitude.
 SRTIPOS:

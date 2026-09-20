@@ -1,0 +1,23 @@
+; Two independent accounts, each keeping its balance in a closure.
+; A transaction changes only the account to which it is sent.
+(define make-account
+  (lambda (balance)
+    (lambda (amount)
+      (set! balance (+ balance amount))
+      balance)))
+(define household (make-account 1200))
+(define savings (make-account 5000))
+(define show-balance
+  (lambda (name account)
+    (display name) (display ": ") (display (account 0)) (newline)))
+(display "Account ledger (whole dollars)") (newline)
+(show-balance "Household opening" household)
+(show-balance "Savings opening" savings)
+(household 800)
+(household -350)
+(household -200)
+(savings 200)
+(show-balance "Household closing" household)
+(show-balance "Savings closing" savings)
+(display "Combined balance: ")
+(+ (household 0) (savings 0))
