@@ -510,6 +510,8 @@ SCOUT:
         RET                        ; Return success to SCMAIN.
 SCOUTER:
         CALL CTCLOSEW              ; Close any open stage and flush no bad bytes.
+        LD HL,SCOUTTXT             ; Distinguish a disk publication failure from source errors.
+        LD (SCERRPTR),HL           ; The command driver prints this diagnostic.
         SCF                       ; Carry reports the publication failure.
         RET                        ; Staged names remain available for inspection.
 SCROLL:
