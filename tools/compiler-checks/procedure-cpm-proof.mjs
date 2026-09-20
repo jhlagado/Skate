@@ -27,20 +27,58 @@ systemDisk.set(firmware.bdos, 0x0800);
 systemDisk.set(firmware.bios, 0x1600);
 const backing = new Uint8Array(Math.ceil(systemDisk.length / 512) * 512);
 backing.set(systemDisk);
-
 const compiler = await loadAssembly("src/compiler/scope-control-compiler.asm");
+const provider = await loadAssembly(
+  "src/compiler/scope-control-runtime-image.asm",
+);
 assert.equal(compiler.image.base, 0);
 assert.equal(compiler.address("SCMAIN"), 0x0100);
 assert.ok(compiler.address("SCEND") < 0x10000);
-const runtimeLength = compiler.address("SRTLEN");
-const heapPointerAddress = compiler.address("SRTHEP");
-const lowStackAddress = compiler.address("SRTLOW");
+const runtimeLength = provider.image.bytes.length - 0x0100;
+assert.equal(runtimeLength, compiler.address("SRTLEN"));
+const heapPointerAddress = provider.address("SRTHEAPP");
+const lowStackAddress = provider.address("SRTLOWSP");
 let disk = installCpm22File(backing, {
   name: "SKATE.COM",
   bytes: compiler.image.bytes.slice(0x0100),
   padByte: 0x1a,
 });
+disk = installCpm22File(disk, {
+  name: "SKATE.RT",
+  bytes: provider.image.bytes.slice(0x0100),
+  padByte: 0x1a,
+});
 
+const dataCases = [
+  ["QUOTE0.SK8", "(quote ())", "()"],
+  ["QUOTE1.SK8", "(quote (1 2))", "(1 2)"],
+  ["DOT.SK8", "(quote (1 2 . 3))", "(1 2 . 3)"],
+  ["QSTR.SK8", '(quote "hi")', '"hi"'],
+  ["QSYM.SK8", "(quote foo)", "foo"],
+  ["CONS.SK8", "(cons 1 (cons 2 (quote ())))", "(1 2)"],
+  ["CARSTR.SK8", '(car (cons "x" 1))', '"x"'],
+  ["CAR.SK8", "(car (cons 1 (quote ())))", "1"],
+  ["CDRSTR.SK8", '(cdr (cons #t "x"))', '"x"'],
+  ["CDR.SK8", "(cdr (cons 1 (cons 2 (quote ()))))", "(2)"],
+  ["PAIRP.SK8", "(pair? (cons 1 2))", "#t"],
+  ["NULLP.SK8", "(null? (quote ()))", "#t"],
+  ["LIST.SK8", "(list 1 2 3)", "(1 2 3)"],
+  ["EQ.SK8", "(eq? 1 1)", "#t"],
+  ["WRITE.SK8", "(write (quote (1 2)))", "(1 2)#<unspecified>"],
+  ["DISPLAY.SK8", '(display "hi")', "hi#<unspecified>"],
+  ["NEWLINE.SK8", '(begin (display "x") (newline))', "x\r\n#<unspecified>"],
+  [
+    "GCFREE.SK8",
+    "(define f (lambda (n) (if (zero? n) 7 (begin (cons n 0) (f (- n 1)))))) (f 1200)",
+    "7",
+  ],
+  [
+    "GSET.SK8",
+    "(define value 1) (set! value 2) value (define + 1) (set! + 8) +",
+    "8",
+  ],
+  ["PRIMVAL.SK8", "(define p +) (p 2 3)", "5"],
+];
 const cases = [
   ["LAMBDA.SK8", "((lambda (x) x) 42)", "42"],
   ["TWOARG.SK8", "((lambda (x y) (+ x y)) 20 22)", "42"],
@@ -187,12 +225,8 @@ const cases = [
     }) x8)))`,
     "8",
   ],
-  [
-    "GSET.SK8",
-    "(define value 1) (set! value 2) value (define + 1) (set! + 8) +",
-    "8",
-  ],
 ];
+const selectedCases = Deno.args.includes("--data") ? dataCases : cases;
 const errorCases = [
   ["BADFORM.SK8", "(let ((value 1 2)) value)", "EXPECT\r\n"],
   ["DUPFORM.SK8", "((lambda (x x) x) 1 2)", "DUP\r\n"],
@@ -207,14 +241,32 @@ const runtimeErrorCases = [
     "RUNTIME ERROR\r\n",
   ],
 ];
-for (const [name, source] of [...cases, ...errorCases, ...runtimeErrorCases]) {
+const dataErrorCases = [
+  ["BADDOT.SK8", "(quote (1 . 2 3))", "COMPILE ERROR\r\n"],
+];
+const dataRuntimeErrorCases = [
+  ["CARERR.SK8", "(car 1)", "RUNTIME ERROR\r\n"],
+  ["CDRERR.SK8", "(cdr 1)", "RUNTIME ERROR\r\n"],
+];
+const selectedErrorCases = Deno.args.includes("--data")
+  ? [...errorCases, ...dataErrorCases]
+  : errorCases;
+const selectedRuntimeErrorCases = Deno.args.includes("--data")
+  ? [...runtimeErrorCases, ...dataRuntimeErrorCases]
+  : runtimeErrorCases;
+for (
+  const [name, source] of [
+    ...selectedCases,
+    ...selectedErrorCases,
+    ...selectedRuntimeErrorCases,
+  ]
+) {
   disk = installCpm22File(disk, {
     name,
     bytes: new TextEncoder().encode(source + "\x1a"),
     padByte: 0x1a,
   });
 }
-
 const machine = new TriptychCpu(firmware.bootRom);
 const decoder = new TextDecoder("ascii");
 let transcript = "";
@@ -330,7 +382,7 @@ try {
   machine.install_drive(0, disk, true);
   runUntilPrompt(0, "the boot prompt");
   const measurements = [];
-  for (const [name, , expected, guard] of cases) {
+  for (const [name, , expected, guard] of selectedCases) {
     const outputName = name.replace(".SK8", ".COM");
     runCommand(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
     const image = machine.export_drive(0);
@@ -368,10 +420,10 @@ try {
     runCommand(`ERA ${outputName}`, "A>", `remove ${outputName}`);
     runCommand(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
   }
-  for (const [name, , expected] of errorCases) {
+  for (const [name, , expected] of selectedErrorCases) {
     runCommand(`SKATE ${name}`, expected, `reject ${name}`);
   }
-  for (const [name, , expected] of runtimeErrorCases) {
+  for (const [name, , expected] of selectedRuntimeErrorCases) {
     const outputName = name.replace(".SK8", ".COM");
     runCommand(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
     runCommand(
@@ -388,7 +440,7 @@ try {
       compilerBytes: compiler.image.bytes.length - 0x100,
       imageEnd: compiler.image.end,
       runtimeBytes: runtimeLength,
-      cases: cases.map(([name]) => name),
+      cases: selectedCases.map(([name]) => name),
       largestComBytes: Math.max(
         ...measurements.map(({ comBytes }) => comBytes),
       ),

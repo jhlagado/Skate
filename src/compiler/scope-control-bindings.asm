@@ -486,7 +486,52 @@ SCGHIGH:
         JR NZ,SCGLOOK
         JR SCGNEW                  ; No existing identity matched.
 
-; Return the predefined arithmetic kind for SCID, or zero for an ordinary name.
+; Find an existing package-global identity without allocating a new slot.
+; Carry set returns its slot in A; carry clear leaves the global table unchanged.
+SCGHAS:
+        LD HL,(SCGCOUNT)           ; Search only the occupied identity records.
+        LD A,H
+        OR L
+        JR Z,SCGHASNO              ; An empty table cannot contain the name.
+        LD B,H                     ; BC counts records still to inspect.
+        LD C,L
+        LD HL,SCGKEYS              ; HL points at the first two-byte identity.
+        LD DE,SCGSLOTS             ; DE points at the matching slot byte.
+        XOR A
+        LD (SCGIDX),A              ; The slot index is retained for each step.
+SCGHASLP:
+        LD A,(SCID)                ; Compare the identity low byte.
+        CP (HL)
+        JR NZ,SCGHASNX             ; A mismatch selects the next identity.
+        INC HL                     ; Advance to the stored identity high byte.
+        LD A,(SCID+1)              ; Compare the identity high byte.
+        CP (HL)
+        JR NZ,SCGHASHI             ; A mismatch advances past this record.
+        LD A,(DE)                  ; Return the existing package-global slot.
+        LD (SCGSLOT),A             ; Preserve it across the caller's setup.
+        SCF                        ; Carry distinguishes a found global.
+        RET
+SCGHASHI:
+        INC HL                     ; Skip the stored identity high byte.
+        INC DE                     ; Advance the parallel slot table.
+        DEC BC                     ; One occupied identity has been checked.
+        LD A,B
+        OR C
+        JR NZ,SCGHASLP             ; Continue while records remain.
+        JR SCGHASNO                ; The complete table had no match.
+SCGHASNX:
+        INC HL                     ; Skip both identity bytes.
+        INC HL
+        INC DE                     ; Advance the parallel slot table.
+        DEC BC                     ; One occupied identity has been checked.
+        LD A,B
+        OR C
+        JR NZ,SCGHASLP             ; Continue while records remain.
+SCGHASNO:
+        XOR A                      ; Carry clear reports an unbound name.
+        RET
+
+; Return the predefined procedure kind for SCID, or zero for an ordinary name.
 ; Symbol references carry subtype bits in the high byte; the interner index is
 ; the remaining thirteen bits and addresses a three-byte descriptor.
 SCPLOOK:
@@ -507,39 +552,52 @@ SCPLOOK:
         LD C,(HL)                  ; Descriptor byte two holds spelling length.
         LD HL,SCNAMEPL             ; Add the offset to the symbol spelling pool.
         ADD HL,DE
-        LD A,C                     ; One-byte names contain the three arithmetic ops.
-        CP 1
-        JR NZ,SCPLONG
-        LD A,(HL)
-        CP '+'
+        LD (SCPNADR),HL            ; Keep the spelling while trying each name.
+        LD A,C
+        LD (SCPNLEN),A             ; Keep the length beside the spelling pointer.
+        LD DE,SCNPLUS
+        CALL SCPMATCH
         JP Z,SCPPLUS
-        CP '-'
+        LD DE,SCNSUB
+        CALL SCPMATCH
         JP Z,SCPSUB
-        CP '*'
+        LD DE,SCNMUL
+        CALL SCPMATCH
         JP Z,SCPMULR
+        LD DE,SCNZERO
+        CALL SCPMATCH
+        JP Z,SCPZERO
+        LD DE,SCNCONS
+        CALL SCPMATCH
+        JP Z,SCPCONS
+        LD DE,SCNCAR
+        CALL SCPMATCH
+        JP Z,SCPCAR
+        LD DE,SCNCDR
+        CALL SCPMATCH
+        JP Z,SCPCDR
+        LD DE,SCNPAIR
+        CALL SCPMATCH
+        JP Z,SCPPAIR
+        LD DE,SCNNULL
+        CALL SCPMATCH
+        JP Z,SCPNULL
+        LD DE,SCNLIST
+        CALL SCPMATCH
+        JP Z,SCPLIST
+        LD DE,SCNEQ
+        CALL SCPMATCH
+        JP Z,SCPEQ
+        LD DE,SCNWRIT
+        CALL SCPMATCH
+        JP Z,SCPWRIT
+        LD DE,SCNDISP
+        CALL SCPMATCH
+        JP Z,SCPDISP
+        LD DE,SCNNWL
+        CALL SCPMATCH
+        JP Z,SCPNWL
         JP SCPNONE
-SCPLONG:
-        CP 5                       ; zero? is the only predefined five-byte name.
-        JP NZ,SCPNONE
-        LD A,(HL)
-        CP 'z'
-        JP NZ,SCPNONE
-        INC HL
-        LD A,(HL)
-        CP 'e'
-        JP NZ,SCPNONE
-        INC HL
-        LD A,(HL)
-        CP 'r'
-        JP NZ,SCPNONE
-        INC HL
-        LD A,(HL)
-        CP 'o'
-        JP NZ,SCPNONE
-        INC HL
-        LD A,(HL)
-        CP '?'
-        JP NZ,SCPNONE
 SCPZERO:
         LD A,4                     ; Kind four identifies zero? at runtime.
         RET
@@ -552,8 +610,65 @@ SCPSUB:
 SCPMULR:
         LD A,3                     ; Kind three identifies multiplication.
         RET
+SCPCONS:
+        LD A,5                     ; Kind five identifies cons.
+        RET
+SCPCAR:
+        LD A,6                     ; Kind six identifies car.
+        RET
+SCPCDR:
+        LD A,7                     ; Kind seven identifies cdr.
+        RET
+SCPPAIR:
+        LD A,8                     ; Kind eight identifies pair?.
+        RET
+SCPNULL:
+        LD A,9                     ; Kind nine identifies null?.
+        RET
+SCPLIST:
+        LD A,10                    ; Kind ten identifies list.
+        RET
+SCPEQ:
+        LD A,11                    ; Kind eleven identifies eq?.
+        RET
+SCPWRIT:
+        LD A,12                    ; Kind twelve identifies write.
+        RET
+SCPDISP:
+        LD A,13                    ; Kind thirteen identifies display.
+        RET
+SCPNWL:
+        LD A,14                    ; Kind fourteen identifies newline.
+        RET
 SCPNONE:
         XOR A                      ; Ordinary names receive no primitive mark.
+        RET
+
+; Compare the saved interned spelling with one length-prefixed static name.
+SCPMATCH:
+        LD HL,(SCPNADR)
+        LD A,(SCPNLEN)
+        LD B,A
+        LD A,(DE)
+        CP B
+        JR NZ,SCPMN
+        INC DE
+        LD A,B
+        OR A
+        JR Z,SCPMY
+SCPMLP:
+        LD A,(DE)
+        CP (HL)
+        JR NZ,SCPMN
+        INC DE
+        INC HL
+        DJNZ SCPMLP
+SCPMY:
+        XOR A
+        RET
+SCPMN:
+        LD A,1
+        OR A
         RET
 
 ; Read one closing parenthesis for a fixed-arity form.

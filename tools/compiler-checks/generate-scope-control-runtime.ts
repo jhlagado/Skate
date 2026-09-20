@@ -60,6 +60,13 @@ const values = [
   `SRTLOW EQU ${address("SRTLOWSP")}`,
   `SRTZERO EQU ${address("SRTZERO")}`,
   `SRTPRI EQU ${address("SRTPRINT")}`,
+  `SRTQPUT EQU ${address("SRTQPUT")}`,
+  `SRTQBLD EQU ${address("SRTQBLD")}`,
+  `SRTCONS EQU ${address("SRTCONS")}`,
+  `SRTCAR EQU ${address("SRTCAR")}`,
+  `SRTCDR EQU ${address("SRTCDR")}`,
+  `SRTPAIRP EQU ${address("SRTPAIRP")}`,
+  `SRTNULLP EQU ${address("SRTNULLP")}`,
 ];
 const lines = [
   "; Runtime image generated from scope-control-runtime-image.asm.",

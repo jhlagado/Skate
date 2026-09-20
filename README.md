@@ -7,9 +7,11 @@ programs. It is a work in progress aimed at useful Scheme programs on a 64K
 machine, with a small native compiler, a compact runtime and checked CP/M
 publication.
 
-Skate 0.3.0 supports exact signed integers, booleans, package definitions,
-lexical `let` and `let*`, `if`, `begin`, `and`, `or`, `+`, `-`, `*`, fixed-arity
-procedures, closures, mutation and proper tail calls.
+Skate 0.4.0 supports exact signed integers, booleans, symbols, strings,
+quoted data, pairs, lists, `cons`, `car`, `cdr`, `pair?`, `null?`, `eq?`,
+`write`, `display`, `newline`, package definitions, lexical `let` and `let*`,
+`if`, `begin`, `and`, `or`, `+`, `-`, `*`, fixed-arity procedures, closures,
+mutation and proper tail calls.
 
 The compiler and runtime are written in Z80 assembly using the ATOM assembler.
 The repository also contains the Deno build commands and CP/M checks needed to

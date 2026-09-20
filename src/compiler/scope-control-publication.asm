@@ -131,6 +131,9 @@ SCDATAOK:
         LD (SCPC),HL               ; Publish the final staged image cursor.
         CALL SCPDESC               ; Append absolute procedure descriptors.
         RET C                      ; Preserve the staged-image capacity guard.
+        CALL SCLITDAT             ; Append copied symbol and string literals.
+        RET C                      ; Preserve the staged-image capacity guard.
+        LD HL,(SCPC)               ; Literal data advances the final image cursor.
         LD DE,SCIMG                ; The payload begins at the staged image base.
         OR A                       ; Clear carry before measuring the image.
         SBC HL,DE                  ; HL becomes runtime plus code plus slot data.
@@ -179,6 +182,8 @@ SCFIXLP:
         PUSH HL                    ; Keep the table cursor across address patching.
         LD (SCFPTR),DE             ; Preserve the staged patch destination.
         LD A,(SCFKIND)             ; Select a global, local or procedure target.
+        CP 3                       ; Kind three names a copied literal record.
+        JR Z,SCFLIT                ; Literal targets are staged after descriptors.
         CP 2                       ; Kind two names the serialized procedure table.
         JR Z,SCFPROC               ; Procedure fixups point at descriptor records.
         OR A                       ; Zero selects the global base.
@@ -190,6 +195,15 @@ SCFGLOB:
 SCFADDR:
         LD A,(SCFSLOT)             ; The slot number is a three-byte index.
         CALL SCADDR                ; Return the absolute address of this slot.
+        JR SCFPATCH                ; Share the placeholder write with descriptors.
+SCFLIT:
+        LD A,(SCFSLOT)             ; The fixup stores a literal-record index.
+        CALL SCLITOA             ; Locate its staged output base word.
+        LD E,(HL)                  ; Read the staged literal header low byte.
+        INC HL                     ; Advance to the high output address byte.
+        LD D,(HL)                  ; DE now identifies the literal header.
+        EX DE,HL                   ; SCABS converts the staged header address.
+        CALL SCABS
         JR SCFPATCH                ; Share the placeholder write with descriptors.
 SCFPROC:
         LD A,(SCFSLOT)             ; The fixup stores a descriptor table index.

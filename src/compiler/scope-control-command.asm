@@ -13,7 +13,7 @@
 SCSTAGE EQU 06000H               ; Object staging, including the image payload.
 SCIMG   EQU SCSTAGE+79           ; NOBJ image payload begins after its header.
 SCCODE  EQU SCIMG+SRTLEN         ; Generated program follows the runtime image.
-SCEND   EQU 07B80H               ; Keep the bounded staged image below the gap.
+SCEND   EQU 08F80H               ; Use the available gap before compiler tables.
 SCGENEND EQU SCEND-32             ; Leave room for the fixed NOBJ tail and CRC.
 
 SCGKEYS  EQU 09000H              ; Two-byte interner IDs for package globals.
@@ -44,7 +44,13 @@ SCIFEND  EQU 0CA80H              ; End-branch patch words for nested if forms.
 SCTAILPT EQU 0CB00H              ; Tail-call target words awaiting body closure.
 SCTAILK  EQU 0CB80H              ; One flag records a saved side-stack operator.
 SCTMAX   EQU 64                   ; Tail candidates per body expression scope.
-SCWEND   EQU 0CBC0H              ; End of all fixed high-memory compiler tables.
+; Literal records and bytes use the compiler-only band below the private stack.
+SCLITREC EQU 0D000H               ; Four bytes per copied symbol or string.
+SCLITPL EQU 0D100H              ; One kilobyte of literal spelling storage.
+SCLITOUT EQU 0D500H               ; Staged output address for each literal record.
+SCLITPSZ EQU SCLITOUT-SCLITPL    ; Capacity check for copied literal spellings.
+SCLITEND EQU 0D600H               ; End of the fixed compiler workspace.
+SCWEND   EQU SCLITEND             ; Budget accounting includes literal storage.
 
 ; Compiler entry and terminal paths.
 SCMAIN:
@@ -54,7 +60,8 @@ SCMAIN:
         SBC HL,DE                 ; Check the qualified TPA has the required guard.
         JP C,SCMEM                ; Refuse an installation with too little memory.
         LD SP,0E000H              ; Parser and emitter calls share this stack.
-        CALL SCSETUP              ; Clear tables and copy the checked runtime image.
+        CALL SCSETUP              ; Clear tables and load the checked runtime provider.
+        JP C,SCFAIL               ; Refuse to parse when the provider was not loaded.
         CALL SCPACK               ; Read the source package and emit native code.
         JP C,SCFAIL               ; No output is opened until parsing succeeds.
         CALL SCFIN                ; Resolve slots, append data and build the object.
@@ -101,6 +108,11 @@ SCSETUP:
         LD (SCMUT),A          ; Stores initialize bindings until set! selects checks.
         LD (SCIFTAIL),A           ; No branch context is active at package entry.
         LD (SCTTOP),A             ; No pending tail-call target words exist.
+        LD (SCLITN),A             ; No copied symbol or string literals exist yet.
+        LD (SCLITUSE),A           ; The literal byte pool starts empty.
+        LD (SCLITUSE+1),A
+        LD (SCQCOUNT),A            ; No quoted-list elements are pending.
+        LD (SCQDOT),A              ; No dotted-list marker is active.
         LD (SCBDEP),A             ; No compiler lambda frame is active.
         LD (SCBMODE),A            ; No body is isolating its tail candidates.
         LD (SCBISOL),A            ; Nested body forms propagate candidates by default.
@@ -120,10 +132,8 @@ SCSETPR:
         LD (SCERRPTR),HL          ; Body diagnostics may replace this pointer.
         LD A,0FFH                 ; Top-level locals have no procedure owner.
         LD (SCCURPR),A            ; Nested lambdas replace this while compiling.
-        LD HL,SRTIMAGE            ; Source address of the checked runtime bytes.
-        LD DE,SCIMG               ; Destination address in the staged object.
-        LD BC,SRTLEN              ; Copy exactly the serialized runtime image.
-        LDIR                      ; The output program will execute at $0100.
+        CALL SCLOADRT              ; Copy the provider into the staged output image.
+        RET C                      ; A short, missing or unreadable provider is fatal.
         LD HL,SCCODE              ; Generated code starts after the runtime image.
         LD (SCPC),HL              ; Publish the first code-generation cursor.
         LD IX,SCNCTX              ; Select the symbol interner context.
@@ -179,6 +189,10 @@ SCEXPE:
         JR Z,SCNUM                 ; Emit an exact integer literal.
         CP 5                       ; Symbol events carry an interned reference.
         JR Z,SCREF                 ; Resolve a local or package-global slot.
+        CP 8                       ; String events become copied immutable literals.
+        JP Z,SCSTRLIT
+        CP 3                       ; Quote prefixes introduce literal data.
+        JP Z,SCQSHRT              ; Read and emit the following quoted datum.
         CP 1                       ; An open parenthesis introduces a form.
         JR Z,SCFORM                ; Read the form's operator symbol and operands.
         JP SCSYN                   ; Strings, quote prefixes and bare punctuation fail.
@@ -196,6 +210,9 @@ SCNUM:
         CP 3                       ; Tag 3 is the exact signed-integer form.
         JP NZ,SCUNSUP              ; Other scalar tags are outside this increment.
         JP SCLIT                   ; Emit the integer payload and its tag.
+SCSTRLIT:
+        LD A,5                     ; Runtime tag five identifies string literals.
+        JP SCLITADD
 SCBOOLV:
         LD A,L                     ; Boolean payloads are zero or one in the low byte.
         JP SCBOOL                  ; Emit the checked boolean representation.
@@ -203,13 +220,24 @@ SCBOOLV:
 ; Resolve a symbol reference, preferring the innermost active local binding.
 SCREF:
         LD (SCID),HL               ; Save the full interner ID across table searches.
-        CALL SCLOCF                ; Search active locals from the current scope.
-        JR C,SCRLOCAL              ; A local slot shadows every global slot.
+        CALL SCLOCF                ; Search active locals before global classification.
+        JR C,SCRLOCAL              ; A local slot shadows every global or primitive.
+        CALL SCGHAS                 ; An explicit global binding takes precedence.
+        JR C,SCRGLOB                ; Existing globals use the ordinary slot path.
+        CALL SCPLOOK                ; Unbound primitive names can stay immediate.
+        OR A
+        JR NZ,SCRPRIM               ; Emit the predefined value without a slot.
         CALL SCGGET                ; Allocate a global slot on the first reference.
         RET C                      ; The 256-slot capacity is a compile diagnostic.
         LD L,A                     ; The emitter takes the slot number in L.
         XOR A                      ; Kind zero denotes a package-global slot.
         JP SCLOAD                  ; Emit the checked runtime load and its fixup.
+SCRGLOB:
+        LD L,A                     ; SCGHAS returns the existing global slot in A.
+        XOR A                      ; Kind zero denotes a package-global slot.
+        JP SCLOAD                  ; Emit the checked runtime load and its fixup.
+SCRPRIM:
+        JP SCPRIM                  ; Emit a reserved primitive value directly.
 SCRLOCAL:
         LD L,A                     ; SCLOCF returns the matching local slot number.
         LD A,1                     ; Kind one denotes a local slot.
@@ -255,6 +283,9 @@ SCFORM:
         LD DE,SCSETK               ; Compare with set!.
         CALL SCMATCH               ; Mutation updates an existing slot.
         JP Z,SCSETF                ; Compile the target and new value.
+        LD DE,SCQUOTE              ; Compare with the explicit quote form.
+        CALL SCMATCH               ; Quote consumes one datum without evaluation.
+        JP Z,SCQUOTEF
         JP SCAPNAME                ; Other names are ordinary procedure values.
 
 ; Compile a computed operator list and continue with its argument sequence.
@@ -271,13 +302,20 @@ SCAPNAME:
         LD (SCID),HL               ; The primitive check uses the common identity word.
         CALL SCLOCF                ; A local name must retain the ordinary path.
         JR C,SCAPGEN               ; Local bindings shadow predefined procedures.
-        CALL SCPLOOK               ; Check the spelling before emitting its value.
+        CALL SCGHAS                ; An explicit global binding must remain dynamic.
+        JR C,SCAPBND               ; Existing globals use the normal marker path.
+        CALL SCPLOOK               ; Unbound primitives use a reserved immediate.
         OR A
-        JR Z,SCAPGEN               ; Ordinary globals still carry a full value record.
-        CALL SCGGET                ; Allocate the shared global slot if necessary.
-        RET C
-        LD (SCAPGSL),A             ; Save the slot for the call boundary emitter.
-        CALL SCGMARK               ; Read the operator before evaluating arguments.
+        JR Z,SCAPGEN               ; Ordinary names still use a full value record.
+        LD (SCPKIND),A             ; Keep the primitive kind while emitting its marker.
+        CALL SCPRIMV               ; Save the immediate operator on the side stack.
+        RET C                      ; Preserve staged-output capacity failures.
+        LD A,1
+        LD (SCAPMODE),A            ; SCAPARGS now emits the compact call entry.
+        JP SCAPARGS
+SCAPBND:
+        LD (SCAPGSL),A             ; Preserve the existing global slot for SCGMARK.
+        CALL SCGMARK               ; Read the bound value before evaluating arguments.
         RET C
         LD A,1
         LD (SCAPMODE),A            ; SCAPARGS now emits the compact call entry.
@@ -663,6 +701,8 @@ SCBTARG:    DW 0                   ; Temporary absolute branch target.
 SCFOUND:    DB 0                   ; Last matching local slot.
 SCFOUNDK:   DB 0                   ; Nonzero after a local match.
 SCOPID:     DW 0                   ; Operator identity for generic applications.
+SCPNADR:    DW 0                   ; Spelling address while classifying a primitive.
+SCPNLEN:    DB 0                   ; Spelling length used by SCPMATCH.
 SCPCOUNT:   DB 0                   ; Number of fixed procedure descriptors.
 SCCURPR:    DB 0FFH                ; Active procedure, or FFH at package level.
 SCTMPPR:    DB 0                   ; Descriptor being compiled.
@@ -735,3 +775,18 @@ SCOPRT:     DB "OP",13,10,"$"
 SCDEFT:     DB "DEF",13,10,"$"
 SCDEFNT:    DB "DEFNAME",13,10,"$"
 SCMEMTXT:   DB "INSUFFICIENT MEMORY",13,10,"$"
+SCQUOTE:    DB 5,"quote"
+SCNPLUS:    DB 1,"+"
+SCNSUB:     DB 1,"-"
+SCNMUL:     DB 1,"*"
+SCNZERO:    DB 5,"zero?"
+SCNCONS:    DB 4,"cons"
+SCNCAR:     DB 3,"car"
+SCNCDR:     DB 3,"cdr"
+SCNPAIR:    DB 5,"pair?"
+SCNNULL:    DB 5,"null?"
+SCNLIST:    DB 4,"list"
+SCNEQ:      DB 3,"eq?"
+SCNWRIT:    DB 5,"write"
+SCNDISP:    DB 7,"display"
+SCNNWL:     DB 7,"newline"

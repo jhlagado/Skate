@@ -54,6 +54,35 @@ SCLIT:
         LD A,3                    ; The generated value is an exact integer.
         JP SCBYTE                 ; Append the tag and return.
 
+; Emit an unbound predefined procedure as a reserved immediate value.
+; A contains its one-based primitive kind; the runtime subtracts $20 from the
+; payload low byte when it selects the dispatcher entry.
+SCPRIM:
+        LD (SCPKIND),A            ; Preserve the kind while writing the value.
+        LD A,21H                  ; LD HL,nn loads the reserved payload.
+        CALL SCBYTE
+        RET C
+        LD A,(SCPKIND)
+        DEC A
+        ADD A,20H
+        CALL SCBYTE                 ; Payload low byte is $20 plus kind minus one.
+        RET C
+        LD A,0FEH
+        CALL SCBYTE                 ; All primitive payloads use the reserved high byte.
+        RET C
+        LD A,3EH                  ; LD A,n loads the immediate value tag.
+        CALL SCBYTE
+        RET C
+        XOR A                      ; Tag zero identifies a primitive value.
+        JP SCBYTE
+
+; Emit and save a predefined procedure on the runtime operator side stack.
+SCPRIMV:
+        CALL SCPRIM                ; Leave the immediate value in A:HL.
+        RET C
+        LD HL,SRTOPUSH             ; Preserve it while application arguments compile.
+        JP SCCALL
+
 ; Emit #f or #t.  A is zero for #f and one for #t.
 SCBOOL:
         LD (SCBTMP),A             ; Preserve the logical boolean value.
