@@ -52,7 +52,7 @@ disk = installCpm22File(disk, {
 const dataCases = [
   [
     "DIGITS.SK8",
-    '(begin (display 45) (display " ") (display -123) 7)',
+    '(begin (display 45) (display " ") (display -123) (write 7) (newline))',
     "45 -1237",
   ],
   [
@@ -79,13 +79,31 @@ const dataCases = [
   ["NULLP.SK8", "(null? (quote ()))", "#t"],
   ["LIST.SK8", "(list 1 2 3)", "(1 2 3)"],
   ["EQ.SK8", "(eq? 1 1)", "#t"],
-  ["WRITE.SK8", "(write (quote (1 2)))", "(1 2)#<unspecified>"],
-  ["DISPLAY.SK8", '(display "hi")', "hi#<unspecified>"],
-  ["NEWLINE.SK8", '(begin (display "x") (newline))', "x\r\n#<unspecified>"],
+  ["WRITE.SK8", "(begin (write (quote (1 2))) (newline))", "(1 2)"],
+  ["DISPLAY.SK8", '(begin (display "hi") (newline))', "hi"],
+  ["NEWLINE.SK8", '(begin (display "x") (newline))', "x"],
+  ["EMPTYSTR.SK8", '(begin (write "") (newline))', '""'],
+  ["SAMESTR.SK8", '(begin (write (eq? "x" "x")) (newline))', "#t"],
+  ["SAMESYM.SK8", "(begin (write (eq? 'x 'x)) (newline))", "#t"],
+  [
+    "NESTQ.SK8",
+    "(write ''x) (newline) (write (quote (a (quote x)))) (newline) (write '''x) (newline) (write (quote 'x)) (newline) (write '(a 'x)) (newline)",
+    "(quote x)\r\n(a (quote x))\r\n(quote (quote x))\r\n(quote x)\r\n(a (quote x))",
+  ],
+  [
+    "STABLE.SK8",
+    "(define f (lambda () (quote (x)))) (write (eq? (f) (f))) (newline)",
+    "#t",
+  ],
+  [
+    "STNEST.SK8",
+    "(define f (lambda () ''x)) (write (eq? (f) (f))) (newline)",
+    "#t",
+  ],
   [
     "GCFREE.SK8",
-    "(define f (lambda (n) (if (zero? n) 7 (begin (cons n 0) (f (- n 1)))))) (f 1200)",
-    "7",
+    "(define f (lambda () (quote ((1) 2 3)))) (define old (f)) (define loop (lambda (n) (if (zero? n) 0 (begin (cons n 0) (loop (- n 1)))))) (loop 3000) (write (list (eq? old (f)) old)) (newline)",
+    "(#t ((1) 2 3))",
   ],
   [
     "GSET.SK8",
@@ -93,6 +111,7 @@ const dataCases = [
     "8",
   ],
   ["PRIMVAL.SK8", "(define p +) (p 2 3)", "5"],
+  ["LAMBDAW.SK8", "(begin (write ((lambda (x) x) 42)))", "42"],
 ];
 const cases = [
   ["LAMBDA.SK8", "((lambda (x) x) 42)", "42"],
@@ -242,10 +261,77 @@ const cases = [
   ],
 ];
 const selectedCases = Deno.args.includes("--data") ? dataCases : cases;
+
+// Programs historically relied on the compiler printing the last value.  The
+// language now leaves output to explicit procedures, so keep these proofs
+// readable by writing the final top-level expression and ending its line.
+function splitTopLevelForms(source) {
+  const forms = [];
+  let index = 0;
+  while (index < source.length) {
+    while (index < source.length && /\s/.test(source[index])) index += 1;
+    if (index >= source.length) break;
+    const start = index;
+    if (source[index] !== "(") {
+      if (source[index] === '"') {
+        index += 1;
+        let escaped = false;
+        while (index < source.length) {
+          const character = source[index++];
+          if (escaped) escaped = false;
+          else if (character === "\\") escaped = true;
+          else if (character === '"') break;
+        }
+      } else {
+        while (index < source.length && !/\s/.test(source[index])) index += 1;
+      }
+      forms.push(source.slice(start, index));
+      continue;
+    }
+    let depth = 0;
+    let string = false;
+    let escaped = false;
+    while (index < source.length) {
+      const character = source[index++];
+      if (string) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === '"') string = false;
+        continue;
+      }
+      if (character === '"') string = true;
+      else if (character === "(") depth += 1;
+      else if (character === ")" && --depth === 0) break;
+    }
+    forms.push(source.slice(start, index));
+  }
+  return forms;
+}
+
+function explicitResultSource(source) {
+  const forms = splitTopLevelForms(source);
+  if (forms.length === 0) return source;
+  if (
+    /^\(begin\b/.test(source) &&
+    /\((?:write|display|newline|write-char|read-char)\b/.test(source)
+  ) {
+    return source;
+  }
+  const last = forms.at(-1);
+  if (/^\((?:write|display|newline|write-char|read-char)\b/.test(last)) {
+    return source;
+  }
+  forms[forms.length - 1] = `(begin (write ${last}) (newline))`;
+  return forms.join(" ");
+}
 const errorCases = [
   ["BADFORM.SK8", "(let ((value 1 2)) value)", "EXPECT\r\n"],
   ["DUPFORM.SK8", "((lambda (x x) x) 1 2)", "DUP\r\n"],
-  ["TOOLONG.SK8", "1 ".repeat(2600), "CAP\r\n"],
+  [
+    "REVQCAP.SK8",
+    "(write (quote (" + "1 ".repeat(64) + ")))",
+    "CAP\r\n",
+  ],
 ];
 const runtimeErrorCases = [
   ["ARITY.SK8", "((lambda (x) x) 1 2)", "RUNTIME ERROR\r\n"],
@@ -276,9 +362,12 @@ for (
     ...selectedRuntimeErrorCases,
   ]
 ) {
+  const isProgramCase = selectedCases.some(([caseName]) => caseName === name);
   disk = installCpm22File(disk, {
     name,
-    bytes: new TextEncoder().encode(source + "\x1a"),
+    bytes: new TextEncoder().encode(
+      (isProgramCase ? explicitResultSource(source) : source) + "\x1a",
+    ),
     padByte: 0x1a,
   });
 }
@@ -320,6 +409,12 @@ function runCommand(command, expected, description) {
     }`,
   );
   return output;
+}
+function programOutput(output) {
+  const commandEnd = output.indexOf("\r\r\n");
+  const prompt = output.lastIndexOf("\r\nA>");
+  assert.ok(commandEnd >= 0 && prompt > commandEnd, JSON.stringify(output));
+  return output.slice(commandEnd + 3, prompt);
 }
 
 function validateObject(object, com, name) {
@@ -397,7 +492,7 @@ try {
   machine.install_drive(0, disk, true);
   runUntilPrompt(0, "the boot prompt");
   const measurements = [];
-  for (const [name, , expected, guard] of selectedCases) {
+  for (const [name, source, expected, guard] of selectedCases) {
     const outputName = name.replace(".SK8", ".COM");
     runCommand(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
     const image = machine.export_drive(0);
@@ -408,10 +503,20 @@ try {
     if (guard) {
       machine.write_ram(0xce00, new Uint8Array(0x100).fill(0xa5));
     }
-    runCommand(
+    const output = runCommand(
       outputName.replace(".COM", ""),
-      `${expected}\r\n`,
+      explicitResultSource(source).includes("(newline)")
+        ? `${expected}\r\n`
+        : expected,
       `run ${outputName}`,
+    );
+    const expectedOutput = explicitResultSource(source).includes("(newline)")
+      ? `${expected}\r\n`
+      : expected;
+    assert.equal(
+      programOutput(output),
+      expectedOutput,
+      `${name}: unexpected program output`,
     );
     if (guard) {
       assert.deepEqual(

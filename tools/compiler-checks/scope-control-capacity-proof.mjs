@@ -40,8 +40,18 @@ const globalDefinitions = Array.from(
   (_, index) => `(define g${String(index).padStart(3, "0")} ${index})`,
 ).join("");
 const cases = [
-  ["GLOB256.SK8", `${globalDefinitions}(+ g255 1)`, "256"],
-  ["FORM256.SK8", Array.from({ length: 256 }, () => "1").join(" "), "1"],
+  [
+    "GLOB256.SK8",
+    `${globalDefinitions}(begin (write (+ g255 1)) (newline))`,
+    "256",
+  ],
+  [
+    "FORM256.SK8",
+    `(begin ${
+      Array.from({ length: 254 }, () => "1").join(" ")
+    } (write 1) (newline))`,
+    "1",
+  ],
 ];
 let disk = installCpm22File(backing, {
   name: "SKATE.COM",

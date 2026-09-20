@@ -400,7 +400,8 @@ SRTMARKV:
         CP 1
         JR NZ,SRTMVC
         EX DE,HL
-        JP SRTMARK
+        CALL SRTMARK                ; Mark CAR, then continue with the CDR edge.
+        JR SRTMVC
 
 SRTMVC:
         ; The CDR payload begins four bytes after the pair state byte.

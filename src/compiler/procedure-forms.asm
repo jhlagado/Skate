@@ -179,9 +179,14 @@ SCLAMPD:
         JP C,SCLAMERR              ; Preserve an output or metadata failure.
         LD A,1                     ; A lambda body is always a tail context.
         LD (SCTCTX),A              ; SCBODY passes this to its final expression.
-        LD (SCBISOL),A             ; Its tail candidates belong to this procedure.
+        LD A,(SCBISOL)             ; Preserve the enclosing body's isolation mode.
+        PUSH AF                     ; The lambda request must not leak on return.
+        LD A,1                     ; Its tail candidates belong to this procedure.
+        LD (SCBISOL),A             ; Ask SCBODY for a private candidate list.
         CALL SCBODY                ; Compile expressions through the lambda close.
-        JP C,SCLAMERR              ; Unwind scope state on any body failure.
+        JP C,SCLAMBER              ; Restore isolation state before unwinding.
+        POP AF                     ; Recover the enclosing body's isolation mode.
+        LD (SCBISOL),A             ; Restore it before compiling the outer form.
         CALL SCRET                 ; A normal body returns its final A:HL value.
         JP C,SCLAMERR              ; The return byte itself is bounded output.
         CALL SCPFIN                ; Save body address and patch the jump-over.
@@ -250,6 +255,11 @@ SCLAMERR:
         CALL SCUNWIND                ; Balance the frame before reporting failure.
         SCF                        ; The caller reports a compile error.
         RET                        ; No partially generated file is published.
+
+SCLAMBER:
+        POP AF                     ; Remove the saved enclosing isolation mode.
+        LD (SCBISOL),A             ; Restore it before unwinding the scope frame.
+        JP SCLAMERR                ; Share the ordinary lambda failure path.
 
 ; Return carry when the current procedure already has a formal with SCID.
 SCPDUP:

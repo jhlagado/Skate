@@ -51,7 +51,6 @@ SRTCLR:
         JR NZ,SRTCLR
 SRTCALL:
         CALL 0000H                ; The compiler patches the generated entry.
-        CALL SRTPRINT             ; Print the final value returned by the program.
         JP 0                      ; Return to CP/M through the warm start.
 
 ; Load a four-byte slot addressed by HL.  The final byte is the initialized
@@ -70,6 +69,28 @@ SRTLOAD:
         EX DE,HL                  ; Return the stored payload in HL.
         LD A,(SRTTAG)             ; Restore the stored value tag.
         RET                       ; Return the value to generated code.
+
+; Probe one quoted-list cache cell.  Carry set means the compiler has not
+; materialized this literal yet; a hit returns its stored A:HL value.
+SRTQGET:
+        PUSH HL                   ; Keep the cell base while reading its flag.
+        INC HL                    ; Skip the payload low byte.
+        INC HL                    ; Skip the payload high byte.
+        INC HL                    ; Skip the value tag.
+        LD A,(HL)                 ; A zero flag means the cache is empty.
+        OR A
+        POP HL                    ; Restore the cell base for a cache hit.
+        JR Z,SRTQMISS             ; The caller falls through to list creation.
+        LD E,(HL)                 ; Recover the cached payload low byte.
+        INC HL
+        LD D,(HL)                 ; Recover the cached payload high byte.
+        INC HL
+        LD A,(HL)                 ; Recover the cached value tag.
+        EX DE,HL                  ; Return the payload in HL.
+        RET
+SRTQMISS:
+        SCF                       ; Carry distinguishes an empty cache cell.
+        RET
 
 ; Store A:HL into the four-byte slot addressed by DE.
 SRTSTORE:

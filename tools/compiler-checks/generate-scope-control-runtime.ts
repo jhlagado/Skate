@@ -39,6 +39,7 @@ const values = [
   `SRTLEN EQU ${payload.length}`,
   `SRTCLP EQU ${offset("SRTCALL") + 1}`,
   `SRTLDA EQU ${address("SRTLOAD")}`,
+  `SRTQGET EQU ${address("SRTQGET")}`,
   `SRTSTA EQU ${address("SRTSTORE")}`,
   `SRTSETS EQU ${address("SRTSET")}`,
   `SRTFAL EQU ${address("SRTFALSE")}`,

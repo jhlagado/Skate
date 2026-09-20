@@ -23,6 +23,15 @@ SCFIN:
         EX DE,HL                   ; DE now contains four times the local count.
         POP HL                     ; Restore the four-times-global extent.
         ADD HL,DE
+        PUSH HL                    ; Keep the combined user-slot extent.
+        LD A,(SCQCNT)             ; Add one four-byte cache cell per quoted list.
+        LD L,A
+        LD H,0
+        ADD HL,HL
+        ADD HL,HL
+        EX DE,HL                   ; DE now contains the cache-cell extent.
+        POP HL                     ; Restore the global/local slot extent.
+        ADD HL,DE
         PUSH HL                    ; Keep the slot extent while sizing descriptors.
         LD A,(SCPCOUNT)            ; Every procedure uses one fixed metadata record.
         LD L,A                     ; Widen the descriptor count to a word.
@@ -128,6 +137,26 @@ SCLOOP:
         DEC BC                     ; Account for the slot just appended.
         JR SCLOOP                  ; Continue until the local extent is filled.
 SCDATAOK:
+        LD (SCQBASE),HL            ; Quoted-list cache cells follow local storage.
+        LD A,(SCQCNT)
+        LD C,A
+        LD B,0
+SCQCLOOP:
+        LD A,B
+        OR C
+        JR Z,SCQCDONE
+        XOR A
+        LD (HL),A
+        INC HL
+        LD (HL),A
+        INC HL
+        LD (HL),A
+        INC HL
+        LD (HL),A
+        INC HL
+        DEC BC
+        JR SCQCLOOP
+SCQCDONE:
         LD (SCPC),HL               ; Publish the final staged image cursor.
         CALL SCPDESC               ; Append absolute procedure descriptors.
         RET C                      ; Preserve the staged-image capacity guard.
@@ -182,6 +211,8 @@ SCFIXLP:
         PUSH HL                    ; Keep the table cursor across address patching.
         LD (SCFPTR),DE             ; Preserve the staged patch destination.
         LD A,(SCFKIND)             ; Select a global, local or procedure target.
+        CP 4                       ; Kind four names a quoted-list cache cell.
+        JP Z,SCFQCH                ; Cache targets use the dedicated cache base.
         CP 3                       ; Kind three names a copied literal record.
         JR Z,SCFLIT                ; Literal targets are staged after descriptors.
         CP 2                       ; Kind two names the serialized procedure table.
@@ -346,6 +377,10 @@ SCADDR:
         ADD HL,HL                  ; Form four times the slot number.
         ADD HL,DE                  ; Add the selected staged data base.
         JP SCABS                   ; Convert the staged pointer to COM address.
+
+SCFQCH:
+        LD DE,(SCQBASE)            ; Select the quoted-list cache base.
+        JP SCFADDR                  ; Share the four-byte slot arithmetic.
 
 ; Serialize the fixed NOBJ prefix, dynamic image record, tail and CRC.
 SCBUILD:

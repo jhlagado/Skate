@@ -48,32 +48,49 @@ disk = installCpm22File(disk, {
   padByte: 0x1a,
 });
 const cases = [
-  ["ADD.SK8", "(+ 40 2)", "42"],
-  ["GLOBAL.SK8", "(define base 40) (+ base 2)", "42"],
-  ["LET.SK8", "(let ((base 40) (delta 2)) (+ base delta))", "42"],
-  ["LETSTAR.SK8", "(let* ((base 40) (delta (+ base 2))) delta)", "42"],
-  ["SHADOW.SK8", "(let ((value 1)) (let ((value 2)) value))", "2"],
-  ["BOOL-LET.SK8", "(let ((value #f)) (if value 1 2))", "2"],
+  ["ADD.SK8", "(begin (write (+ 40 2)) (newline))", "42"],
+  ["GLOBAL.SK8", "(define base 40) (write (+ base 2)) (newline)", "42"],
+  [
+    "LET.SK8",
+    "(begin (write (let ((base 40) (delta 2)) (+ base delta))) (newline))",
+    "42",
+  ],
+  [
+    "LETSTAR.SK8",
+    "(begin (write (let* ((base 40) (delta (+ base 2))) delta)) (newline))",
+    "42",
+  ],
+  [
+    "SHADOW.SK8",
+    "(begin (write (let ((value 1)) (let ((value 2)) value))) (newline))",
+    "2",
+  ],
+  [
+    "BOOL-LET.SK8",
+    "(begin (write (let ((value #f)) (if value 1 2))) (newline))",
+    "2",
+  ],
   [
     "NESTLET.SK8",
-    "(let ((value (let ((inner 1)) inner)) (other 2)) value)",
+    "(begin (write (let ((value (let ((inner 1)) inner)) (other 2)) value)) (newline))",
     "1",
   ],
   [
     "NESTSTAR.SK8",
-    "(let* ((value (let ((inner 1)) inner)) (other 2)) value)",
+    "(begin (write (let* ((value (let ((inner 1)) inner)) (other 2)) value)) (newline))",
     "1",
   ],
-  ["IF.SK8", "(if #t 42 0)", "42"],
-  ["IF-FALSE.SK8", "(if #f 1 42)", "42"],
-  ["AND.SK8", "(and #t 42)", "42"],
-  ["OR.SK8", "(or #f 42)", "42"],
+  ["IF.SK8", "(begin (write (if #t 42 0)) (newline))", "42"],
+  ["IF-FALSE.SK8", "(begin (write (if #f 1 42)) (newline))", "42"],
+  ["AND.SK8", "(begin (write (and #t 42)) (newline))", "42"],
+  ["OR.SK8", "(begin (write (or #f 42)) (newline))", "42"],
   ["UNBOUND.SK8", "unbound-name", "UNBOUND"],
 ];
 const errorCases = [
   ["BADFORM.SK8", "(let ((value 1 2)) value)", "EXPECT\r\n"],
   ["TOOLONG.SK8", "1 ".repeat(2600), "CAP\r\n"],
 ];
+const noOutputCases = [["NOAUTO.SK8", "42"]];
 for (const [name, source] of cases) {
   disk = installCpm22File(disk, {
     name,
@@ -82,6 +99,13 @@ for (const [name, source] of cases) {
   });
 }
 for (const [name, source] of errorCases) {
+  disk = installCpm22File(disk, {
+    name,
+    bytes: new TextEncoder().encode(source + "\x1a"),
+    padByte: 0x1a,
+  });
+}
+for (const [name, source] of noOutputCases) {
   disk = installCpm22File(disk, {
     name,
     bytes: new TextEncoder().encode(source + "\x1a"),
@@ -115,6 +139,12 @@ function runCommand(command, expected, description) {
   assert.ok(output.includes(expected), JSON.stringify(output));
   return output;
 }
+function programOutput(output) {
+  const commandEnd = output.indexOf("\r\r\n");
+  const prompt = output.lastIndexOf("\r\nA>");
+  assert.ok(commandEnd >= 0 && prompt > commandEnd, JSON.stringify(output));
+  return output.slice(commandEnd + 3, prompt);
+}
 try {
   machine.install_drive(0, disk, true);
   runUntilPrompt(0, "the boot prompt");
@@ -138,6 +168,17 @@ try {
   }
   for (const [name, , expected] of errorCases) {
     runCommand(`SKATE ${name}`, expected, `reject ${name}`);
+  }
+  for (const [name] of noOutputCases) {
+    runCommand(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
+    const output = runCommand(
+      name.replace(".SK8", ""),
+      "A>",
+      `run ${name.replace(".SK8", ".COM")}`,
+    );
+    assert.equal(programOutput(output), "", `${name}: implicit output remains`);
+    runCommand(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
+    runCommand(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
   }
   console.log(JSON.stringify(
     {

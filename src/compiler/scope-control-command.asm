@@ -111,6 +111,7 @@ SCSETUP:
         LD (SCLITN),A             ; No copied symbol or string literals exist yet.
         LD (SCLITUSE),A           ; The literal byte pool starts empty.
         LD (SCLITUSE+1),A
+        LD (SCQCNT),A             ; No quoted-list cache cells are reserved yet.
         LD (SCQCOUNT),A            ; No quoted-list elements are pending.
         LD (SCQDOT),A              ; No dotted-list marker is active.
         LD (SCBDEP),A             ; No compiler lambda frame is active.
@@ -294,6 +295,8 @@ SCAPLIST:
         RET C                      ; Preserve the nested operator diagnostic.
         CALL SCPUSH                ; Keep the computed callee below its arguments.
         RET C
+        XOR A                      ; A computed operator uses the ordinary call path.
+        LD (SCAPMODE),A            ; Do not inherit a surrounding primitive marker.
         JP SCAPARGS               ; The outer form supplies the arguments.
 
 ; Load a named procedure value and compile its application arguments.
@@ -503,6 +506,8 @@ SCORERR:
 ; event to decide whether its recorded tail calls need ordinary continuations.
 SCBODY:
         POP DE                     ; Move the caller return below the body frame.
+        LD A,(SCTMARK)             ; Nested bodies share this expression cursor.
+        PUSH AF                    ; Restore it before the enclosing body resumes.
         LD A,(SCTCTX)              ; Save the caller's tail context.
         PUSH AF                    ; Frame word seven: previous tail context.
         LD A,(SCTTOP)              ; Save pending tail-call records from an outer body.
@@ -622,6 +627,8 @@ SCBKEEPT:
 SCBMODDN:
         POP AF                     ; Restore the caller's tail context.
         LD (SCTCTX),A              ; Nested forms see their original context again.
+        POP AF                     ; Restore the enclosing expression's tail cursor.
+        LD (SCTMARK),A             ; A nested body must not change its caller's mark.
         PUSH DE                    ; Restore the caller continuation below the helper.
         PUSH BC                    ; Return to the success or failure continuation.
         RET                        ; The frame is balanced on every exit path.

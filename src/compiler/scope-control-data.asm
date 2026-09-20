@@ -13,12 +13,58 @@ SCQUOTEF:
         RET C                      ; Reject malformed quoted structure.
         JP SCEXPECT                ; The quote form accepts exactly one datum.
 
-; Compile the apostrophe shorthand.  Nested shorthand has the same value
-; behaviour as quote for this first data release.
+; Compile the apostrophe shorthand.  A nested apostrophe is data and therefore
+; becomes the ordinary two-element list (quote datum).
 SCQSHRT:
         CALL RNEXT                 ; Read the datum following the prefix.
         RET C                      ; Preserve a reader failure.
+        CP 3                       ; A second apostrophe is a quoted symbol.
+        JP Z,SCQNEST               ; Preserve it as (quote datum).
         JP SCQDAT                  ; Emit the quoted value directly.
+
+; Emit the pair represented by a nested apostrophe: (quote datum).
+SCQNEST:
+        LD A,(SCQFIX)              ; Preserve the enclosing literal's cache index.
+        PUSH AF
+        CALL SCQCACH                ; Nested quote pairs are literals as well.
+        JP C,SCNFAIL
+        LD HL,SCQUOTE+1            ; Intern the reader's ordinary quote name.
+        LD BC,5
+        LD IX,SCNCTX
+        CALL INTERN
+        JP C,SCNFAIL
+        LD A,4                     ; The quote operator is a symbol literal.
+        CALL SCLITADD
+        JP C,SCNFAIL
+        CALL SCQPUT                ; Push quote as the first pair element.
+        JP C,SCNFAIL
+        CALL RNEXT                 ; Read the datum after the nested prefix.
+        JP C,SCNFAIL
+        CALL SCQDAT
+        JP C,SCNFAIL
+        CALL SCQPUT                ; Push the quoted datum as the second element.
+        JP C,SCNFAIL
+        LD A,2
+        LD (SCQCOUNT),A
+        XOR A
+        LD (SCQDOT),A
+        LD B,A
+        CALL SCQBUILD
+        JP C,SCNFAIL
+        CALL SCQSTOR
+        JP C,SCNFAIL
+        LD HL,(SCPC)
+        CALL SCBRPAT
+        JP C,SCNFAIL
+        POP AF                     ; Restore the enclosing cache index.
+        LD (SCQFIX),A
+        RET
+
+SCNFAIL:
+        POP AF                     ; Keep compiler stack balanced on every exit.
+        LD (SCQFIX),A
+        SCF
+        RET
 
 ; Dispatch one quoted reader event.
 SCQDAT:
@@ -30,8 +76,8 @@ SCQDAT:
         JP Z,SCQSTR
         CP 1                       ; An opening parenthesis starts a data list.
         JP Z,SCQLIST
-        CP 3                       ; Quoted shorthand inside data consumes one datum.
-        JP Z,SCQSHRT
+        CP 3                       ; Quoted shorthand inside data is a pair.
+        JP Z,SCQNEST               ; Construct (quote datum) without collapsing it.
         JP SCSYN                   ; Close, dot and EOF are invalid datum starts.
 
 ; Copy a quoted symbol into the output and return a tag-four value.
@@ -47,10 +93,14 @@ SCQSTR:
 ; Compile one quoted list.  Elements are pushed in source order; the runtime
 ; folds them from the end so both proper and dotted lists retain that order.
 SCQLIST:
+        LD A,(SCQFIX)              ; Preserve the enclosing literal's cache index.
+        PUSH AF
         LD A,(SCQCOUNT)            ; Preserve a surrounding quoted-list cursor.
         PUSH AF
         LD A,(SCQDOT)              ; Preserve a surrounding dotted-list marker.
         PUSH AF
+        CALL SCQCACH                ; Probe the stable cell for this literal.
+        JP C,SCQFAIL
         XOR A                      ; The new list starts with no elements.
         LD (SCQCOUNT),A
         LD (SCQDOT),A
@@ -82,27 +132,27 @@ SCQLP:
         POP AF                     ; Restore this list's element count.
         LD (SCQCOUNT),A
         CALL SCQPUT                ; Push the complete value at run time.
-        RET C
+        JP C,SCQFAIL               ; Unwind the enclosing list state.
         LD A,(SCQCOUNT)
         INC A
         LD (SCQCOUNT),A
         CP 64                      ; Keep the generated data stack bounded.
-        JP NC,SCCAP
+        JP NC,SCQCAPF
         JP SCQLP
 
 SCQDOTF:
         LD A,(SCQDOT)              ; A second dot is malformed.
         OR A
-        JP NZ,SCSYN
+        JP NZ,SCQFAIL
         LD A,(SCQCOUNT)            ; A dotted list needs at least one head.
         OR A
-        JP Z,SCSYN
+        JP Z,SCQFAIL
         CALL RNEXT                 ; Read exactly one dotted-tail datum.
         JP C,SCQFAIL
         CP 2
-        JP Z,SCSYN
+        JP Z,SCQFAIL
         CP 4
-        JP Z,SCSYN
+        JP Z,SCQFAIL
         LD (SCQEV),A
         LD (SCQVAL),HL
         LD A,(RTAG)
@@ -122,7 +172,7 @@ SCQDOTF:
         POP AF
         LD (SCQCOUNT),A
         CALL SCQPUT
-        RET C
+        JP C,SCQFAIL               ; Unwind the enclosing list state.
         LD A,(SCQCOUNT)
         INC A
         LD (SCQCOUNT),A
@@ -131,7 +181,7 @@ SCQDOTF:
         CALL RNEXT                 ; The dotted tail must be followed by close.
         JP C,SCQFAIL
         CP 2
-        JP NZ,SCSYN
+        JP NZ,SCQFAIL
 
 SCQEND:
         LD A,(SCQCOUNT)            ; Runtime receives the number of stack values.
@@ -139,10 +189,17 @@ SCQEND:
         LD B,A                     ; B distinguishes proper from dotted folding.
         CALL SCQBUILD              ; Return the completed list as A:HL.
         JP C,SCQFAIL
+        CALL SCQSTOR               ; Retain the pair graph for later evaluations.
+        JP C,SCQFAIL
+        LD HL,(SCPC)               ; Cache hits branch to the code after this store.
+        CALL SCBRPAT
+        JP C,SCQFAIL
         POP AF                     ; Restore the enclosing dotted marker.
         LD (SCQDOT),A
         POP AF                     ; Restore the enclosing element count.
         LD (SCQCOUNT),A
+        POP AF                     ; Restore the enclosing literal's cache index.
+        LD (SCQFIX),A
         OR A                       ; Return carry clear with the list value live.
         RET
 
@@ -153,8 +210,14 @@ SCQFAIL:
         POP AF                     ; Restore the enclosing dotted marker.
         LD (SCQDOT),A
         POP AF                     ; Restore the enclosing element count.
+        POP AF                     ; Restore the enclosing literal's cache index.
+        LD (SCQFIX),A
         SCF
         RET
+
+SCQCAPF:
+        CALL SCCAP                 ; Preserve the capacity diagnostic text.
+        JP SCQFAIL                 ; Unwind the three saved list-state words.
 
 ; Emit the run-time data-stack push used by quoted lists.
 SCQPUT:
@@ -178,14 +241,56 @@ SCQBUILD:
         LD HL,SRTQBLD
         JP SCCALL
 
+; Reserve one static cache cell and emit its hit probe.  A cache hit returns
+; directly through the conditional branch; a miss falls through to list code.
+SCQCACH:
+        LD A,(SCQCNT)
+        CP 255                      ; The byte-sized cache index must not wrap.
+        JP NC,SCCAP
+        LD (SCQFIX),A
+        INC A
+        LD (SCQCNT),A
+        LD A,21H                    ; LD HL,nn receives the cache-cell address.
+        CALL SCBYTE
+        RET C
+        LD HL,(SCPC)
+        LD A,4                       ; Fixup kind four selects quoted cache cells.
+        LD (SCFKIND),A
+        LD A,(SCQFIX)
+        LD (SCFSLOT),A
+        CALL SCFIX
+        RET C
+        XOR A
+        CALL SCBYTE
+        RET C
+        CALL SCBYTE
+        RET C
+        LD HL,SRTQGET
+        CALL SCCALL
+        RET C
+        LD A,0D2H                    ; JP NC skips the builder when the cache hits.
+        CALL SCBYTE
+        RET C
+        LD HL,(SCPC)
+        CALL SCBRPUSH
+        RET C
+        XOR A
+        CALL SCBYTE
+        RET C
+        JP SCBYTE
+
+; Emit the static store that publishes a freshly built quoted pair graph.
+SCQSTOR:
+        LD A,(SCQFIX)
+        LD L,A
+        LD A,4                       ; The cache cells use the fourth fixup kind.
+        JP SCSTORE
+
 ; Add one symbol or string spelling to the bounded literal pool.  A is the
 ; eventual runtime tag (four for symbol, five for string), HL is the reader ID.
 SCLITADD:
         LD (SCLITKND),A
         LD (SCLITVAL),HL
-        LD A,(SCLITN)
-        CP 64
-        JP NC,SCCAP
         LD HL,(SCLITVAL)
         LD A,H
         AND 1FH                    ; Remove the reader's reference subtype.
@@ -234,6 +339,13 @@ SCLITSP:
         LD C,A
         LD B,0
         LD (SCLITREM),BC
+        PUSH BC                    ; The search uses BC while walking records.
+        CALL SCLTFIND             ; Reuse an equal spelling and its output slot.
+        POP BC                     ; Keep the source length for a new record.
+        JP C,SCLITPTR             ; Existing symbols and strings keep identity.
+        LD A,(SCLITN)
+        CP 64
+        JP NC,SCCAP               ; Only a genuinely new literal needs a record.
         LD HL,(SCLITUSE)
         LD (SCLITPOF),HL
         ADD HL,BC
@@ -250,9 +362,13 @@ SCLITSP:
         ADD HL,DE
         LD (SCLITDST),HL
         LD BC,(SCLITREM)
+        LD A,B                     ; A zero-length literal needs no copy at all.
+        OR C                       ; A zero BC would make Z80 LDIR copy 65536 bytes.
+        JR Z,SCLTNCPY              ; The descriptor still records the empty spelling.
         LD DE,(SCLITDST)
         LD HL,(SCLITSRC)
-        LDIR
+        LDIR                       ; Copy only after the nonzero length guard.
+SCLTNCPY:
         LD HL,(SCLITUSE)
         LD DE,(SCLITREM)
         ADD HL,DE
@@ -268,12 +384,82 @@ SCLITSP:
         LD A,(SCLITLEN)
         LD (HL),A
         INC HL
-        XOR A
+        LD A,(SCLITKND)            ; Keep symbol and string records distinct.
         LD (HL),A
         LD A,(SCLITN)
         INC A
         LD (SCLITN),A
         JP SCLITPTR
+
+; Find an existing literal with the same runtime kind and copied spelling.
+; SCLITIDX returns the matching record, or the next free index on a miss.
+SCLTFIND:
+        XOR A
+        LD (SCLITIDX),A
+SCLITFLP:
+        LD A,(SCLITIDX)
+        LD B,A
+        LD A,(SCLITN)
+        CP B
+        JR Z,SCLTMISS
+        LD A,B
+        CALL SCLITRCA
+        INC HL
+        INC HL
+        LD A,(HL)                 ; Compare decoded lengths before reading bytes.
+        LD B,A
+        LD A,(SCLITLEN)
+        CP B
+        JR NZ,SCLTNEXT
+        INC HL
+        LD A,(HL)                 ; The final record byte stores the value kind.
+        LD B,A
+        LD A,(SCLITKND)
+        CP B
+        JR NZ,SCLTNEXT
+        LD A,(SCLITIDX)
+        CALL SCLITRCA
+        LD E,(HL)
+        INC HL
+        LD D,(HL)
+        LD (SCLTFOFF),DE
+        LD HL,(SCLITOFF)
+        LD DE,(SCLITPB)
+        ADD HL,DE
+        LD (SCLTFSRC),HL
+        LD HL,(SCLTFOFF)
+        LD DE,SCLITPL
+        ADD HL,DE
+        LD (SCLTFDST),HL
+        LD A,(SCLITLEN)
+        OR A
+        JR Z,SCTFOUND
+        LD (SCLTFREM),A
+SCLTCMP:
+        LD HL,(SCLTFSRC)
+        LD A,(HL)
+        INC HL
+        LD (SCLTFSRC),HL
+        LD HL,(SCLTFDST)
+        CP (HL)
+        JR NZ,SCLTNEXT
+        INC HL
+        LD (SCLTFDST),HL
+        LD A,(SCLTFREM)
+        DEC A
+        LD (SCLTFREM),A
+        JR NZ,SCLTCMP
+SCTFOUND:
+        SCF
+        RET
+SCLTNEXT:
+        LD A,(SCLITIDX)
+        INC A
+        LD (SCLITIDX),A
+        JR SCLITFLP
+SCLTMISS:
+        OR A
+        RET
 
 ; Emit a literal pointer placeholder and remember its record index.
 SCLITPTR:
@@ -395,8 +581,15 @@ SCLITBAS:  DW 0
 SCLITDST:  DW 0
 SCLITSRC:  DW 0
 SCLITPB: DW 0
+SCLTFREM:  DB 0
+SCLTFOFF:  DW 0
+SCLTFSRC:  DW 0
+SCLTFDST:  DW 0
 SCQCOUNT:  DB 0
 SCQDOT:    DB 0
+SCQCNT:    DB 0                   ; Number of static quoted-list cache cells.
+SCQBASE:   DW 0                   ; Staged base address of the cache cells.
+SCQFIX:    DB 0                   ; Cache-cell index for the current list.
 SCQEV:     DB 0
 SCQTAG:    DB 0
 SCQVAL:    DW 0
