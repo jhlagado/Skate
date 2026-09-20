@@ -122,10 +122,40 @@ SCLETEND:
         POP BC                     ; Recover the old active count and next slot.
         LD A,B                     ; Restore the outer active local count.
         LD (SCLOCTOP),A            ; The generated code still owns inner slots.
+        CALL SCESCAN               ; Retain slots whose cells escaped in a closure.
+        JR NZ,SCLETKEP              ; An escaped slot must not be reused by a sibling.
         LD A,C                     ; Restore the outer slot-allocation cursor.
-        LD (SCLNEXT),A             ; Later siblings can reuse the released slots.
+        LD (SCLNEXT),A             ; Uncaptured slots can be reused safely.
+SCLETKEP:
         XOR A                      ; Return carry clear with the body value intact.
         RET                        ; The caller's A/HL result is not touched.
+
+; Return NZ when an escape flag is set between C and the current slot cursor.
+SCESCAN:
+        PUSH BC                    ; Preserve the old scope cursors for SCLETEND.
+        LD A,(SCLNEXT)             ; The current cursor bounds the newly allocated range.
+        SUB C                      ; A is the number of slots in this let.
+        JR Z,SCESNONE              ; No new slots means no captured storage.
+        LD B,A                     ; B counts the escape flags to inspect.
+        LD L,C                     ; Start at the old cursor value.
+        LD H,0
+        LD DE,SCLOCEV              ; One flag byte belongs to each compiler slot.
+        ADD HL,DE
+SCESLOOP:
+        LD A,(HL)                  ; A nonzero flag keeps this slot live.
+        OR A
+        JR NZ,SCESCYES
+        INC HL
+        DJNZ SCESLOOP
+SCESNONE:
+        POP BC
+        XOR A                      ; No captured slot was found.
+        RET
+SCESCYES:
+        POP BC
+        LD A,1                     ; Return NZ while preserving the old cursors.
+        OR A
+        RET
 
 ; Allocate a new local slot and track the maximum data extent observed.
 SCNSLOT:
@@ -133,6 +163,13 @@ SCNSLOT:
         CP 128                     ; Keep the local area bounded for the runtime.
         JP NC,SCCAP                ; A 129th simultaneous local is rejected.
         LD B,A                     ; B keeps the zero-based slot returned to caller.
+        LD L,A                     ; Clear a stale escape mark before reuse.
+        LD H,0
+        LD DE,SCLOCEV
+        ADD HL,DE
+        XOR A
+        LD (HL),A
+        LD A,B                     ; Restore the selected slot before advancing.
         INC A                      ; The next binding uses the following slot.
         LD (SCLNEXT),A             ; Publish the updated reusable cursor.
         LD C,A                     ; C is the new simultaneous slot count.
@@ -142,8 +179,10 @@ SCNSLOT:
         LD A,C                     ; Publish the new high-water count.
         LD (SCLOCMAX),A            ; Finalisation sizes the local data area from it.
 SCNSDONE:
+        LD A,B                     ; Record the owner before returning the slot.
+        CALL SCOWNSET               ; Procedure bodies receive cell-backed slots.
         XOR A                      ; Clear carry after the capacity comparisons.
-        LD A,B                     ; Return the zero-based slot allocated to binding.
+        LD A,(SCMSLOT)              ; SCBITSET uses B for its shift count.
         RET                        ; Carry remains clear on a successful allocation.
 
 ; Append the current SCID/SCSLOT pair to the pending binding stack.
@@ -230,6 +269,8 @@ SCADDLOC:
         ADD HL,DE                  ; HL points at the slot destination.
         LD A,(SCSLOT)              ; The allocator selected this local slot.
         LD (HL),A                  ; Publish the active slot mapping.
+        LD A,(SCSLOT)              ; Keep the owner alongside the active binding.
+        CALL SCOWNSET               ; Captured references compare this owner.
         LD A,(SCLOCTOP)            ; Advance the active local count.
         INC A                      ; The new binding is visible to later forms.
         LD (SCLOCTOP),A            ; Publish the updated directory extent.
@@ -292,6 +333,10 @@ SCBINDLP:
         ADD HL,DE                  ; HL points at the active slot byte.
         LD A,(SCSLOT)              ; Restore the pending slot number.
         LD (HL),A                  ; Publish the active local record.
+        LD A,(SCSLOT)              ; Keep the owner alongside the active binding.
+        PUSH BC                     ; SCOWNSET uses B/C while setting the mask bit.
+        CALL SCOWNSET               ; Captured references compare this owner.
+        POP BC                      ; Resume the pending and active cursors.
         LD A,B                     ; Advance the active local count.
         INC A                      ; One pending binding is now visible.
         LD (SCLOCTOP),A            ; Publish it before copying the next record.
@@ -333,6 +378,13 @@ SCLOCLP:
         JR NZ,SCLOCHI               ; A mismatch leaves the previous candidate.
         LD A,(DE)                  ; A match replaces the previous outer slot.
         LD (SCFOUND),A             ; The final match is the innermost binding.
+        PUSH BC                    ; The lookup loop owns all three cursors.
+        PUSH HL
+        PUSH DE
+        CALL SCCAPSET               ; Mark a captured slot in the active procedure.
+        POP DE
+        POP HL
+        POP BC
         LD A,1                     ; Record that at least one match exists.
         LD (SCFOUNDK),A            ; The value survives the remaining scan.
         JR SCLOCHI                 ; Advance from this record's high byte.
@@ -356,6 +408,8 @@ SCLOCFNO:
 
 ; Allocate or find a package-global slot for the full symbol ID in SCID.
 SCGGET:
+        CALL SCPLOOK                ; Classify predefined arithmetic names before allocation.
+        LD (SCPKIND),A              ; Keep the classification beside the selected slot.
         LD HL,(SCGCOUNT)           ; Search only the occupied global identities.
         LD A,H                     ; The count is bounded to 256 records.
         OR L                       ; A zero count has no records to inspect.
@@ -410,6 +464,13 @@ SCGNEW:
         LD HL,(SCGCOUNT)           ; Publish the additional occupied slot.
         INC HL
         LD (SCGCOUNT),HL
+        LD A,(SCGSLOT)             ; Address the matching primitive-kind byte.
+        LD L,A
+        LD H,0
+        LD DE,SCGPRIM
+        ADD HL,DE
+        LD A,(SCPKIND)             ; A zero means that this name is ordinary.
+        LD (HL),A
         LD A,(SCGSLOT)             ; Return the assigned slot with carry clear.
         OR A                       ; Preserve the slot while clearing carry.
         RET
@@ -424,5 +485,75 @@ SCGHIGH:
         OR C
         JR NZ,SCGLOOK
         JR SCGNEW                  ; No existing identity matched.
+
+; Return the predefined arithmetic kind for SCID, or zero for an ordinary name.
+; Symbol references carry subtype bits in the high byte; the interner index is
+; the remaining thirteen bits and addresses a three-byte descriptor.
+SCPLOOK:
+        LD HL,(SCID)               ; Copy the encoded symbol identity locally.
+        LD A,H                     ; Remove the reference subtype from the index.
+        AND 1FH
+        LD H,A
+        LD D,H                     ; Multiply the thirteen-bit index by descriptor size.
+        LD E,L
+        ADD HL,HL                  ; Two bytes per descriptor so far.
+        ADD HL,DE                  ; Add one more byte for the three-byte stride.
+        LD DE,SCNAMEDS             ; Address the selected symbol descriptor.
+        ADD HL,DE
+        LD E,(HL)                  ; Descriptor bytes zero and one hold pool offset.
+        INC HL
+        LD D,(HL)
+        INC HL
+        LD C,(HL)                  ; Descriptor byte two holds spelling length.
+        LD HL,SCNAMEPL             ; Add the offset to the symbol spelling pool.
+        ADD HL,DE
+        LD A,C                     ; One-byte names contain the three arithmetic ops.
+        CP 1
+        JR NZ,SCPLONG
+        LD A,(HL)
+        CP '+'
+        JP Z,SCPPLUS
+        CP '-'
+        JP Z,SCPSUB
+        CP '*'
+        JP Z,SCPMULR
+        JP SCPNONE
+SCPLONG:
+        CP 5                       ; zero? is the only predefined five-byte name.
+        JP NZ,SCPNONE
+        LD A,(HL)
+        CP 'z'
+        JP NZ,SCPNONE
+        INC HL
+        LD A,(HL)
+        CP 'e'
+        JP NZ,SCPNONE
+        INC HL
+        LD A,(HL)
+        CP 'r'
+        JP NZ,SCPNONE
+        INC HL
+        LD A,(HL)
+        CP 'o'
+        JP NZ,SCPNONE
+        INC HL
+        LD A,(HL)
+        CP '?'
+        JP NZ,SCPNONE
+SCPZERO:
+        LD A,4                     ; Kind four identifies zero? at runtime.
+        RET
+SCPPLUS:
+        LD A,1                     ; Kind one identifies addition.
+        RET
+SCPSUB:
+        LD A,2                     ; Kind two identifies subtraction.
+        RET
+SCPMULR:
+        LD A,3                     ; Kind three identifies multiplication.
+        RET
+SCPNONE:
+        XOR A                      ; Ordinary names receive no primitive mark.
+        RET
 
 ; Read one closing parenthesis for a fixed-arity form.

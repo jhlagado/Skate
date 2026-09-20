@@ -1,57 +1,39 @@
 # Skate
 
-Scheme for a 64K computer.
+Scheme for Z80 computers running CP/M.
 
-Skate is a small native Scheme compiler and runtime for Z80 computers running
-CP/M. It turns `.sk8` source into NOBJ 1.0 output and linked `.COM` programs
-that can run from the CP/M prompt.
+Skate compiles `.sk8` source into NOBJ 1.0 files and runnable `.COM`
+programs. It is a work in progress aimed at useful Scheme programs on a 64K
+machine, with a small native compiler, a compact runtime and checked CP/M
+publication.
 
-The current public release is Skate 0.2.1, a work-in-progress compiler for
-small Scheme programs. It reads CP/M source, resolves package definitions and
-lexical bindings, emits native Z80 code for integer and boolean expressions,
-and publishes checked NOBJ and `.COM` files.
+Skate 0.3.0 supports exact signed integers, booleans, package definitions,
+lexical `let` and `let*`, `if`, `begin`, `and`, `or`, `+`, `-`, `*`, fixed-arity
+procedures, closures, mutation and proper tail calls.
+
+The compiler and runtime are written in Z80 assembly using the ATOM assembler.
+The repository also contains the Deno build commands and CP/M checks needed to
+assemble the compiler, publish an object file and run the generated program.
 
 ```scheme
-(define base 40)
-(let* ((step 2)
-       (answer (+ base step)))
-  (if #t answer 0))
+(define make-counter
+  (lambda (start)
+    (lambda ()
+      (begin (set! start (+ start 1)) start))))
+
+(define counter (make-counter 0))
+(counter)
 ```
 
 ## Build
 
-Skate uses Deno and the ATOM assembler adapter. Make the packages listed in
-`deno.runtime.json` available beside the checkout, then compile a program with:
+Make the packages listed in `deno.runtime.json` available beside the checkout,
+then run:
 
 ```sh
-deno task compile examples/make-adder.sk8 build/make-adder.com cpm-64k
+deno task check
+deno task test:cpm
+deno task measure
 ```
 
-Run the host and runtime checks with:
-
-```sh
-deno task test
-```
-
-Run the scope compiler proof and size checks with:
-
-```sh
-deno task check:c2
-deno task test:cpm:c2
-deno task measure:c2
-```
-
-The [scope compiler notes](docs/scope-compiler/README.md) describe the current
-language subset and its memory limits.
-
-The `release/` directory contains the first tested CP/M artifacts and their
-checksums.
-
-## Scope
-
-Skate is a work in progress under active development. The current compiler
-supports exact integers, booleans, package definitions, lexical `let` and
-`let*`, conditionals, `begin`, `and`, `or`, and the basic arithmetic forms.
-Procedures, mutation, pairs, strings and collection are planned parts of the
-language. The compiler is written for a 64K CP/M machine and keeps its tables,
-generated code and stack within the available transient program area.
+The compiler writes checked NOBJ and `.COM` output for use from a CP/M prompt.

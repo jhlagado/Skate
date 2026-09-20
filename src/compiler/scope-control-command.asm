@@ -27,10 +27,24 @@ SCNAMEDS EQU 09C00H              ; Symbol descriptor table for the reader.
 SCNAMEPL EQU 0A000H              ; 5,120-byte symbol spelling pool.
 SCSTRDS  EQU 0B400H              ; String descriptor table required by RINIT.
 SCSTRPL  EQU 0B500H              ; Small string pool; strings are rejected here.
-SCBRANCH EQU 0B700H              ; Generic short-circuit branch patch stack.
-SCIFALSE EQU 0B800H              ; False-branch patch words for nested if forms.
-SCIFEND  EQU 0B880H              ; End-branch patch words for nested if forms.
-SCWEND   EQU 0B900H              ; End of all fixed high-memory compiler tables.
+SCPMETA  EQU 0C000H              ; Procedure records stay outside reader tables.
+SCLOCOWN EQU 0C400H              ; Owner procedure for each reusable local slot.
+SCPMASK  EQU 0C500H              ; Per-procedure masks follow the owner bytes.
+SCPRSZ   EQU 44                  ; Body, arity, slots and two 128-bit masks.
+SCOWNOF  EQU 12                  ; Owned-slot mask begins after four formals.
+SCCAPOF  EQU 28                  ; Captured-slot mask follows the owned mask.
+SCMASKB  EQU 16                  ; One mask covers the 128 local slots.
+SCLOCEV  EQU 0C600H              ; One escape flag belongs to each local slot.
+SCBFRAME EQU 0C700H              ; Nested body lookahead records use this area.
+SCBFSZ   EQU 9                   ; Cursors, owner and procedure patch state.
+SCGPRIM  EQU 0C800H              ; One predefined-primitive kind per global slot.
+SCBRANCH EQU 0C900H              ; Generic short-circuit branch patch stack.
+SCIFALSE EQU 0CA00H              ; False-branch patch words for nested if forms.
+SCIFEND  EQU 0CA80H              ; End-branch patch words for nested if forms.
+SCTAILPT EQU 0CB00H              ; Tail-call target words awaiting body closure.
+SCTAILK  EQU 0CB80H              ; One flag records a saved side-stack operator.
+SCTMAX   EQU 64                   ; Tail candidates per body expression scope.
+SCWEND   EQU 0CBC0H              ; End of all fixed high-memory compiler tables.
 
 ; Compiler entry and terminal paths.
 SCMAIN:
@@ -52,7 +66,7 @@ SCMAIN:
 
 SCFAIL:
         CALL CTCLOSER              ; Close a source left open by a parse failure.
-        LD DE,SCERRTXT             ; All rejected forms remain unpublished.
+        LD DE,(SCERRPTR)           ; All rejected forms remain unpublished.
         JP SCPRINT                ; Print the diagnostic and warm-start CP/M.
 SCMEM:
         LD DE,SCMEMTXT             ; Memory guard failure is distinct to the user.
@@ -79,6 +93,33 @@ SCSETUP:
         LD (SCBRTOP),A            ; No short-circuit branch is pending.
         LD (SCIFTOP),A            ; No if form is being compiled.
         LD (SCBNDTOP),A          ; No pending let binding is retained.
+        LD (SCPCOUNT),A           ; No procedure descriptor has been allocated.
+        LD (SCTMPPR),A            ; No descriptor is awaiting its body address.
+        LD (SCARGN),A             ; No generic application argument is pending.
+        LD (SCAPMODE),A           ; No compact global-call marker is active.
+        LD (SCTCTX),A             ; Top-level expressions are not tail calls.
+        LD (SCMUT),A          ; Stores initialize bindings until set! selects checks.
+        LD (SCIFTAIL),A           ; No branch context is active at package entry.
+        LD (SCTTOP),A             ; No pending tail-call target words exist.
+        LD (SCBDEP),A             ; No compiler lambda frame is active.
+        LD (SCBMODE),A            ; No body is isolating its tail candidates.
+        LD (SCBISOL),A            ; Nested body forms propagate candidates by default.
+        LD HL,SCLOCEV              ; Clear escape flags from the previous source run.
+        LD B,0                    ; DJNZ with zero performs all 256 byte writes.
+SCSETEV:
+        LD (HL),A
+        INC HL
+        DJNZ SCSETEV
+        LD HL,SCGPRIM              ; Clear predefined-primitive marks as well.
+        LD B,0
+SCSETPR:
+        LD (HL),A
+        INC HL
+        DJNZ SCSETPR
+        LD HL,SCERRTXT            ; Use the ordinary diagnostic by default.
+        LD (SCERRPTR),HL          ; Body diagnostics may replace this pointer.
+        LD A,0FFH                 ; Top-level locals have no procedure owner.
+        LD (SCCURPR),A            ; Nested lambdas replace this while compiling.
         LD HL,SRTIMAGE            ; Source address of the checked runtime bytes.
         LD DE,SCIMG               ; Destination address in the staged object.
         LD BC,SRTLEN              ; Copy exactly the serialized runtime image.
@@ -129,7 +170,7 @@ SCENDPK:
         LD HL,(SCFORMN)            ; Reject an empty source before publication.
         LD A,H                     ; Test both bytes of the form count.
         OR L                       ; A zero count has no result for SRTPRINT.
-        JP Z,SCSYN                 ; Report the same syntax error as other empties.
+        JP Z,SCENDSYN              ; Report the same syntax error as other empties.
         JP SCRET                   ; Append RET and return to the command driver.
 
 ; Parse one event already returned in A; literal payloads remain in RTAG:HL.
@@ -182,11 +223,14 @@ SCFORM:
         LD (SCALLOW),A             ; Only the package loop grants this permission.
         CALL RNEXT                 ; Every supported form begins with a symbol.
         RET C                      ; Propagate a reader source failure.
+        CP 1                       ; A list operator is a computed procedure value.
+        JP Z,SCAPLIST              ; Compile it before reading application arguments.
         CP 5                       ; Event kind five is an interned symbol.
-        JP NZ,SCSYN                ; Lists and scalar literals cannot be operators.
+        JP NZ,SCOPRSYN             ; Scalar literals cannot be operators.
+        LD (SCOPID),HL             ; Preserve the complete identity for fallback.
         LD DE,SCDEF                ; Compare the spelling with the define keyword.
         CALL SCMATCH               ; The lexer buffer remains valid until RNEXT.
-        JR Z,SCDEFINE              ; Definitions use the saved package-level flag.
+        JP Z,SCDEFINE              ; Definitions use the saved package-level flag.
         LD DE,SCIF                 ; Compare with the conditional form.
         CALL SCMATCH               ; Match only complete identifier spellings.
         JP Z,SCIFORM               ; Emit the branch skeleton and both arms.
@@ -205,25 +249,57 @@ SCFORM:
         LD DE,SCOR                 ; Compare with the short-circuit disjunction.
         CALL SCMATCH               ; The two operands are evaluated left to right.
         JP Z,SCORF                 ; Preserve the first true value.
-        LD DE,SCPADD               ; Compare with the two-operand addition form.
-        CALL SCMATCH               ; Numeric dispatch remains a runtime operation.
-        JP Z,SCADDF                 ; Emit a checked addition call.
-        LD DE,SCPMIN               ; Compare with subtraction.
-        CALL SCMATCH               ; The current form accepts exactly two operands.
-        JP Z,SCSUBF                ; Emit a checked subtraction call.
-        LD DE,SCPMUL               ; Compare with multiplication.
-        CALL SCMATCH               ; Overflow remains a runtime diagnostic.
-        JP Z,SCMULF                ; Emit a checked multiplication call.
-        JP SCSYN                   ; Implicit procedure calls are not supported.
+        LD DE,SCLAMBK              ; Compare with lambda.
+        CALL SCMATCH               ; Lambda creates a fixed procedure descriptor.
+        JP Z,SCLAMBF               ; Compile its formal list and body.
+        LD DE,SCSETK               ; Compare with set!.
+        CALL SCMATCH               ; Mutation updates an existing slot.
+        JP Z,SCSETF                ; Compile the target and new value.
+        JP SCAPNAME                ; Other names are ordinary procedure values.
+
+; Compile a computed operator list and continue with its argument sequence.
+SCAPLIST:
+        CALL SCEXPE                ; The opening list event remains in A.
+        RET C                      ; Preserve the nested operator diagnostic.
+        CALL SCPUSH                ; Keep the computed callee below its arguments.
+        RET C
+        JP SCAPARGS               ; The outer form supplies the arguments.
+
+; Load a named procedure value and compile its application arguments.
+SCAPNAME:
+        LD HL,(SCOPID)             ; Restore the operator's interned identity.
+        LD (SCID),HL               ; The primitive check uses the common identity word.
+        CALL SCLOCF                ; A local name must retain the ordinary path.
+        JR C,SCAPGEN               ; Local bindings shadow predefined procedures.
+        CALL SCPLOOK               ; Check the spelling before emitting its value.
+        OR A
+        JR Z,SCAPGEN               ; Ordinary globals still carry a full value record.
+        CALL SCGGET                ; Allocate the shared global slot if necessary.
+        RET C
+        LD (SCAPGSL),A             ; Save the slot for the call boundary emitter.
+        CALL SCGMARK               ; Read the operator before evaluating arguments.
+        RET C
+        LD A,1
+        LD (SCAPMODE),A            ; SCAPARGS now emits the compact call entry.
+        JP SCAPARGS
+SCAPGEN:
+        XOR A
+        LD (SCAPMODE),A            ; The general path carries a complete callee value.
+        LD HL,(SCOPID)             ; Restore the operator's interned identity.
+        CALL SCREF                 ; Resolve the value before reading arguments.
+        RET C
+        CALL SCPUSH                ; Keep the named callee below its arguments.
+        RET C
+        JP SCAPARGS                ; SCREF leaves the generated value in A:HL.
 
 SCDEFINE:
         LD A,(SCTOP)               ; Nested define is outside this increment.
         OR A                       ; Nonzero is the package-level permission.
-        JP Z,SCSYN                 ; Reject definitions inside an expression body.
+        JP Z,SCDEFSYN               ; Reject definitions inside an expression body.
         CALL RNEXT                 ; Read the new global's symbol name.
         RET C                      ; Propagate source failure before allocation.
         CP 5                       ; Definitions require one identifier.
-        JP NZ,SCSYN                ; A list or literal is not a binding name.
+        JP NZ,SCDEFNSY              ; A list or literal is not a binding name.
         LD (SCID),HL               ; Preserve the full identity across the initializer.
         CALL SCGGET                ; Forward references use this same slot.
         RET C                      ; Reject the 257th distinct package name.
@@ -240,15 +316,24 @@ SCDEFINE:
 
 ; Compile a two-operand numeric form selected by SCOP and close its list.
 SCBIN:
+        LD A,(SCOP)                ; Preserve the operator across recursive operands.
+        PUSH AF                    ; A nested binary form uses the same scratch byte.
+        XOR A                      ; Binary operands are evaluated before the result.
+        LD (SCTCTX),A              ; Neither operand is in tail position.
         CALL SCEXPR                ; Compile the left operand first.
-        RET C                      ; Preserve the first operand's diagnostic.
+        JR C,SCBINERR              ; Balance the saved operator on failure.
         CALL SCPUSH                ; Save its tag and payload on the generated stack.
+        JR C,SCBINERR              ; Preserve output exhaustion with a balanced frame.
+        XOR A                      ; The right operand also retains its continuation.
+        LD (SCTCTX),A
         CALL SCEXPR                ; Compile the right operand second.
-        RET C                      ; Preserve a nested syntax or capacity error.
+        JR C,SCBINERR              ; Balance the saved operator on failure.
         CALL SCPUSH                ; Push the right value above the left value.
+        JR C,SCBINERR              ; Preserve output exhaustion with a balanced frame.
         CALL SCEXPECT              ; Exactly two operands are accepted here.
-        RET C                      ; A third operand or missing close is syntax.
-        LD A,(SCOP)                ; Select the checked runtime operation.
+        JR C,SCBINERR              ; A third operand or missing close is syntax.
+        POP AF                     ; Recover the operator after both operands finish.
+        LD (SCOP),A                ; Restore the selector before dispatch.
         OR A                       ; Addition uses the zero selector.
         JR Z,SCADD                 ; Call the runtime helper for addition.
         CP 1                       ; Subtraction uses selector one.
@@ -261,6 +346,10 @@ SCADD:
 SCSUB:
         LD HL,SRTSUB               ; Address of the checked subtraction helper.
         JP SCCALL                  ; Emit the call and return to the form parser.
+SCBINERR:
+        POP AF                     ; Remove the saved operator after a failure.
+        SCF                       ; Preserve the nested expression diagnostic.
+        RET
 
 SCADDF:
         XOR A                      ; Addition selector zero.
@@ -278,12 +367,18 @@ SCMULF:
 ; Compile if, placing a false-arm branch before the consequent and a jump over
 ; the alternative after it.  Nested forms use the separate IF patch stacks.
 SCIFORM:
+        LD A,(SCTCTX)              ; Save the surrounding tail position for both arms.
+        LD (SCIFTAIL),A            ; The predicate itself is never a tail call.
+        XOR A
+        LD (SCTCTX),A              ; Test evaluation returns to the branch skeleton.
         CALL SCEXPR                ; Compile the test value.
         RET C                      ; Preserve a test-expression diagnostic.
         LD HL,SRTFAL               ; Runtime helper returns Z only for #f.
         CALL SCCALL                ; Check the test without changing its value.
         CALL SCJZ                  ; Emit JP Z,zero and return its patch address.
         CALL SCIFPUSH              ; Save the false-arm patch for this depth.
+        LD A,(SCIFTAIL)            ; The consequent inherits the enclosing position.
+        LD (SCTCTX),A
         CALL SCEXPR                ; Compile the consequent expression.
         RET C                      ; A broken consequent aborts the whole form.
         CALL SCJP                  ; Skip the alternative after a true arm.
@@ -291,17 +386,18 @@ SCIFORM:
         LD HL,(SCPC)               ; The alternative starts at this code address.
         CALL SCABS                 ; Convert its staged address to output address.
         CALL SCIFPATF            ; Patch the false branch before reading the arm.
+        LD A,(SCIFTAIL)            ; The alternative inherits the enclosing position.
+        LD (SCTCTX),A
         CALL RNEXT                 ; A close means the optional alternative is absent.
         RET C                      ; Preserve a reader error after the consequent.
-        CP 2                       ; Closing now selects an unspecified false value.
-        JR Z,SCIFNONE              ; Emit #f and finish the branch skeleton.
+        CP 2                       ; Closing now selects the unspecified value.
+        JR Z,SCIFNONE              ; Emit it and finish the branch skeleton.
         CALL SCEXPE                ; The already-read event is the alternative.
         RET C                      ; Propagate an alternative expression failure.
         CALL SCEXPECT              ; The alternative must close the original list.
         JR SCIFDONE                ; Patch the end jump after its last byte.
 SCIFNONE:
-        XOR A                      ; Select #f for an omitted alternative.
-        CALL SCBOOL                ; The false arm returns a stable scalar value.
+        CALL SCUNS                 ; An omitted alternative returns UNSPECIFIED.
 SCIFDONE:
         LD HL,(SCPC)               ; Both arms now end at this generated address.
         CALL SCABS                 ; Convert it to the output's absolute address.
@@ -315,8 +411,14 @@ SCBEGINF:
 
 ; Compile the two short-circuit operands of and.
 SCANDF:
+        LD A,(SCTCTX)              ; Save the surrounding tail position.
+        PUSH AF                    ; The first operand itself is never tail code.
+        XOR A
+        LD (SCTCTX),A
         CALL SCEXPR                ; Compile the first operand.
-        RET C                      ; Preserve the first operand's diagnostic.
+        JR C,SCANDERR              ; Balance the saved context on failure.
+        POP AF                     ; Recover the enclosing tail position.
+        LD (SCTCTX),A              ; Only the second operand can inherit it.
         LD HL,SRTFAL               ; Test the value while retaining its registers.
         CALL SCCALL                ; Z means the first operand is #f.
         CALL SCJZ                  ; Branch to the first operand's final-value path.
@@ -328,11 +430,21 @@ SCANDF:
         LD HL,(SCPC)               ; The second operand is the true path's result.
         CALL SCABS                 ; Convert its end address for the branch target.
         JP SCBRPAT                 ; Patch the pending branch to this target.
+SCANDERR:
+        POP AF                     ; Remove the saved tail position after failure.
+        SCF
+        RET
 
 ; Compile the two short-circuit operands of or.
 SCORF:
+        LD A,(SCTCTX)              ; Save the surrounding tail position.
+        PUSH AF                    ; The first operand itself is never tail code.
+        XOR A
+        LD (SCTCTX),A
         CALL SCEXPR                ; Compile the first operand.
-        RET C                      ; Preserve the first operand's diagnostic.
+        JR C,SCORERR               ; Balance the saved context on failure.
+        POP AF                     ; Recover the enclosing tail position.
+        LD (SCTCTX),A              ; Only the second operand can inherit it.
         LD HL,SRTFAL               ; Test the value while retaining its registers.
         CALL SCCALL                ; Z means the first operand is false.
         CALL SCJNZ                 ; A true first operand skips the second.
@@ -344,40 +456,171 @@ SCORF:
         LD HL,(SCPC)               ; The second operand is the false path's result.
         CALL SCABS                 ; Convert its end address for the branch target.
         JP SCBRPAT                 ; Patch the pending branch to this target.
+SCORERR:
+        POP AF                     ; Remove the saved tail position after failure.
+        SCF
+        RET
 
-; Consume a body until its close.  The already-read closing event is not lost.
+; Compile each body expression immediately, then use the following reader
+; event to decide whether its recorded tail calls need ordinary continuations.
 SCBODY:
-        XOR A                      ; No body expression has been seen yet.
-        LD (SCBODYN),A             ; Track the nonempty-body requirement.
-SCBODYLP:
-        CALL RNEXT                 ; Read the next body expression or close.
-        RET C                      ; Preserve source failure.
-        CP 2                       ; A close terminates the body.
-        JR Z,SCBODYED             ; The final expression remains in registers.
-        CP 0                       ; EOF cannot close a form.
-        JP Z,SCSYN                 ; Reject an incomplete body.
-        CALL SCEXPE                ; Compile the already-read expression event.
-        RET C                      ; Propagate its diagnostic.
-        LD A,(SCBODYN)             ; Count this completed body expression.
-        INC A                      ; Body sequences may contain multiple forms.
-        LD (SCBODYN),A             ; Publish the count before reading the next.
-        JR SCBODYLP              ; Continue until the matching close arrives.
-SCBODYED:
-        LD A,(SCBODYN)             ; Empty bodies are not accepted here.
-        OR A                       ; Z denotes no body expression.
-        JP Z,SCSYN                 ; Keep the source contract explicit.
-        XOR A                      ; Return carry clear after a complete body.
-        RET                        ; The last body's value is still in A/HL.
+        POP DE                     ; Move the caller return below the body frame.
+        LD A,(SCTCTX)              ; Save the caller's tail context.
+        PUSH AF                    ; Frame word seven: previous tail context.
+        LD A,(SCTTOP)              ; Save pending tail-call records from an outer body.
+        PUSH AF                    ; Frame word six: previous tail-record top.
+        LD A,(SCBMODE)             ; Save the enclosing body's candidate mode.
+        PUSH AF                    ; Frame word five: previous candidate mode.
+        LD A,(SCBISOL)             ; Save whether this body is isolated.
+        PUSH AF                    ; Frame word four: requested isolation state.
+        LD A,(SCBODYN)             ; Preserve the previous expression count.
+        PUSH AF                    ; Frame word three: previous body count.
+        LD A,(SCBTAIL)             ; Preserve the previous body tail flag.
+        PUSH AF                    ; Frame word two: previous body tail flag.
+        LD A,(SCBEV)               ; Preserve the previous current event.
+        PUSH AF                    ; Frame word one: previous event kind.
+        LD A,(SCBTAG)              ; Preserve the previous current tag.
+        PUSH AF                    ; Frame word zero: previous scalar tag.
+        LD HL,(SCBVAL)             ; Preserve the previous current payload.
+        PUSH HL                    ; Body payload completes the saved frame.
+        PUSH DE                    ; Restore the caller return above the frame.
+        LD A,(SCTCTX)              ; The incoming context belongs to this body.
+        LD (SCBTAIL),A             ; Only a final expression keeps this flag.
+        LD A,(SCBISOL)             ; Record whether this body owns a private list.
+        LD (SCBMODE),A
+        XOR A                      ; Nested begin and let bodies share their list.
+        LD (SCBISOL),A
+        LD A,(SCBMODE)
+        OR A
+        JR Z,SCBKEEP               ; Shared bodies retain outer tail candidates.
+        XOR A                      ; A procedure body starts a private candidate list.
+        LD (SCTTOP),A
+SCBKEEP:
+        XOR A                      ; Start with no expressions in this body.
+        LD (SCBODYN),A             ; Empty bodies remain a syntax error.
+SCBREAD:
+        CALL RNEXT                 ; Read one body expression or its closing parenthesis.
+        JP C,SCBFAIL               ; Restore the frame after a reader failure.
+        CP 2                       ; A close before an expression is invalid.
+        JP Z,SCBFAIL               ; Report an empty body after balanced cleanup.
+        OR A                       ; EOF cannot close an open body.
+        JP Z,SCBFAIL               ; Report an incomplete body after cleanup.
+        LD (SCBEV),A               ; Preserve the event until SCEXPE dispatches it.
+        LD (SCBVAL),HL             ; Preserve the event payload.
+        LD A,(RTAG)                ; Preserve its scalar tag.
+        LD (SCBTAG),A              ; Structural events ignore this field.
+SCBEXPR:
+        LD A,(SCTTOP)              ; Remember tail records made by this expression.
+        LD (SCTMARK),A             ; Non-final expressions will rewrite those calls.
+        LD A,(SCBTAIL)             ; Give the expression the body's incoming context.
+        LD (SCTCTX),A              ; Tail candidates use a wrapper until finality is known.
+        LD A,(SCBTAG)              ; Restore the event's reader tag.
+        LD (RTAG),A
+        LD A,(SCBEV)               ; Restore the event kind for SCEXPE.
+        LD HL,(SCBVAL)             ; Restore its payload for SCEXPE.
+        CALL SCEXPE                ; Compile this complete expression immediately.
+        JR NC,SCBEXPOK             ; Continue after a successful body expression.
+        JP SCBFAIL                 ; No later event is consumed on expression failure.
+SCBEXPOK:
+        LD (SCRESV),HL             ; Save the expression result before reading ahead.
+        LD (SCREST),A              ; Preserve its tag across the reader call.
+        LD A,(SCBODYN)             ; Count the completed body expression.
+        INC A
+        LD (SCBODYN),A
+        CALL RNEXT                 ; The next event distinguishes final from non-final.
+        JP C,SCBFAIL               ; The expression result is discarded on source failure.
+        CP 2                       ; A close leaves the preceding expression final.
+        JP Z,SCBFINAL              ; Leave tail wrappers intact for the final value.
+        OR A                       ; EOF cannot terminate a body.
+        JP Z,SCBFAIL               ; Reject an incomplete body.
+        LD (SCBEV),A               ; Save the next expression while rewriting candidates.
+        LD (SCBVAL),HL             ; Preserve its payload across SCTFIX.
+        LD A,(RTAG)                ; Preserve its logical scalar tag.
+        LD (SCBTAG),A
+        CALL SCTFIX                ; Non-final tail calls become ordinary calls.
+        JP C,SCBFAIL
+        JP SCBEXPR                ; Compile the saved next event without rereading.
+SCBFINAL:
+        LD HL,(SCRESV)             ; Recover the final expression payload.
+        LD A,(SCREST)              ; Recover its final expression tag.
+        CALL SCBREST               ; Restore caller scratch and the continuation.
+        LD HL,(SCRESV)             ; Restore the body value after frame cleanup.
+        LD A,(SCREST)              ; Restore the body tag after frame cleanup.
+        OR A                       ; Return carry clear with the final value.
+        RET
+SCBFAIL:
+        CALL SCBREST               ; Restore all body fields and the continuation.
+        SCF                        ; Preserve the reader or expression failure.
+        RET                        ; No partially compiled body is accepted.
+
+; Restore one saved body frame.  The helper is called with its frame on top.
+SCBREST:
+        POP BC                     ; Save the continuation after this helper call.
+        POP DE                     ; Recover the caller continuation below the frame.
+        POP HL                     ; Restore the previous body payload.
+        LD (SCBVAL),HL             ; Publish it before returning to the caller.
+        POP AF                     ; Restore the previous scalar tag.
+        LD (SCBTAG),A              ; Preserve it for another nested body.
+        POP AF                     ; Restore the previous event kind.
+        LD (SCBEV),A               ; Publish the old current event.
+        POP AF                     ; Restore the previous incoming tail flag.
+        LD (SCBTAIL),A             ; Publish the old body context.
+        POP AF                     ; Restore the previous body count.
+        LD (SCBODYN),A             ; Publish the old expression count.
+        POP AF                     ; Restore the caller's isolation request.
+        LD (SCBISOL),A
+        LD A,(SCBMODE)             ; Private bodies restore their candidate top.
+        OR A
+        JR Z,SCBKEEPT
+        POP AF                     ; Restore the enclosing body's candidate mode.
+        LD (SCBMODE),A
+        POP AF                     ; Restore the enclosing candidate top.
+        LD (SCTTOP),A
+        JR SCBMODDN
+SCBKEEPT:
+        POP AF                     ; Restore the enclosing body's candidate mode.
+        LD (SCBMODE),A
+        POP AF                     ; Discard the shared body's saved candidate top.
+SCBMODDN:
+        POP AF                     ; Restore the caller's tail context.
+        LD (SCTCTX),A              ; Nested forms see their original context again.
+        PUSH DE                    ; Restore the caller continuation below the helper.
+        PUSH BC                    ; Return to the success or failure continuation.
+        RET                        ; The frame is balanced on every exit path.
 
 ; Report a bounded table or nesting failure.
 SCCAP:
+        LD HL,SCCAPTXT
+        LD (SCERRPTR),HL
         SCF                       ; Carry distinguishes capacity from syntax.
         RET                        ; No partial output is published after this return.
 
 SCSYN:
         SCF                       ; The caller reports a compile-error diagnostic.
         RET                        ; Reader state remains terminal until the next run.
+SCEXERR:
+        LD HL,SCEXTXT
+        LD (SCERRPTR),HL
+        JP SCSYN
+SCENDSYN:
+        LD HL,SCENDT
+        LD (SCERRPTR),HL
+        JP SCSYN
+SCOPRSYN:
+        LD HL,SCOPRT
+        LD (SCERRPTR),HL
+        JP SCSYN
+SCDEFSYN:
+        LD HL,SCDEFT
+        LD (SCERRPTR),HL
+        JP SCSYN
+SCDEFNSY:
+        LD HL,SCDEFNT
+        LD (SCERRPTR),HL
+        JP SCSYN
 SCUNSUP:
+        LD HL,SCUNSTXT
+        LD (SCERRPTR),HL
         SCF                       ; Binary16 and unsupported forms are explicit errors.
         RET                        ; The public command does not publish a partial file.
 SCREAD:
@@ -398,6 +641,7 @@ SCID:       DW 0                   ; Current full interner symbol identity.
 SCSLOT:     DB 0                   ; Current local or global slot number.
 SCGSLOT:    DB 0                   ; Global slot returned by SCGGET.
 SCGIDX:     DB 0                   ; Candidate global slot during a key scan.
+SCPKIND:    DB 0                   ; Predefined primitive kind for the current name.
 SCDEFSL:  DB 0                   ; Definition initializer's global slot.
 SCOP:       DB 0                   ; Selected binary operation 0, 1 or 2.
 SCALLOW:    DB 0                   ; Package-level permission for define.
@@ -418,7 +662,44 @@ SCBPTMP:    DW 0                   ; Temporary staged branch patch address.
 SCBTARG:    DW 0                   ; Temporary absolute branch target.
 SCFOUND:    DB 0                   ; Last matching local slot.
 SCFOUNDK:   DB 0                   ; Nonzero after a local match.
-SCERR:      DB 0                   ; Reserved diagnostic selector.
+SCOPID:     DW 0                   ; Operator identity for generic applications.
+SCPCOUNT:   DB 0                   ; Number of fixed procedure descriptors.
+SCCURPR:    DB 0FFH                ; Active procedure, or FFH at package level.
+SCTMPPR:    DB 0                   ; Descriptor being compiled.
+SCARGN:     DB 0                   ; Generic application argument count.
+SCTCTX:     DB 0                   ; Nonzero when the current expression is tail code.
+SCIFTAIL:   DB 0                   ; Tail context saved while compiling an if.
+SCTLSAV:    DB 0                   ; Saved tail context while evaluating arguments.
+SCSKIP:     DW 0                   ; Lambda jump-over patch address.
+SCPBODY:    DW 0                   ; Procedure body staged address during setup.
+SCLOCVAL:   DB 0                   ; Temporary local slot for owner marking.
+SCMSLOT:    DB 0                   ; Slot selected while setting a mask bit.
+SCMPR:      DB 0                   ; Procedure index selected for mask writes.
+SCMTADR:    DW 0                   ; Mask byte address during bit assembly.
+SCDESTK:    DB 0                   ; Mutation destination kind.
+SCMUT:  DB 0                   ; Nonzero selects the checked mutation store.
+SCORIGPR:   DB 0                   ; Active procedure while capture masks are chained.
+SCORIGTM:   DB 0                   ; Descriptor under construction during mask writes.
+SCCAPOWN:   DB 0                   ; Procedure that owns the captured local slot.
+SCCHAINN:   DB 0                   ; Remaining body frames in a capture chain.
+SCAPEV:     DB 0                   ; Saved generic-argument event kind.
+SCAPTAG:    DW 0                   ; Saved generic-argument scalar tag.
+SCAPVAL:    DW 0                   ; Saved generic-argument payload.
+SCAPMODE:   DB 0                   ; Nonzero selects the compact global-call marker.
+SCAPGSL:    DB 0                   ; Global slot carried by the compact call marker.
+SCRESV:     DW 0                   ; Procedure/body result payload during cleanup.
+SCREST:     DB 0                   ; Procedure/body result tag during cleanup.
+SCERRPTR:   DW 0                   ; Current compiler diagnostic string.
+SCBDEP:     DB 0                   ; Nested body-frame depth.
+SCBTAIL:    DB 0                   ; Incoming tail context for the current body.
+SCBMODE:    DB 0                   ; Nonzero bodies keep tail candidates private.
+SCBISOL:    DB 0                   ; Caller requests a private candidate scope.
+SCBEV:      DB 0                   ; Current body-frame event kind.
+SCBTAG:     DB 0                   ; Current body-frame scalar tag.
+SCBVAL:     DW 0                   ; Current body-frame payload.
+SCTTOP:     DB 0                   ; Number of tail-call target words in this body.
+SCTMARK:    DB 0                   ; Start of the current expression's tail records.
+SCTPTR:     DW 0                   ; Tail-call patch address during table writes.
 SCNCTX:     DW SCNAMEDS,320,SCNAMEPL,5120,0,0
             DB 0,0                  ; Symbol context kind and ready flag.
 SCSCTX:     DW SCSTRDS,64,SCSTRPL,512,0,0
@@ -433,9 +714,24 @@ SCLET:      DB 3,"let"
 SCLETST:  DB 4,"let*"
 SCAND:      DB 3,"and"
 SCOR:       DB 2,"or"
+SCLAMBK:    DB 6,"lambda"
+SCSETK:     DB 4,"set!"
+SCZEROK:    DB 5,"zero?"
 SCPADD:     DB 1,"+"
 SCPMIN:     DB 1,"-"
 SCPMUL:     DB 1,"*"
 SCOKTXT:    DB "COMPILED",13,10,"$"
 SCERRTXT:   DB "COMPILE ERROR",13,10,"$"
+SCCAPTXT:   DB "CAP",13,10,"$"
+SCSYNTXT:   DB "SYN",13,10,"$"
+SCUNSTXT:   DB "UNSUP",13,10,"$"
+SCEXPTXT:   DB "EXPECT",13,10,"$"
+SCEXTXT:    DB "EXPR",13,10,"$"
+SCAPTXT:    DB "APPLY",13,10,"$"
+SCDESTT:    DB "DEST",13,10,"$"
+SCDUPTXT:   DB "DUP",13,10,"$"
+SCENDT:     DB "END",13,10,"$"
+SCOPRT:     DB "OP",13,10,"$"
+SCDEFT:     DB "DEF",13,10,"$"
+SCDEFNT:    DB "DEFNAME",13,10,"$"
 SCMEMTXT:   DB "INSUFFICIENT MEMORY",13,10,"$"

@@ -1,9 +1,0 @@
-; Bisection uses binary16 deliberately: eight steps bound the interval error.
-(define (bisect low high steps)
-  (if (= steps 0)
-      (/ (+ low high) 2.0)
-      (let ((mid (/ (+ low high) 2.0)))
-        (if (< (* mid mid) 2.0)
-            (bisect mid high (- steps 1))
-            (bisect low mid (- steps 1))))))
-(bisect 1.0 2.0 8)

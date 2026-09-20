@@ -23,6 +23,25 @@ SCFIN:
         EX DE,HL                   ; DE now contains four times the local count.
         POP HL                     ; Restore the four-times-global extent.
         ADD HL,DE
+        PUSH HL                    ; Keep the slot extent while sizing descriptors.
+        LD A,(SCPCOUNT)            ; Every procedure uses one fixed metadata record.
+        LD L,A                     ; Widen the descriptor count to a word.
+        LD H,0
+        LD D,H                     ; Keep the original count for the final add.
+        LD E,L
+        ADD HL,HL                  ; Two times the descriptor count.
+        ADD HL,HL                  ; Four times the descriptor count.
+        PUSH HL                    ; Keep four times the count.
+        ADD HL,HL                  ; Eight times the descriptor count.
+        PUSH HL                    ; Keep eight times the count.
+        ADD HL,HL                  ; Sixteen times the descriptor count.
+        ADD HL,HL                  ; Thirty-two times the descriptor count.
+        POP DE                     ; Recover eight times the count.
+        ADD HL,DE                  ; Forty times the descriptor count.
+        POP DE                     ; Recover four times the count.
+        ADD HL,DE                  ; Complete forty-four bytes per descriptor.
+        POP DE                     ; Recover the global and local slot extent.
+        ADD HL,DE                  ; Add descriptor records to the final image.
         LD DE,32                   ; Leave room for the serialized tail and checksum.
         ADD HL,DE
         POP DE                     ; DE is the generated-code end address.
@@ -35,19 +54,57 @@ SCFIN:
         LD HL,(SCPC)               ; Restore the generated-code cursor for slot data.
         LD (SCGBASE),HL           ; Globals follow the generated instruction bytes.
         LD BC,(SCGCOUNT)          ; One four-byte record is reserved per global.
+        XOR A                     ; Global slot zero is the first primitive mark.
+        LD (SCGIDX),A
+        JP SCGDATA                 ; Skip the helper body before entering the loop.
+
+; Write one global value record, seeding predefined names with their procedure
+; value while leaving ordinary names unbound until a definition stores them.
+SCGINIT:
+        PUSH HL                   ; Keep the slot cursor while reading its mark.
+        LD A,(SCGIDX)             ; The compiler mark table is byte indexed.
+        LD L,A
+        LD H,0
+        LD DE,SCGPRIM
+        ADD HL,DE
+        LD A,(HL)                 ; Zero denotes an ordinary uninitialized name.
+        POP HL                    ; Resume at the four-byte output record.
+        OR A
+        JR Z,SCGZERO              ; Ordinary names receive four zero bytes.
+        DEC A                     ; Convert kind one..four to payload low $20..$23.
+        ADD A,20H
+        LD (HL),A                 ; Primitive procedure payload low byte.
+        INC HL
+        LD A,0FEH                 ; Primitive payloads use the reserved high byte.
+        LD (HL),A
+        INC HL
+        XOR A                     ; Tag zero identifies a primitive procedure value.
+        LD (HL),A
+        INC HL
+        LD A,1                     ; Predefined values are initialized at startup.
+        LD (HL),A
+        INC HL
+        RET
+SCGZERO:
+        XOR A                     ; Ordinary names begin with no payload or tag.
+        LD (HL),A
+        INC HL
+        LD (HL),A
+        INC HL
+        LD (HL),A
+        INC HL
+        LD (HL),A                 ; The zero flag makes an unresolved load fail.
+        INC HL
+        RET
+
 SCGDATA:
         LD A,B                     ; Test the high count byte first.
         OR C                       ; A zero pair means all global slots are present.
         JR Z,SCLDATA               ; Continue with local storage after the globals.
-        XOR A                      ; Slot payload and initialized flag start at zero.
-        LD (HL),A                  ; Store the payload low byte.
-        INC HL                     ; Advance to the payload high byte.
-        LD (HL),A                  ; Store the payload high byte.
-        INC HL                     ; Advance to the stored value tag.
-        LD (HL),A                  ; A zero tag is harmless while the slot is unbound.
-        INC HL                     ; Advance to the initialized flag.
-        LD (HL),A                  ; A zero flag makes an unresolved load fail.
-        INC HL                     ; Advance to the following global slot.
+        CALL SCGINIT               ; Materialize an ordinary or predefined value.
+        LD A,(SCGIDX)              ; Advance the primitive-mark cursor.
+        INC A
+        LD (SCGIDX),A
         DEC BC                     ; Account for the slot just appended.
         JR SCGDATA                 ; Continue until the global count is exhausted.
 SCLDATA:
@@ -72,6 +129,8 @@ SCLOOP:
         JR SCLOOP                  ; Continue until the local extent is filled.
 SCDATAOK:
         LD (SCPC),HL               ; Publish the final staged image cursor.
+        CALL SCPDESC               ; Append absolute procedure descriptors.
+        RET C                      ; Preserve the staged-image capacity guard.
         LD DE,SCIMG                ; The payload begins at the staged image base.
         OR A                       ; Clear carry before measuring the image.
         SBC HL,DE                  ; HL becomes runtime plus code plus slot data.
@@ -119,7 +178,9 @@ SCFIXLP:
         INC HL                     ; Advance to the following fixup record.
         PUSH HL                    ; Keep the table cursor across address patching.
         LD (SCFPTR),DE             ; Preserve the staged patch destination.
-        LD A,(SCFKIND)             ; Select the matching staged data region.
+        LD A,(SCFKIND)             ; Select a global, local or procedure target.
+        CP 2                       ; Kind two names the serialized procedure table.
+        JR Z,SCFPROC               ; Procedure fixups point at descriptor records.
         OR A                       ; Zero selects the global base.
         JR Z,SCFGLOB               ; A local fixup uses the local base instead.
         LD DE,(SCLBASE)            ; Select the local data region.
@@ -129,6 +190,28 @@ SCFGLOB:
 SCFADDR:
         LD A,(SCFSLOT)             ; The slot number is a three-byte index.
         CALL SCADDR                ; Return the absolute address of this slot.
+        JR SCFPATCH                ; Share the placeholder write with descriptors.
+SCFPROC:
+        LD A,(SCFSLOT)             ; The fixup stores a descriptor table index.
+        LD L,A                     ; Widen the index before multiplying by forty-four.
+        LD H,0
+        LD D,H                     ; Keep the original index for the final add.
+        LD E,L
+        ADD HL,HL                  ; Two bytes per descriptor index.
+        ADD HL,HL                  ; Four bytes per descriptor index.
+        PUSH HL                    ; Keep four bytes per descriptor index.
+        ADD HL,HL                  ; Eight bytes per descriptor index.
+        PUSH HL                    ; Keep eight bytes per descriptor index.
+        ADD HL,HL                  ; Sixteen bytes per descriptor index.
+        ADD HL,HL                  ; Thirty-two bytes per descriptor index.
+        POP DE                     ; Recover eight bytes per descriptor index.
+        ADD HL,DE                  ; Forty bytes per descriptor index.
+        POP DE                     ; Recover four bytes per descriptor index.
+        ADD HL,DE                  ; Complete the forty-four-byte offset.
+        LD DE,(SCPBASE)            ; Add the staged descriptor table base.
+        ADD HL,DE                  ; Locate the descriptor's staged record.
+        CALL SCABS                 ; Convert its staged address to COM space.
+SCFPATCH:
         LD (SCTARG),HL             ; Retain the absolute target for the write.
         LD HL,(SCFPTR)             ; Recover the staged placeholder address.
         LD DE,(SCTARG)             ; Recover the absolute slot address.
@@ -145,6 +228,102 @@ SCFADDR:
         JR NZ,SCFIXLP              ; Continue until every placeholder is resolved.
         RET                        ; Carry remains clear after the final patch.
 
+; Append the procedure descriptor table after global and local storage.
+SCPDESC:
+        LD HL,(SCPC)               ; The table begins at the current image cursor.
+        LD (SCPBASE),HL            ; Fixups use this staged base after serialization.
+        LD A,(SCPCOUNT)            ; No procedures leave the cursor unchanged.
+        LD (SCPDREM),A             ; Keep the remaining descriptor count.
+        OR A
+        RET Z
+        XOR A                      ; Descriptor zero is the first record.
+        LD (SCPDIDX),A             ; The index is also stored in every fixup.
+SCPDLOOP:
+        LD A,(SCPDIDX)             ; Select the metadata record being published.
+        LD (SCTMPPR),A             ; SCPREC uses the current descriptor index.
+        CALL SCPREC                ; Locate its compiler-side metadata record.
+        LD (SCPTR),HL              ; Preserve the metadata cursor across writes.
+        LD HL,(SCPTR)              ; Read the generated body address.
+        LD E,(HL)
+        INC HL
+        LD D,(HL)
+        EX DE,HL                   ; SCPDWRD takes the body address in HL.
+        CALL SCPDWRD               ; Write the two-byte body address.
+        RET C
+        LD HL,(SCPTR)              ; Read the fixed arity and slot count.
+        INC HL
+        INC HL
+        LD A,(HL)                  ; Descriptor byte two is its formal count.
+        CALL SCBYTE                ; Use the normal guarded image writer.
+        RET C
+        LD A,(SCLOCMAX)            ; Every environment has the bounded slot extent.
+        CALL SCBYTE
+        RET C
+        LD HL,(SCPTR)
+        INC HL
+        INC HL
+        INC HL
+        INC HL                    ; HL now points at the first formal slot byte.
+        LD (SCPTR),HL              ; Keep it while each formal index is written.
+        LD A,4
+        LD (SCPDSLT),A             ; Every descriptor has four fixed formal fields.
+SCPDSLP:
+        LD HL,(SCPTR)              ; Read one compiler-local slot index.
+        LD A,(HL)                  ; The low byte is the dynamic slot number.
+        INC HL
+        INC HL                     ; Skip the reserved high byte.
+        LD (SCPTR),HL
+        CALL SCBYTE                ; Write the formal slot index low byte.
+        RET C
+        XOR A                      ; The high byte keeps the descriptor format fixed.
+        CALL SCBYTE
+        RET C
+        LD A,(SCPDSLT)            ; Four fields are emitted for every record.
+        DEC A
+        LD (SCPDSLT),A
+        JR NZ,SCPDSLP
+        LD HL,(SCPTR)              ; Owned-slot mask starts after the formal fields.
+        LD (SCPTR),HL
+        LD B,SCMASKB
+SCPMLOOP:
+        LD HL,(SCPTR)
+        LD A,(HL)
+        INC HL
+        LD (SCPTR),HL
+        CALL SCBYTE
+        RET C
+        DJNZ SCPMLOOP
+        LD HL,(SCPTR)              ; The owner loop has reached the capture mask.
+        LD (SCPTR),HL
+        LD B,SCMASKB
+SCPNLOOP:
+        LD HL,(SCPTR)
+        LD A,(HL)
+        INC HL
+        LD (SCPTR),HL
+        CALL SCBYTE
+        RET C
+        DJNZ SCPNLOOP
+        LD A,(SCPDIDX)              ; Advance to the following descriptor.
+        INC A
+        LD (SCPDIDX),A
+        LD A,(SCPDREM)
+        DEC A
+        LD (SCPDREM),A
+        JP NZ,SCPDLOOP
+        XOR A
+        RET
+
+; Write an absolute descriptor word through the guarded image emitter.
+SCPDWRD:
+        LD (SCTARG),HL
+        LD A,L
+        CALL SCBYTE
+        RET C
+        LD HL,(SCTARG)
+        LD A,H
+        JP SCBYTE
+
 ; Convert a staged four-byte-slot address into its absolute COM address.
 SCADDR:
         LD L,A                     ; Widen the slot index to a word.
@@ -156,8 +335,8 @@ SCADDR:
 
 ; Serialize the fixed NOBJ prefix, dynamic image record, tail and CRC.
 SCBUILD:
-        LD HL,SCSTAGE              ; The object always begins at its staging base.
-        LD DE,SCHEAD                ; Copy the measured 70-byte NOBJ prefix.
+        LD HL,SCHEAD                ; The fixed prefix is the copy source.
+        LD DE,SCSTAGE              ; The object always begins at its staging base.
         LD BC,70                   ; The first image record header begins at offset 70.
         LDIR                       ; Materialize the prefix in the staged object.
         LD HL,(SCIMGL)              ; Runtime, generated code and data length.
@@ -169,15 +348,16 @@ SCBUILD:
         LD (SCSTAGE+71),A           ; The object format is little endian.
         LD A,H                     ; Store the record length high byte.
         LD (SCSTAGE+72),A           ; Complete the IMAGE record header.
-        LD DE,SCIMAGE               ; The six-byte descriptor follows the header.
-        LD HL,SCSTAGE+73            ; Point at the descriptor destination.
+        LD HL,SCIMAGE               ; The six-byte descriptor is the copy source.
+        LD DE,SCSTAGE+73            ; Point at the descriptor destination.
         LD BC,6                     ; The descriptor is six bytes long.
         LDIR                       ; Copy the descriptor before the image payload.
         LD HL,SCIMG                 ; The payload already contains the runtime image.
         LD DE,(SCIMGL)              ; Skip the complete runtime and generated image.
         ADD HL,DE                  ; HL now points at the first tail record.
         LD (SCTAILP),HL             ; Preserve the tail address for CRC and length.
-        LD DE,SCTAIL                ; Copy the fixed symbol/relocation/commit tail.
+        EX DE,HL                   ; DE is the dynamic tail destination.
+        LD HL,SCTAIL               ; The fixed tail is the copy source.
         LD BC,30                   ; The final two bytes are reserved for the CRC.
         LDIR                       ; Materialize every tail byte before checksum work.
         LD HL,(SCTAILP)             ; Reconstruct the end of the CRC-covered prefix.
@@ -421,6 +601,7 @@ SCTAIL:
 ; Compiler publication state and private CP/M FCBs.
 SCGBASE:  DW 0                   ; Staged address of global slot zero.
 SCLBASE:  DW 0                   ; Staged address of local slot zero.
+SCPBASE:  DW 0                   ; Staged address of procedure descriptor zero.
 SCIMGL:   DW 0                   ; Runtime image payload length.
 SCOBJL:   DW 0                   ; Complete serialized NOBJ length.
 SCCRCL:   DW 0                   ; CRC input length excluding checksum bytes.
@@ -431,5 +612,8 @@ SCPTR:    DW 0                   ; Stream or checksum input cursor.
 SCLEFT:   DW 0                   ; Remaining stream or checksum byte count.
 SCBITS:   DB 0                   ; CRC inner-loop bit count.
 SCFIXC:   DW 0                   ; Remaining slot-fixup record count.
+SCPDREM:  DB 0                   ; Descriptors still waiting for serialization.
+SCPDIDX:  DB 0                   ; Descriptor index being serialized.
+SCPDSLT: DB 0                  ; Formal slot fields left in one descriptor.
 SCFCB:    DS 36                  ; Working stage or final output FCB.
 SCF2:     DS 36                  ; Destination FCB used by CTRENAME.

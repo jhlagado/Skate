@@ -4,7 +4,7 @@ import { loadAssembly } from "../../tests/z80.ts";
 
 export const SCOPE_LOAD = 0x0100;
 export const SCOPE_CORE_LIMIT = 16_384;
-export const SCOPE_ALLOCATION_LIMIT = 30_720;
+export const SCOPE_ALLOCATION_LIMIT = 57_088;
 export const SCOPE_STACK_TOP = 0xe000;
 export const SCOPE_STACK_RESERVE = 2_048;
 

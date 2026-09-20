@@ -1,3 +1,0 @@
-ORG 100H
-CALL 0
-RET

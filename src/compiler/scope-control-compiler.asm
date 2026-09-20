@@ -2,6 +2,7 @@
 %INCLUDE "origin.asm"
 %INCLUDE "scope-control-runtime-values.inc"
 %INCLUDE "scope-control-command.asm"
+%INCLUDE "procedure-forms.asm"
 %INCLUDE "scope-control-bindings.asm"
 %INCLUDE "scope-control-branches.asm"
 %INCLUDE "scope-control-emitter.asm"

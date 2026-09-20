@@ -1,5 +1,0 @@
-; Higher-order closure: the returned procedure keeps x after make-adder exits.
-(define (make-adder x)
-  (lambda (y) (+ x y)))
-(define add7 (make-adder 7))
-(add7 5)

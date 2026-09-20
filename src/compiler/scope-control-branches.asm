@@ -5,9 +5,14 @@ SCEXPECT:
         CALL RNEXT                 ; The enclosing form must close now.
         RET C                      ; Preserve a source read failure.
         CP 2                       ; Event kind two is a closing parenthesis.
-        JP NZ,SCSYN                ; Reject a missing or overlong form.
+        JP NZ,SCEXPSYN              ; Reject a missing or overlong form.
         XOR A                      ; Carry clear reports a complete form.
         RET                        ; Return to the caller with its value intact.
+
+SCEXPSYN:
+        LD HL,SCEXPTXT
+        LD (SCERRPTR),HL
+        JP SCSYN
 
 ; Compare the current lexer spelling with a length-prefixed static name.
 SCMATCH:
@@ -172,4 +177,3 @@ SCIFPOP:
         LD (SCIFTOP),A             ; Publish the enclosing form's depth.
         XOR A                      ; Return carry clear to the expression parser.
         RET                        ; The selected branch value remains in A/HL.
-

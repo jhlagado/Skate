@@ -72,6 +72,20 @@ SCBOOL:
         XOR A                     ; Booleans use tag zero.
         JP SCBYTE                 ; Append the tag and return.
 
+; Emit the canonical unspecified value (tag zero, payload FE04H).
+SCUNS:
+        LD A,21H                  ; Load the reserved immediate payload.
+        CALL SCBYTE               ; Append the LD HL,nn opcode.
+        RET C                     ; Preserve a staged-output capacity failure.
+        LD HL,0FE04H              ; FE04H is the language's UNSPECIFIED value.
+        CALL SCWORD                ; Append the payload in little-endian order.
+        RET C                     ; Preserve a staged-output capacity failure.
+        LD A,3EH                  ; Load the tag register with zero.
+        CALL SCBYTE               ; Append the LD A,n opcode.
+        RET C                     ; Preserve a staged-output capacity failure.
+        XOR A                      ; Tag zero identifies immediate values.
+        JP SCBYTE                  ; Append the tag and return.
+
 ; Emit PUSH AF followed by PUSH HL for the value currently in registers.
 SCPUSH:
         LD A,0F5H                 ; PUSH AF saves the value tag and flags.
@@ -86,6 +100,20 @@ SCLOAD:
         LD (SCFKIND),A            ; Keep the slot kind with the pending record.
         LD A,L                    ; Copy the slot number into the pending record.
         LD (SCFSLOT),A            ; A single byte addresses every current slot.
+        LD A,(SCFKIND)
+        CP 1
+        JR NZ,SCLDFIX               ; Globals and top-level lets retain static slots.
+        CALL SCLOCALQ              ; Package-owned locals remain static.
+        JR Z,SCLDFIX
+        LD A,3EH                   ; LD A,slot supplies the dynamic slot index.
+        CALL SCBYTE
+        RET C
+        LD A,(SCFSLOT)
+        CALL SCBYTE
+        RET C
+        LD HL,SRTLOADI             ; Load through the active environment map.
+        JP SCCALL
+SCLDFIX:
         LD A,21H                  ; LD HL,nn will receive the slot address later.
         CALL SCBYTE               ; Append the load opcode.
         LD HL,(SCPC)              ; The next two bytes are the patch location.
@@ -105,6 +133,26 @@ SCSTORE:
         LD (SCFKIND),A            ; Keep the slot kind with the pending record.
         LD A,L                    ; Copy the slot number into the pending record.
         LD (SCFSLOT),A            ; A single byte addresses every current slot.
+        LD A,(SCFKIND)             ; Procedure locals use the active environment.
+        CP 1
+        JR NZ,SCSTFIX               ; Globals and top-level lets retain static slots.
+        LD A,(SCCURPR)
+        CALL SCLOCALQ              ; Package-owned locals remain static.
+        JR Z,SCSTFIX
+        LD A,06H                   ; LD B,slot supplies the dynamic slot index.
+        CALL SCBYTE
+        RET C
+        LD A,(SCFSLOT)
+        CALL SCBYTE
+        RET C
+        LD HL,SRTSTORI             ; Store through the active environment map.
+        LD A,(SCMUT)           ; Mutation selects the checked local helper.
+        OR A
+        JR Z,SCSTLOC              ; Definitions use the initializing helper.
+        LD HL,SRTSETI
+SCSTLOC:
+        JP SCCALL
+SCSTFIX:
         LD A,11H                  ; LD DE,nn will receive the slot address later.
         CALL SCBYTE               ; Append the store-address opcode.
         LD HL,(SCPC)              ; The next two bytes are the patch location.
@@ -115,8 +163,38 @@ SCSTORE:
         RET C                     ; Preserve a staged-output capacity failure.
         CALL SCBYTE               ; Append the placeholder high byte.
         RET C                     ; Preserve a staged-output capacity failure.
-        LD HL,SRTSTA        ; Generated code calls the runtime slot store.
+        LD HL,SRTSTA                ; Generated code calls the runtime slot store.
+        LD A,(SCMUT)            ; Mutation selects the checked static helper.
+        OR A
+        JR Z,SCSTSTAT              ; Definitions initialize the destination.
+        LD HL,SRTSETS
+SCSTSTAT:
         JP SCCALL                 ; Append the call and return.
+
+; Save the value of a predefined global procedure before its arguments run.
+; The side stack preserves Scheme's operator-first evaluation order without
+; placing a callee word on the native stack for every recursive call.
+SCGMARK:
+        LD A,21H                  ; LD HL,nn receives the global cell address.
+        CALL SCBYTE
+        RET C
+        LD HL,(SCPC)              ; The following word is fixed after layout.
+        LD A,0                    ; Fixup kind zero selects global storage.
+        LD (SCFKIND),A
+        LD A,(SCAPGSL)            ; The marker carries the selected global slot.
+        LD (SCFSLOT),A
+        CALL SCFIX
+        RET C
+        XOR A                     ; Leave both address bytes as placeholders.
+        CALL SCBYTE
+        RET C
+        CALL SCBYTE
+        RET C
+        LD HL,SRTLDA              ; Read the value while the operator is current.
+        CALL SCCALL
+        RET C
+        LD HL,SRTOPUSH            ; Preserve the four-byte value across arguments.
+        JP SCCALL
 
 ; Record a two-byte staged address, slot kind and slot number.
 SCFIX:
@@ -150,6 +228,90 @@ SCFIX:
 SCFIXERR:
         SCF                       ; The parser reports a bounded fixup failure.
         RET                       ; No staged output is published on this path.
+
+; Record the staged operand word of a tail-call wrapper for later rewriting.
+SCTSAVE:
+        LD (SCTPTR),HL             ; Preserve the operand address during indexing.
+        LD A,(SCTTOP)              ; Each record occupies one staged address word.
+        CP SCTMAX                  ; Refuse a body that exceeds the patch bound.
+        JP NC,SCCAP                ; A partial tail record cannot be emitted safely.
+        LD L,A                     ; Widen the record index before doubling it.
+        LD H,0
+        ADD HL,HL
+        LD DE,SCTAILPT             ; Locate the next free tail-candidate record.
+        ADD HL,DE
+        LD DE,(SCTPTR)             ; Restore the staged operand address.
+        LD (HL),E                  ; Store its low byte.
+        INC HL
+        LD (HL),D                  ; Store its high byte.
+        LD L,A                     ; Reuse the candidate index for its side flag.
+        LD H,0
+        LD DE,SCTAILK
+        ADD HL,DE
+        LD A,(SCAPMODE)            ; Mode two means the operator uses the side stack.
+        CP 2
+        JR NZ,SCTSAVEG
+        LD A,1
+SCTSAVEG:
+        LD (HL),A                  ; Preserve the dispatch path for later rewriting.
+        LD A,(SCTTOP)              ; Advance the candidate count after the write.
+        INC A
+        LD (SCTTOP),A
+        XOR A
+        RET
+
+; Rewrite the current body's non-final tail candidates as ordinary calls.
+SCTFIX:
+        LD A,(SCTMARK)             ; The current expression owns records from here.
+        LD B,A                     ; B walks the bounded patch-record range.
+SCTFIXLP:
+        LD A,(SCTTOP)              ; Stop when every candidate in this expression is fixed.
+        CP B
+        JR Z,SCTFIXDN
+        LD L,B                     ; Address the candidate word by its record index.
+        LD H,0
+        ADD HL,HL
+        LD DE,SCTAILPT
+        ADD HL,DE
+        LD E,(HL)                  ; Recover the staged operand address.
+        INC HL
+        LD D,(HL)
+        EX DE,HL                   ; HL now names the generated CALL operand.
+        PUSH HL                    ; Preserve the patch address while reading its flag.
+        LD L,B                     ; The flag table uses one byte per candidate.
+        LD H,0
+        LD DE,SCTAILK
+        ADD HL,DE
+        LD A,(HL)                  ; A nonzero flag selects the side-stack entry.
+        POP HL                     ; Restore the staged operand address.
+        OR A
+        JR Z,SCTFIXG
+        LD DE,SRTOPINV             ; Keep operator-first evaluation for this call.
+        JR SCTFIXW
+SCTFIXG:
+        LD DE,SRTINVOK             ; Ordinary calls preserve the continuation.
+SCTFIXW:
+        LD (HL),E
+        INC HL
+        LD (HL),D
+        INC B                      ; Advance to the next tail candidate.
+        JR SCTFIXLP
+SCTFIXDN:
+        LD A,B                     ; Discard the records just rewritten.
+        LD (SCTTOP),A
+        XOR A
+        RET
+
+; Return Z when the selected local slot belongs to package-level storage.
+SCLOCALQ:
+        LD A,(SCFSLOT)             ; Address the owner byte for the selected slot.
+        LD L,A
+        LD H,0
+        LD DE,SCLOCOWN
+        ADD HL,DE
+        LD A,(HL)
+        CP 0FFH
+        RET
 
 ; Emit a conditional absolute jump and return its patch address in HL.  The
 ; caller patches the address when the matching branch target is known.

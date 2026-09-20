@@ -1,5 +1,0 @@
-; A rational-number pair keeps its denominator directly in an arbitrary CDR.
-(define (make-rational numerator denominator)
-  (cons numerator denominator))
-(define half (make-rational 1 2))
-(+ (car half) (cdr half))

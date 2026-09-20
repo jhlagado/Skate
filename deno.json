@@ -1,16 +1,11 @@
 {
   "tasks": {
-    "compile": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services --allow-write=build tools/compile.ts",
-    "measure:c2": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services tools/compiler-checks/scope-control-budget.ts",
-    "test:c2": "deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../debug80-runtime tests/compiler-checks/scope-control-budget_test.ts",
-    "test:cpm:c2:capacity": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/scope-control-capacity-proof.mjs",
-    "test:cpm:c2:core": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/scope-control-cpm-proof.mjs",
-    "test:cpm:c2": "deno task test:cpm:c2:core && deno task test:cpm:c2:capacity",
-    "check:c2": "deno fmt --check tools/compiler-checks tests/compiler-checks && deno lint tools/compiler-checks tests/compiler-checks && deno check --config deno.runtime.json tools/compiler-checks/scope-control-budget.ts tests/compiler-checks/scope-control-budget_test.ts && deno task test:c2",
-    "test": "deno task check:c2 && deno task test:cpm:c2",
+    "check": "deno fmt --check tools/compiler-checks tests/compiler-checks && deno lint tools/compiler-checks tests/compiler-checks && deno check --config deno.runtime.json tools/compiler-checks/scope-control-budget.ts tests/compiler-checks/scope-control-budget_test.ts && deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../debug80-runtime tests/compiler-checks/scope-control-budget_test.ts",
+    "test:cpm": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/procedure-cpm-proof.mjs",
+    "measure": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services tools/compiler-checks/scope-control-budget.ts",
     "fmt": "deno fmt",
     "lint": "deno lint"
   },
   "fmt": { "exclude": ["**/*.md"] },
-  "exclude": ["work", "build"]
+  "exclude": ["build"]
 }

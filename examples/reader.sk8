@@ -1,4 +1,0 @@
-; M4 reader input: syntax and values, before code generation.
-(define greeting "Skate\n")
-(define sample '(2049 2049.0 -0.0 #t #\xFF . "tail"))
-(quote (a . (b . ())))
