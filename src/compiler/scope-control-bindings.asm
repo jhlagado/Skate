@@ -597,6 +597,51 @@ SCPLOOK:
         LD DE,SCNNWL
         CALL SCPMATCH
         JP Z,SCPNWL
+        LD DE,SCNQUOT
+        CALL SCPMATCH
+        JP Z,SCPQUOT
+        LD DE,SCNREMA
+        CALL SCPMATCH
+        JP Z,SCPREMA
+        LD DE,SCNEQNUM
+        CALL SCPMATCH
+        JP Z,SCPEQNUM
+        LD DE,SCNLT
+        CALL SCPMATCH
+        JP Z,SCPLT
+        LD DE,SCNGT
+        CALL SCPMATCH
+        JP Z,SCPGT
+        LD DE,SCNLE
+        CALL SCPMATCH
+        JP Z,SCPLE
+        LD DE,SCNGE
+        CALL SCPMATCH
+        JP Z,SCPGE
+        LD DE,SCNNOT
+        CALL SCPMATCH
+        JP Z,SCPNOT
+        LD DE,SCNNUM
+        CALL SCPMATCH
+        JP Z,SCPNUM
+        LD DE,SCNBOOL
+        CALL SCPMATCH
+        JP Z,SCPBOOL
+        LD DE,SCNSYM
+        CALL SCPMATCH
+        JP Z,SCPSYM
+        LD DE,SCNPRO
+        CALL SCPMATCH
+        JP Z,SCPPRO
+        LD DE,SCNSTR
+        CALL SCPMATCH
+        JP Z,SCPSTR
+        LD DE,SCNCHAR
+        CALL SCPMATCH
+        JP Z,SCPCHAR
+        LD DE,SCNEOFQ
+        CALL SCPMATCH
+        JP Z,SCPEOFQ
         JP SCPNONE
 SCPZERO:
         LD A,4                     ; Kind four identifies zero? at runtime.
@@ -639,6 +684,51 @@ SCPDISP:
         RET
 SCPNWL:
         LD A,14                    ; Kind fourteen identifies newline.
+        RET
+SCPQUOT:
+        LD A,15                    ; Kind fifteen identifies quotient.
+        RET
+SCPREMA:
+        LD A,16                    ; Kind sixteen identifies remainder.
+        RET
+SCPEQNUM:
+        LD A,17                    ; Kind seventeen identifies numeric equality.
+        RET
+SCPLT:
+        LD A,18                    ; Kind eighteen identifies numeric less-than.
+        RET
+SCPGT:
+        LD A,19                    ; Kind nineteen identifies numeric greater-than.
+        RET
+SCPLE:
+        LD A,20                    ; Kind twenty identifies numeric less-or-equal.
+        RET
+SCPGE:
+        LD A,21                    ; Kind twenty-one identifies numeric greater-or-equal.
+        RET
+SCPNOT:
+        LD A,22                    ; Kind twenty-two identifies not.
+        RET
+SCPNUM:
+        LD A,23                    ; Kind twenty-three identifies number?.
+        RET
+SCPBOOL:
+        LD A,24                    ; Kind twenty-four identifies boolean?.
+        RET
+SCPSYM:
+        LD A,25                    ; Kind twenty-five identifies symbol?.
+        RET
+SCPPRO:
+        LD A,26                    ; Kind twenty-six identifies procedure?.
+        RET
+SCPSTR:
+        LD A,27                    ; Kind twenty-seven identifies string?.
+        RET
+SCPCHAR:
+        LD A,28                    ; Kind twenty-eight identifies char?.
+        RET
+SCPEOFQ:
+        LD A,29                    ; Kind twenty-nine identifies eof-object?.
         RET
 SCPNONE:
         XOR A                      ; Ordinary names receive no primitive mark.

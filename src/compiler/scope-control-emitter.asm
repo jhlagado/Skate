@@ -101,6 +101,22 @@ SCBOOL:
         XOR A                     ; Booleans use tag zero.
         JP SCBYTE                 ; Append the tag and return.
 
+; Emit a byte character.  Characters share the scalar tag with booleans, but
+; keep the FFxx payload so predicates can distinguish them from numbers.
+SCCHAR:
+        LD (SCVTMP),HL            ; Preserve the complete FFxx payload.
+        LD A,21H                  ; Load the character payload into HL.
+        CALL SCBYTE               ; Append the payload-load opcode.
+        RET C                     ; Preserve a staged-output capacity failure.
+        LD HL,(SCVTMP)            ; Recover the character payload.
+        CALL SCWORD               ; Append both payload bytes unchanged.
+        RET C                     ; Preserve a staged-output capacity failure.
+        LD A,3EH                  ; Load the scalar tag into A.
+        CALL SCBYTE               ; Append the tag-load opcode.
+        RET C                     ; Preserve a staged-output capacity failure.
+        XOR A                     ; Characters use the established scalar tag.
+        JP SCBYTE                 ; Append the tag and return.
+
 ; Emit the canonical unspecified value (tag zero, payload FE04H).
 SCUNS:
         LD A,21H                  ; Load the reserved immediate payload.

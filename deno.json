@@ -1,9 +1,10 @@
 {
   "tasks": {
     "check": "deno fmt --check tools/compiler-checks tests/compiler-checks && deno lint tools/compiler-checks tests/compiler-checks && deno check --config deno.runtime.json tools/compiler-checks/scope-control-budget.ts tests/compiler-checks/scope-control-budget_test.ts && deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../debug80-runtime tests/compiler-checks/scope-control-budget_test.ts",
-    "test:cpm": "deno task test:cpm:procedures && deno task test:cpm:data",
+    "test:cpm": "deno task test:cpm:procedures && deno task test:cpm:data && deno task test:cpm:integers",
     "test:cpm:procedures": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/procedure-cpm-proof.mjs",
     "test:cpm:data": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/procedure-cpm-proof.mjs --data",
+    "test:cpm:integers": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/procedure-cpm-proof.mjs --integers",
     "test:cpm:release": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/release-cpm-proof.mjs",
     "measure": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services tools/compiler-checks/scope-control-budget.ts",
     "fmt": "deno fmt",

@@ -207,7 +207,12 @@ SCEXPR:
 SCNUM:
         LD A,(RTAG)                ; Reader tag zero is the boolean scalar form.
         OR A                       ; A zero tag selects the boolean emitter.
-        JR Z,SCBOOLV               ; Preserve #f/#t as a scalar runtime value.
+        JR NZ,SCNUMTAG              ; Exact integers carry their own logical tag.
+        LD A,H                      ; Character scalars retain FFxx in their payload.
+        CP 0FFH                     ; The lexer uses this reserved byte-character range.
+        JP Z,SCCHAR                 ; Preserve the complete character value.
+        JR SCBOOLV                  ; Ordinary tag-zero values here are booleans.
+SCNUMTAG:
         CP 3                       ; Tag 3 is the exact signed-integer form.
         JP NZ,SCUNSUP              ; Other scalar tags are outside this increment.
         JP SCLIT                   ; Emit the integer payload and its tag.
@@ -798,3 +803,18 @@ SCNEQ:      DB 3,"eq?"
 SCNWRIT:    DB 5,"write"
 SCNDISP:    DB 7,"display"
 SCNNWL:     DB 7,"newline"
+SCNQUOT:    DB 8,"quotient"
+SCNREMA:    DB 9,"remainder"
+SCNEQNUM:   DB 1,"="
+SCNLT:      DB 1,"<"
+SCNGT:      DB 1,">"
+SCNLE:      DB 2,"<="
+SCNGE:      DB 2,">="
+SCNNOT:     DB 3,"not"
+SCNNUM:     DB 7,"number?"
+SCNBOOL:    DB 8,"boolean?"
+SCNSYM:     DB 7,"symbol?"
+SCNPRO:     DB 10,"procedure?"
+SCNSTR:     DB 7,"string?"
+SCNCHAR:    DB 5,"char?"
+SCNEOFQ:    DB 11,"eof-object?"

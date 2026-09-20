@@ -260,7 +260,82 @@ const cases = [
     "8",
   ],
 ];
-const selectedCases = Deno.args.includes("--data") ? dataCases : cases;
+const integerCases = [
+  [
+    "INTARITH.SK8",
+    `(begin
+      (write (+)) (newline)
+      (write (*)) (newline)
+      (write (- 5)) (newline)
+      (write (+ 1 2 3 4)) (newline)
+      (write (* 2 3 4)) (newline)
+      (write (- 10 3 2)) (newline)
+      (write (quotient 7 3)) (newline)
+      (write (quotient -7 3)) (newline)
+      (write (remainder 7 3)) (newline)
+      (write (remainder -7 3)) (newline)
+      (write (remainder 7 -3)) (newline)
+      (write (remainder -7 -3)) (newline))`,
+    "0\r\n1\r\n-5\r\n10\r\n24\r\n5\r\n2\r\n-2\r\n1\r\n-1\r\n1\r\n-1",
+  ],
+  [
+    "INTCMP.SK8",
+    `(begin
+      (write (= 4 4 4)) (newline)
+      (write (= 4 5)) (newline)
+      (write (< 1 2 3)) (newline)
+      (write (< 1 3 2)) (newline)
+      (write (> 3 2 1)) (newline)
+      (write (> 3 4)) (newline)
+      (write (<= 2 2 3)) (newline)
+      (write (<= 3 2)) (newline)
+      (write (>= 3 3 2)) (newline)
+      (write (>= 2 3)) (newline)
+      (write (< -2 -1)) (newline)
+      (write (> -1 -2)) (newline))`,
+    "#t\r\n#f\r\n#t\r\n#f\r\n#t\r\n#f\r\n#t\r\n#f\r\n#t\r\n#f\r\n#t\r\n#t",
+  ],
+  [
+    "INTPRED.SK8",
+    `(begin
+      (write (not #f)) (newline)
+      (write (not #t)) (newline)
+      (write (not 0)) (newline)
+      (write (number? 1)) (newline)
+      (write (number? #t)) (newline)
+      (write (number? #\\A)) (newline)
+      (write (boolean? #t)) (newline)
+      (write (boolean? 1)) (newline)
+      (write (symbol? (quote foo))) (newline)
+      (write (symbol? "foo")) (newline)
+      (write (string? "foo")) (newline)
+      (write (string? (quote foo))) (newline)
+      (write (procedure? (lambda (x) x))) (newline)
+      (write (procedure? +)) (newline)
+      (write (procedure? 1)) (newline)
+      (write (char? #\\A)) (newline)
+      (write (char? 1)) (newline)
+      (write (eof-object? 1)) (newline))`,
+    "#t\r\n#f\r\n#f\r\n#t\r\n#f\r\n#f\r\n#t\r\n#f\r\n#t\r\n#f\r\n#t\r\n#f\r\n#t\r\n#t\r\n#f\r\n#t\r\n#f\r\n#f",
+  ],
+];
+const integerRuntimeErrorCases = [
+  ["INTDIV0.SK8", "(quotient 7 0)", "RUNTIME ERROR\r\n"],
+  ["INTREM0.SK8", "(remainder 7 0)", "RUNTIME ERROR\r\n"],
+  ["INTTYPE.SK8", "(+ 1 #t)", "RUNTIME ERROR\r\n"],
+  ["CMPBAD.SK8", "(< 1 #t)", "RUNTIME ERROR\r\n"],
+  ["INTOVF.SK8", "(+ 32767 1)", "RUNTIME ERROR\r\n"],
+  ["INTQOVF.SK8", "(quotient -32768 -1)", "RUNTIME ERROR\r\n"],
+  ["NOTARITY.SK8", "(not #t #f)", "RUNTIME ERROR\r\n"],
+  ["MINUS0.SK8", "(-)", "RUNTIME ERROR\r\n"],
+  ["CMPARITY.SK8", "(< 1)", "RUNTIME ERROR\r\n"],
+];
+const integerMode = Deno.args.includes("--integers");
+const selectedCases = integerMode
+  ? integerCases
+  : Deno.args.includes("--data")
+  ? dataCases
+  : cases;
 
 // Programs historically relied on the compiler printing the last value.  The
 // language now leaves output to explicit procedures, so keep these proofs
@@ -349,10 +424,14 @@ const dataRuntimeErrorCases = [
   ["CARERR.SK8", "(car 1)", "RUNTIME ERROR\r\n"],
   ["CDRERR.SK8", "(cdr 1)", "RUNTIME ERROR\r\n"],
 ];
-const selectedErrorCases = Deno.args.includes("--data")
+const selectedErrorCases = integerMode
+  ? []
+  : Deno.args.includes("--data")
   ? [...errorCases, ...dataErrorCases]
   : errorCases;
-const selectedRuntimeErrorCases = Deno.args.includes("--data")
+const selectedRuntimeErrorCases = integerMode
+  ? integerRuntimeErrorCases
+  : Deno.args.includes("--data")
   ? [...runtimeErrorCases, ...dataRuntimeErrorCases]
   : runtimeErrorCases;
 for (

@@ -93,65 +93,443 @@ SRTOPPOP:
 ; normal application continuation or the current procedure epilogue. Packet
 ; values are read directly so a primitive call adds no argument stack frame.
 SRTPRIM:
-        LD A,(SRTPID)              ; Kinds zero through two are binary operators.
-        CP 3
-        JR Z,SRTPZERO              ; Kind three is the unary zero? predicate.
+        LD A,(SRTPID)              ; Kinds zero through three are numeric primitives.
         CP 4
-        JP NC,SRTDAT                ; Data and output primitives use the same packet.
-        LD A,(SRTARGC)
-        CP 2
-        JP NZ,SRTERROR             ; Every binary primitive requires two operands.
-        LD HL,SRTARGPK             ; Read the left packet payload and tag.
-        LD E,(HL)
-        INC HL
-        LD D,(HL)
-        INC HL
-        LD A,(HL)
-        LD (SRTTAG),A              ; The numeric ABI expects the left tag in A.
-        LD (SRTVAL),DE             ; Preserve the left payload while reading right.
-        LD HL,SRTARGPK             ; Advance to the right packet record.
-        INC HL
-        INC HL
-        INC HL
-        INC HL
-        LD E,(HL)
-        INC HL
-        LD D,(HL)
-        INC HL
-        LD B,(HL)                  ; The numeric ABI expects the right tag in B.
-        LD HL,(SRTVAL)             ; Restore the left payload for the ABI.
-        LD A,(SRTPID)
+        JP C,SRTPNUM               ; +, -, *, and zero? share numeric validation.
+        CP 14
+        JP C,SRTDAT                ; Existing pair, list and output services.
+        CP 16
+        JP C,SRTPQRM               ; quotient and remainder are integer-only.
+        CP 21
+        JP C,SRTCMP                ; Five numeric comparisons accept two or more.
+        JP Z,SRTNOT                 ; not is the first unary logical predicate.
+        CP 29
+        JP C,SRTTYPE                ; Type predicates occupy the remaining IDs.
+        JP SRTERROR                ; The reserved range has no other services.
+
+; Validate one logical numeric value. Tag three is exact integer; tag zero is
+; binary16 except for the reserved booleans, sentinels and primitive values.
+SRTNCHK:
+        LD (SRTNTAG),A
+        CP 3
+        JR Z,SRTNOK
         OR A
-        JR Z,SRTPADD               ; Kind zero is addition.
+        JR NZ,SRTNFAIL
+        LD (SRTNVAL),HL
+        LD A,H
+        OR L
+        JR Z,SRTNFAIL
+        LD HL,(SRTNVAL)
+        LD DE,1
+        OR A
+        SBC HL,DE
+        JR Z,SRTNFAIL
+        LD HL,(SRTNVAL)
+        LD A,H
+        CP 0FEH
+        JR NZ,SRTNF16
+        LD A,L
+        CP 2
+        JR C,SRTNFAIL
+        CP 5
+        JR C,SRTNFAIL
+        CP 20H
+        JR C,SRTNF16
+        CP 3DH
+        JR C,SRTNFAIL
+SRTNF16:
+        LD HL,(SRTNVAL)
+        LD A,H
+        CP 0FFH
+        JR Z,SRTNFAIL             ; FFxx is the reserved byte-character range.
+        LD A,(SRTNTAG)
+        CALL NCLASS
+        RET
+SRTNOK:
+        OR A
+        RET
+SRTNFAIL:
+        SCF
+        RET
+
+; Validate every packet value before folding any result.  This preserves the
+; language rule that a later type error is not hidden by an earlier overflow.
+SRTNVALL:
+        LD A,(SRTARGC)              ; Walk exactly the values in the packet.
+        LD (SRTNLEFT),A             ; The counter is independent of packet contents.
+        OR A
+        JR Z,SRTNVRET                ; Empty + and * calls have no values to check.
+        LD HL,SRTARGPK              ; Begin at the first four-byte value record.
+SRTNVLP:
+        LD E,(HL)                   ; Recover the payload low byte.
+        INC HL
+        LD D,(HL)                   ; Recover the payload high byte.
+        INC HL
+        LD A,(HL)                   ; Recover the logical value tag.
+        INC HL
+        INC HL                      ; Skip the record flag before preserving the next address.
+        PUSH HL                     ; Preserve the next packet address.
+        EX DE,HL                    ; NCLASS receives the payload in HL.
+        CALL SRTNCHK                ; Accept exact integers and valid numeric scalars.
+        POP HL                      ; Restore the packet cursor after classification.
+        JP C,SRTERROR               ; Every arithmetic argument must be a number.
+        LD A,(SRTNLEFT)
+        DEC A
+        LD (SRTNLEFT),A
+        JR NZ,SRTNVLP
+SRTNVRET:
+        RET
+
+; Fold +, -, and * with the exact identities and one-argument subtraction.
+SRTPNUM:
+        CALL SRTNVALL               ; Validate the whole packet before arithmetic.
+        LD A,(SRTPID)
+        CP 3
+        JP Z,SRTPZERO               ; Kind three is the unary zero? predicate.
+        CP 0
+        JR Z,SRTPADDV
         CP 1
-        JR Z,SRPTSUB               ; Kind one is subtraction.
-        JR SRPTMUL                 ; Kind two is multiplication.
-SRTPADD:
-        LD A,(SRTTAG)              ; Restore the left tag after selecting the op.
-        CALL NADD                  ; Checked addition consumes the ABI registers.
-        JP C,SRTERROR              ; Type or overflow failure is terminal.
-        PUSH IX                    ; Return the checked result to the caller.
-        RET
-SRPTSUB:
-        LD A,(SRTTAG)              ; Restore the left tag after selecting the op.
-        CALL NSUB                  ; Checked subtraction consumes the ABI registers.
+        JR Z,SRPTSUBV
+        JR SRPTMULV
+SRTPADDV:
+        LD A,3                      ; Exact integer zero is the empty-sum identity.
+        LD (SRTNACCT),A
+        XOR A
+        LD H,A
+        LD L,A
+        JR SRTPFOLD
+SRPTMULV:
+        LD A,3                      ; Exact integer one is the empty-product identity.
+        LD (SRTNACCT),A
+        LD HL,1
+        JR SRTPFOLD
+SRPTSUBV:
+        LD A,(SRTARGC)
+        OR A
+        JP Z,SRTERROR               ; Subtraction requires at least one operand.
+        CP 1
+        JR NZ,SRTPFOLD              ; Two or more operands use left subtraction.
+        LD HL,SRTARGPK
+        CALL SRTPVAL
+        CALL NNEG                   ; Unary subtraction is checked negation.
         JP C,SRTERROR
         PUSH IX
         RET
-SRPTMUL:
-        LD A,(SRTTAG)              ; Restore the left tag after selecting the op.
-        CALL NMUL                  ; Checked multiplication consumes the ABI registers.
+SRTPFOLD:
+        LD (SRTNACCV),HL            ; Keep the current folded payload.
+        LD A,(SRTARGC)
+        OR A
+        JR Z,SRTPFRET               ; + and * return their identities at arity zero.
+        LD HL,SRTARGPK
+        CALL SRTPVAL
+        LD (SRTNACCV),HL            ; First argument replaces the identity.
+        LD (SRTNACCT),A
+        LD A,(SRTARGC)
+        DEC A
+        LD (SRTNLEFT),A
+        LD HL,SRTARGPK+4
+        LD (SRTNPTR),HL
+SRTPFLP:
+        LD A,(SRTNLEFT)
+        OR A
+        JR Z,SRTPFRET
+        LD HL,(SRTNPTR)
+        CALL SRTPVAL
+        LD (SRTNVAL),HL
+        LD (SRTNTAG),A
+        LD HL,(SRTNACCV)
+        LD DE,(SRTNVAL)
+        LD A,(SRTNTAG)
+        LD B,A
+        LD A,(SRTPID)
+        LD C,A
+        LD A,C
+        OR A
+        JR Z,SRTPFADD
+        CP 1
+        JR Z,SRTPFSUB
+        LD A,(SRTNACCT)
+        CALL NMUL
+        JR SRTPFCHK
+SRTPFADD:
+        LD A,(SRTNACCT)
+        CALL NADD
+        JR SRTPFCHK
+SRTPFSUB:
+        LD A,(SRTNACCT)
+        CALL NSUB
+SRTPFCHK:
         JP C,SRTERROR
+        LD (SRTNACCV),HL
+        LD (SRTNACCT),A
+        LD HL,(SRTNPTR)
+        LD DE,4
+        ADD HL,DE
+        LD (SRTNPTR),HL
+        LD A,(SRTNLEFT)
+        DEC A
+        LD (SRTNLEFT),A
+        JR SRTPFLP
+SRTPFRET:
+        LD A,(SRTNACCT)
+        LD HL,(SRTNACCV)
         PUSH IX
         RET
+
+; zero? remains a checked unary exact-integer predicate.
 SRTPZERO:
         LD A,(SRTARGC)
         CP 1
-        JP NZ,SRTERROR             ; zero? accepts one exact-integer operand.
+        JP NZ,SRTERROR
         LD HL,SRTARGPK
-        CALL SRTPVAL               ; Recover the packet value in A:HL.
-        PUSH IX                    ; The predicate returns to the caller.
+        CALL SRTPVAL
+        PUSH IX
         JP SRTZERO
+
+; quotient and remainder require exactly two exact-integer arguments.
+SRTPQRM:
+        LD A,(SRTARGC)
+        CP 2
+        JP NZ,SRTERROR
+        LD HL,SRTARGPK
+        CALL SRTPVAL
+        LD (SRTNACCV),HL
+        LD (SRTNACCT),A
+        LD HL,SRTARGPK+4
+        CALL SRTPVAL
+        LD (SRTNVAL),HL
+        LD (SRTNTAG),A
+        LD A,(SRTNTAG)
+        LD B,A
+        LD HL,(SRTNACCV)
+        LD DE,(SRTNVAL)
+        LD A,(SRTPID)
+        LD C,A
+        LD A,C
+        CP 14
+        JR Z,SRTPQUOT
+        LD A,(SRTNACCT)
+        CALL NREM
+        JR SRTPQRCK
+SRTPQUOT:
+        LD A,(SRTNACCT)
+        CALL NQUOT
+SRTPQRCK:
+        JP C,SRTERROR
+        PUSH IX
+        RET
+
+; Compare each adjacent numeric pair after validating the complete packet.
+SRTCMP:
+        LD A,(SRTARGC)
+        CP 2
+        JP C,SRTERROR
+        CALL SRTNVALL
+        LD HL,SRTARGPK
+        CALL SRTPVAL
+        LD (SRTNACCV),HL
+        LD (SRTNACCT),A
+        LD A,(SRTARGC)
+        DEC A
+        LD (SRTNLEFT),A
+        LD HL,SRTARGPK+4
+        LD (SRTNPTR),HL
+SRTCLOOP:
+        LD A,(SRTNLEFT)
+        OR A
+        JP Z,SRTBYES
+        LD HL,(SRTNPTR)
+        CALL SRTPVAL
+        LD (SRTNVAL),HL
+        LD (SRTNTAG),A
+        LD HL,(SRTNACCV)
+        LD DE,(SRTNVAL)
+        LD A,(SRTNTAG)
+        LD B,A
+        LD A,(SRTNACCT)
+        CALL NCMP
+        JP C,SRTERROR
+        LD (SRTCCOD),HL
+        CALL SRTCONE
+        OR A
+        JP Z,SRTBNO
+        LD HL,(SRTNVAL)
+        LD (SRTNACCV),HL
+        LD A,(SRTNTAG)
+        LD (SRTNACCT),A
+        LD HL,(SRTNPTR)
+        LD DE,4
+        ADD HL,DE
+        LD (SRTNPTR),HL
+        LD A,(SRTNLEFT)
+        DEC A
+        LD (SRTNLEFT),A
+        JR SRTCLOOP
+
+; Turn NCMP's -1, 0, +1 and unordered codes into the selected relation.
+SRTCONE:
+        LD A,(SRTCCOD+1)
+        OR A
+        JR NZ,SRTCNNEG
+        LD A,(SRTCCOD)
+        OR A
+        JR Z,SRTCNZER
+        CP 1
+        JR Z,SRTCNPOS
+        XOR A                      ; Unordered comparisons are always false.
+        RET
+SRTCNNEG:
+        CP 0FFH
+        JR NZ,SRTCNBAD
+        LD A,(SRTCCOD)
+        CP 0FFH
+        JR NZ,SRTCNBAD
+        LD A,(SRTPID)
+        CP 17                       ; < accepts the negative code.
+        JR Z,SRTCYES
+        CP 19                       ; <= also accepts the negative code.
+        JR Z,SRTCYES
+        JR SRTCNO
+SRTCNZER:
+        LD A,(SRTPID)
+        CP 16                       ; = accepts equality.
+        JR Z,SRTCYES
+        CP 19                       ; <= and >= accept equality.
+        JR Z,SRTCYES
+        CP 20
+        JR Z,SRTCYES
+        JR SRTCNO
+SRTCNPOS:
+        LD A,(SRTPID)
+        CP 18                       ; > accepts a positive code.
+        JR Z,SRTCYES
+        CP 20                       ; >= accepts a positive code.
+        JR Z,SRTCYES
+        JR SRTCNO
+SRTCNBAD:
+        XOR A
+        RET
+SRTCYES:
+        LD A,1
+        RET
+SRTCNO:
+        XOR A
+        RET
+
+; not and the type predicates return canonical boolean values.
+SRTNOT:
+        LD A,(SRTARGC)
+        CP 1
+        JP NZ,SRTERROR
+        LD HL,SRTARGPK
+        CALL SRTPVAL
+        CALL SRTFALSE
+        JP Z,SRTBYES
+        JP SRTBNO
+SRTTYPE:
+        LD A,(SRTARGC)
+        CP 1
+        JP NZ,SRTERROR
+        LD HL,SRTARGPK
+        CALL SRTPVAL
+        LD (SRTNVAL),HL
+        LD (SRTNTAG),A
+        LD A,(SRTPID)
+        CP 22
+        JP Z,SRTTNUM
+        CP 23
+        JP Z,SRTTBOOL
+        CP 24
+        JP Z,SRTTSYM
+        CP 25
+        JP Z,SRTTPRO
+        CP 26
+        JP Z,SRTTSTR
+        CP 27
+        JP Z,SRTTCHAR
+        JP SRTTEOF
+SRTTNUM:
+        LD A,(SRTNTAG)
+        LD HL,(SRTNVAL)
+        CALL SRTNCHK
+        JP C,SRTBNO
+        JP SRTBYES
+SRTTBOOL:
+        LD A,(SRTNTAG)
+        OR A
+        JP NZ,SRTBNO
+        LD HL,(SRTNVAL)
+        LD DE,0
+        OR A
+        SBC HL,DE
+        JP Z,SRTBYES
+        LD HL,(SRTNVAL)
+        LD DE,1
+        OR A
+        SBC HL,DE
+        JP Z,SRTBYES
+        JP SRTBNO
+SRTTSYM:
+        LD A,(SRTNTAG)
+        CP 4
+        JP Z,SRTBYES
+        JP SRTBNO
+SRTTPRO:
+        LD A,(SRTNTAG)
+        CP 2
+        JP Z,SRTBYES
+        OR A
+        JP NZ,SRTBNO
+        LD HL,(SRTNVAL)
+        LD A,H
+        CP 0FEH
+        JP NZ,SRTBNO
+        LD A,L
+        CP 20H
+        JP C,SRTBNO
+        CP 3DH
+        JP C,SRTBYES
+        JP SRTBNO
+SRTTSTR:
+        LD A,(SRTNTAG)
+        CP 5
+        JP Z,SRTBYES
+        JP SRTBNO
+SRTTCHAR:
+        LD A,(SRTNTAG)
+        OR A
+        JP NZ,SRTBNO
+        LD HL,(SRTNVAL)
+        LD A,H
+        CP 0FFH
+        JP Z,SRTBYES
+        JP SRTBNO
+SRTTEOF:
+        LD A,(SRTNTAG)
+        OR A
+        JP NZ,SRTBNO
+        LD HL,(SRTNVAL)
+        LD DE,0FE03H
+        OR A
+        SBC HL,DE
+        JP NZ,SRTBNO
+SRTBYES:
+        LD A,1
+SRTPBRES:
+        OR A
+        JR Z,SRTBZERO
+        XOR A
+        LD HL,1
+        PUSH IX
+        RET
+SRTBZERO:
+        XOR A
+        LD HL,0
+        PUSH IX
+        RET
+SRTBNO:
+        XOR A
+        JR SRTPBRES
 
 ; Dispatch the data and output primitives introduced by the C4 value model.
 SRTDAT:

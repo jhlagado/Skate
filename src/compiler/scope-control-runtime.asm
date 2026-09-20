@@ -616,7 +616,7 @@ SRTIVAL:
         LD A,L
         CP 20H
         JP C,SRTERROR
-        CP 2EH                  ; Data primitives extend the reserved range to 13.
+        CP 3DH                  ; Integer and type predicates extend the range to 28.
         JP NC,SRTERROR
         SUB 20H
         LD (SRTPID),A              ; Kind zero is addition; kind three is zero?.
