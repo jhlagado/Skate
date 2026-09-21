@@ -1,0 +1,9 @@
+(begin
+  (display "You are at a fork. Choose left or right: ")
+  (let ((choice (read-char)))
+    (newline)
+    (if (eq? choice #\l)
+        (display "You take the left path.")
+        (if (eq? choice #\r)
+            (display "You take the right path.")
+            (display "You wait at the fork.")))))

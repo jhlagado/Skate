@@ -430,12 +430,21 @@ SRTWRVAL:
         JP Z,SRTWRSTR
         OR A
         JP NZ,SRTERROR
+        LD A,H
+        CP 0FFH
+        JP Z,SRTWCHAR              ; Byte characters share the scalar tag with booleans.
         PUSH HL
         LD DE,0FE02H
         OR A
         SBC HL,DE
         POP HL
         JR Z,SRTWNIL
+        PUSH HL
+        LD DE,0FE03H
+        OR A
+        SBC HL,DE
+        POP HL
+        JR Z,SRTWEOFV
         PUSH HL
         LD DE,0FE04H
         OR A
@@ -460,6 +469,48 @@ SRTWUNS:
         LD DE,SRTWUNST
         LD C,9
         JP 5
+
+SRTWEOFV:
+        LD DE,SRTWEOF
+        LD C,9
+        JP 5
+
+; Print a character raw for display or as a hexadecimal reader spelling.
+SRTWCHAR:
+        LD A,(SRTWMODE)
+        OR A
+        JR Z,SRTWOUT
+        LD A,35                    ; Prefix the readable character spelling with '#'.
+        CALL SRTCH                  ; Send the hash byte through the BDOS-safe writer.
+        LD A,92                    ; The second prefix byte is a backslash.
+        CALL SRTCH                  ; Send the backslash through the BDOS-safe writer.
+        LD A,'x'                    ; Hexadecimal spelling is valid for every byte.
+        CALL SRTCH                  ; Send the hexadecimal marker.
+        LD A,L                      ; Preserve the byte while formatting its nibbles.
+        LD (SRTINB),A              ; Reuse the input scratch byte during output.
+        AND 0F0H                   ; Keep the high nibble of the character byte.
+        RRCA                        ; Shift the high nibble into the low position.
+        RRCA                        ; Shift the high nibble into the low position.
+        RRCA                        ; Shift the high nibble into the low position.
+        RRCA                        ; Shift the high nibble into the low position.
+        LD E,A                      ; Index the hexadecimal digit table.
+        LD D,0                      ; Form a word index from the nibble.
+        LD HL,SRTWHX                ; Point at the hexadecimal digit table.
+        ADD HL,DE                   ; Select the high-nibble digit.
+        LD A,(HL)                   ; Load the selected hexadecimal digit.
+        CALL SRTCH                  ; Send the high-nibble digit.
+        LD A,(SRTINB)              ; Restore the original character byte.
+        AND 0FH                     ; Keep the low nibble.
+        LD E,A                      ; Index the hexadecimal digit table again.
+        LD D,0                      ; Form the second word index.
+        LD HL,SRTWHX                ; Point at the hexadecimal digit table.
+        ADD HL,DE                   ; Select the low-nibble digit.
+        LD A,(HL)                   ; Load the selected hexadecimal digit.
+        CALL SRTCH                  ; Send the low-nibble digit.
+        RET                          ; The complete reader spelling is now emitted.
+SRTWOUT:
+        LD A,L                     ; Emit the byte payload itself.
+        JP SRTCH
 
 SRTWPAIR:
         PUSH HL                     ; CP/M output is allowed to clobber HL.
@@ -679,10 +730,30 @@ SRTCH:
         POP AF                     ; Restore the original flags and value tag.
         RET                        ; Continue formatting or return to the primitive.
 
+; Read one console byte while preserving the runtime continuation and cursors.
+SRTIN:
+        PUSH BC                    ; Preserve the caller's packet count and counters.
+        PUSH DE                    ; Preserve the caller's data pointer or divisor.
+        PUSH HL                    ; Preserve the caller's value payload or cursor.
+        PUSH IX                    ; Preserve the generated continuation across BDOS.
+        PUSH IY                    ; Preserve indexed runtime state used by collection.
+        LD C,1                     ; BDOS function one reads one console byte.
+        CALL 5                     ; CP/M returns the byte in A and may clobber registers.
+        LD (SRTINB),A              ; Stage the byte before restoring caller registers.
+        POP IY                     ; Restore indexed runtime state.
+        POP IX                     ; Restore the primitive return continuation.
+        POP HL                     ; Restore the caller's payload or cursor.
+        POP DE                     ; Restore the caller's pointer or divisor.
+        POP BC                     ; Restore the caller's packet count and counters.
+        LD A,(SRTINB)              ; Return the byte obtained from the console.
+        RET                        ; The primitive maps Control-Z to the EOF value.
+
 SRTWQF:    DB "#f$"
 SRTWQT:    DB "#t$"
 SRTWNILT: DB "()$"
+SRTWEOF:   DB "#<eof>$"
 SRTWUNST:  DB "#<unspecified>$"
+SRTWHX:    DB "0123456789abcdef"
 
 SRTQSP:   DW SRTQBASE
 SRTQNXT:  DW 0
@@ -702,3 +773,7 @@ SRTMVAL:  DW 0
 SRTMTAG:  DB 0
 SRTWRP:   DW 0
 SRTWBEG:  DB 0
+SRTWMODE: DB 0                    ; Zero displays contents; one writes readable syntax.
+
+; One-byte staging for a BDOS console input call that may clobber registers.
+SRTINB:    DB 0

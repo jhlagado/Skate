@@ -105,6 +105,8 @@ SRTPRIM:
         JP Z,SRTNOT                 ; not is the first unary logical predicate.
         CP 29
         JP C,SRTTYPE                ; Type predicates occupy the remaining IDs.
+        CP 31
+        JP C,SRTIO                   ; Character output and console input follow EOF.
         JP SRTERROR                ; The reserved range has no other services.
 
 ; Validate one logical numeric value. Tag three is exact integer; tag zero is
@@ -135,7 +137,7 @@ SRTNCHK:
         JR C,SRTNFAIL
         CP 20H
         JR C,SRTNF16
-        CP 3DH
+        CP 3FH
         JR C,SRTNFAIL
 SRTNF16:
         LD HL,(SRTNVAL)
@@ -487,7 +489,7 @@ SRTTPRO:
         LD A,L
         CP 20H
         JP C,SRTBNO
-        CP 3DH
+        CP 3FH
         JP C,SRTBYES
         JP SRTBNO
 SRTTSTR:
@@ -531,7 +533,45 @@ SRTBNO:
         XOR A
         JR SRTPBRES
 
-; Dispatch the data and output primitives introduced by the C4 value model.
+; Character output and console input use the CP/M console byte interface.
+SRTIO:
+        LD A,(SRTPID)
+        CP 29
+        JP Z,SRTWCHR
+        JP SRTRDCH
+
+; write-char accepts one byte character and returns UNSPECIFIED.
+SRTWCHR:
+        CALL SRTONE
+        OR A
+        JP NZ,SRTERROR              ; Only scalar character values are writable.
+        LD A,H
+        CP 0FFH
+        JP NZ,SRTERROR              ; FFxx is the byte-character representation.
+        LD A,L
+        CALL SRTCH                   ; BDOS function two writes the selected byte.
+        JP SRTUNSP
+
+; read-char accepts no arguments and maps CP/M Control-Z to the EOF singleton.
+SRTRDCH:
+        LD A,(SRTARGC)
+        OR A
+        JP NZ,SRTERROR              ; A nonempty packet is an arity error.
+        CALL SRTIN                   ; BDOS function one supplies the next console byte.
+        CP 26
+        JP Z,SRTRDEOF                ; CP/M text input uses Control-Z as EOF.
+        LD L,A
+        LD H,0FFH                   ; Return the byte in the scalar character range.
+        XOR A                       ; Characters use scalar logical tag zero.
+        PUSH IX
+        RET
+SRTRDEOF:
+        XOR A                       ; EOF is the canonical scalar immediate.
+        LD HL,0FE03H
+        PUSH IX
+        RET
+
+; Dispatch pair, list and console output primitives.
 SRTDAT:
         LD A,(SRTPID)
         CP 4
@@ -679,16 +719,31 @@ SRTPEQ:
 
 ; write and display return UNSPECIFIED after printing their one argument.
 SRTWRITE:
+        LD A,1
+        LD (SRTWMODE),A            ; write uses readable character syntax.
         CALL SRTONE
         CALL SRTWRVAL
         JP SRTUNSP
 SRTDSPP:
+        LD A,1
+        LD (SRTWMODE),A            ; Compound values use the readable write format.
         CALL SRTONE
         CP 5
         JR NZ,SRTDISPV
         CALL SRTWRLIT
         JP SRTUNSP
 SRTDISPV:
+        OR A
+        JR NZ,SRTDWR
+        LD A,H
+        CP 0FFH
+        JR NZ,SRTDZERO
+        LD A,L                      ; A top-level character is displayed as its byte.
+        CALL SRTCH
+        JP SRTUNSP
+SRTDZERO:
+        XOR A                       ; Restore the scalar tag after checking its payload.
+SRTDWR:
         CALL SRTWRVAL
         JP SRTUNSP
 

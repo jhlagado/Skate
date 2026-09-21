@@ -64,6 +64,12 @@ SCPLOOK:
         LD DE,SCNNWL
         CALL SCPMATCH
         JP Z,SCPNWL
+        LD DE,SCNWCHR
+        CALL SCPMATCH
+        JP Z,SCPWCHR
+        LD DE,SCNRDCHR
+        CALL SCPMATCH
+        JP Z,SCPRDCHR
         LD DE,SCNQUOT
         CALL SCPMATCH
         JP Z,SCPQUOT
@@ -152,6 +158,12 @@ SCPDISP:
 SCPNWL:
         LD A,14                    ; Kind fourteen identifies newline.
         RET
+SCPWCHR:
+        LD A,30                    ; Kind thirty identifies write-char.
+        RET
+SCPRDCHR:
+        LD A,31                    ; Kind thirty-one identifies read-char.
+        RET
 SCPQUOT:
         LD A,15                    ; Kind fifteen identifies quotient.
         RET
@@ -227,4 +239,3 @@ SCPMN:
         LD A,1
         OR A
         RET
-
