@@ -97,6 +97,8 @@ RNEXT:
     LD A,(RERRCODE)            ; Recover a prior terminal diagnostic.
     OR A                    ; Zero means this reader has not failed.
     JP NZ,RERRRET           ; Repeated reads preserve the original reason.
+    XOR A                   ; No numeric marker belongs to the next source event.
+    LD (RNUMFLT),A          ; DPARSE sets it again only for an inexact literal.
     LD A,(REOFSEEN)             ; A completed source needs no further callback.
     OR A                    ; Test whether EOF has already been delivered.
     JP NZ,REOFGOOD            ; Return stable EOF without touching the source.
@@ -134,6 +136,11 @@ RNUMERIC:
     CALL DPARSE             ; Validate and convert the bounded numeric token.
     JP C,RERRSET             ; Numeric errors already use reader codes 128..130.
     LD (RTAG),A             ; Retain exact-integer versus floating representation.
+    OR A                    ; The decimal parser uses tag zero for binary16 values.
+    JR NZ,RNUMX             ; Tag three remains an ordinary exact integer event.
+    LD A,1                  ; Mark this source event as an inexact numeric token.
+    LD (RNUMFLT),A          ; The scope compiler preserves this bit through replay.
+RNUMX:
     LD A,7                  ; Expose a scalar event after conversion.
     LD (REVENT),A           ; Hide the lexer's numeric-text event from callers.
     JR RATOMVAL                ; Complete the numeric datum.
@@ -294,5 +301,6 @@ REOFSEEN: DB 0                  ; One after successful EOF.
 RREADY: DB 0                ; One after RINIT.
 REVENT: DB 0                ; Current lexical/public event across helper calls.
 RTAG: DB 0                  ; Logical tag for the most recent atomic result.
+RNUMFLT: DB 0               ; One while the current source event is a binary16 literal.
 RSTACKBY: DS 64               ; One state byte per outstanding list or quote.
 RWEND:                      ; Exclusive end of fixed reader workspace.

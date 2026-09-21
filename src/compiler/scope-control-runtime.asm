@@ -8,7 +8,7 @@
 ;  the generated program and its data areas have been sized.
 ;
 ;  A value is returned as A=tag, HL=payload.  Integer values use tag 3;
-;  #f and #t use tag 0 with payload 0 and 1 respectively.
+;  #f and #t use tag zero with reserved payloads FE00H and FE01H.
 ;=============================================================================
 
 ORG 0100H
@@ -130,16 +130,19 @@ SRTSET:
         RET                        ; The caller receives the language result value.
 
 ; Return Z exactly when the value is #f, preserving A and HL for short-circuit
-; forms.  Other tag-zero scalars are true when their payload is nonzero.
+; forms.  Other tag-zero scalars, including numeric zero, are true.
 SRTFALSE:
-        LD (SRTTAG),A        ; Keep the logical tag while checking payload.
+        LD (SRTTAG),A             ; Keep the logical tag while checking payload.
         OR A                      ; Nonzero tags are always true.
         JR NZ,SRTTRUE             ; Leave the original value untouched.
-        LD A,H                    ; A tag-zero value is false only at payload zero.
-        OR L                      ; Combine the two payload bytes for the test.
-        JR NZ,SRTTRUE             ; A nonzero scalar is true.
+        PUSH HL                   ; Compare the scalar payload without changing it.
+        LD DE,0FE00H              ; Only the canonical false payload is false.
+        OR A                      ; Clear carry before the subtraction.
+        SBC HL,DE                 ; Test for exact #f representation.
+        POP HL                    ; Restore the original payload for the caller.
+        JR NZ,SRTTRUE             ; Numeric zero and all other scalars are true.
         XOR A                     ; Record the false result in the state byte.
-        JR SRTBDONE            ; Restore the original tag before returning.
+        JR SRTBDONE               ; Restore the original tag before returning.
 SRTTRUE:
         LD A,1                    ; Record a true branch decision.
 SRTBDONE:
@@ -616,7 +619,7 @@ SRTIVAL:
         LD A,L
         CP 20H
         JP C,SRTERROR
-        CP 3FH                  ; Character I/O extends the range to thirty.
+        CP 40H                  ; Division extends the range through runtime kind thirty-one.
         JP NC,SRTERROR
         SUB 20H
         LD (SRTPID),A              ; Kind zero is addition; kind three is zero?.

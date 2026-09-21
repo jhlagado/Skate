@@ -12,11 +12,11 @@ SRTZERO:
         OR L                     ; Z means the exact integer is zero.
         JR Z,SRTZTRUE             ; Return canonical true for zero.
         LD A,0                   ; Tag zero identifies a boolean value.
-        LD HL,0                  ; #f has payload zero.
+        LD HL,0FE00H             ; #f has the reserved false payload.
         RET                      ; Return the false predicate result.
 SRTZTRUE:
         LD A,0                   ; Tag zero identifies a boolean value.
-        LD HL,1                  ; #t has payload one.
+        LD HL,0FE01H             ; #t has the reserved true payload.
         RET                      ; Return the true predicate result.
 
 ; Dispatch the final value printer.  Pair and literal values use the compact
@@ -154,7 +154,7 @@ SRTSLOTS:     DB 0                 ; Number of pointer slots in the current shap
 SRTCURS:      DB 0                 ; Pointer-slot extent of the current frame.
 SRTARGPK:     DS 32                ; Eight four-byte argument records.
 SRTOPS:       DW SRTOPB        ; Operator side-stack cursor between heap and guard.
-SRTBUF:   DS 16                ; Decimal output buffer including CR/LF/$.
+SRTBUF:   DS 32                ; Decimal output buffer terminated for BDOS function 9.
 SRTERRTX:  DB "RUNTIME ERROR",13,10,"$"
 SRTUNBT: DB "UNBOUND",13,10,"$"
 

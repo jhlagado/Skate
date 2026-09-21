@@ -70,6 +70,8 @@ SCNFAIL:
 SCQDAT:
         CP 7                       ; Exact integers and booleans are immediate.
         JP Z,SCNUM                 ; Existing scalar emission preserves RTAG.
+        CP 87H                     ; Binary16 numeric events retain their marker in replay.
+        JP Z,FNUM                  ; Emit the tag-zero payload as a scalar literal.
         CP 5                       ; A symbol is copied as an immutable literal.
         JP Z,SCQSYM
         CP 8                       ; A string is copied with its byte length.

@@ -47,70 +47,69 @@ disk = installCpm22File(disk, {
 });
 
 const cases = [
+  ["FLOATLIT.SK8", "(begin (display 1.5) (newline))", "1.5\r\n"],
+  ["DIVINT.SK8", "(begin (display (/ 1 2)) (newline))", "0.5\r\n"],
+  ["DIVUNARY.SK8", "(begin (display (/ 2)) (newline))", "0.5\r\n"],
+  ["DIVFOLD.SK8", "(begin (display (/ 8 2)) (newline))", "4.0\r\n"],
+  ["DIVTHREE.SK8", "(begin (display (/ 8 2 2)) (newline))", "2.0\r\n"],
+  ["MIXADD.SK8", "(begin (display (+ 1 0.5)) (newline))", "1.5\r\n"],
+  ["MIXSUB.SK8", "(begin (display (- 3.0 1)) (newline))", "2.0\r\n"],
+  ["MIXMUL.SK8", "(begin (display (* 2.0 3)) (newline))", "6.0\r\n"],
+  ["NEGATIVE.SK8", "(begin (display -1.5) (newline))", "-1.5\r\n"],
+  ["SIGNZER0.SK8", "(begin (display -0.0) (newline))", "-0.0\r\n"],
   [
-    "CHAROUT.SK8",
-    "(begin (write-char #\\A) (write-char #\\space) (write-char #\\B) (newline))",
-    "A B\r\n",
+    "SUBNORM.SK8",
+    "(begin (display 0.000000059604644775390625) (newline))",
+    "0.000000059604644775390625\r\n",
+  ],
+  ["MAXFLT.SK8", "(begin (display 65504.0) (newline))", "65504.0\r\n"],
+  ["EXP25.SK8", "(begin (display 1024.0) (newline))", "1024.0\r\n"],
+  [
+    "COMPARIS.SK8",
+    "(begin (write (= 2048 2048.0)) (write (< 2048 2050.0)) (write (> +nan.0 1.0)) (newline))",
+    "#t#t#f\r\n",
   ],
   [
-    "CHARPRNT.SK8",
-    "(begin (write #\\A) (display #\\B) (newline))",
-    "#\\x41B\r\n",
+    "NUMPRED.SK8",
+    "(begin (write (number? 1.5)) (write (boolean? 1.5)) (newline))",
+    "#t#f\r\n",
   ],
   [
-    "CHARCTL.SK8",
-    "(begin (write #\\newline) (write #\\x00) (write #\\x7f) (newline))",
-    "#\\x0a#\\x00#\\x7f\r\n",
+    "BOOLFLT.SK8",
+    "(begin (write #f) (write #t) (write (number? 0.0)) (write (boolean? 0.0)) (newline))",
+    "#f#t#t#f\r\n",
   ],
   [
-    "DISPLAYP.SK8",
-    "(display (list #\\A #\\B))",
-    "(#\\x41 #\\x42)",
+    "ZEROFLT.SK8",
+    "(begin (write 0.0) (newline) (write 1.0) (newline) (write (if 0.0 7 8)) (newline))",
+    "0.0\r\n1.0\r\n7\r\n",
   ],
   [
-    "DISPZERO.SK8",
-    "(begin (display #t) (display '()) (newline))",
-    "#t()\r\n",
+    "SPECIALS.SK8",
+    "(begin (write +inf.0) (newline) (write -inf.0) (newline) (write +nan.0) (newline))",
+    "+inf.0\r\n-inf.0\r\n+nan.0\r\n",
+  ],
+  ["EXACTINT.SK8", "(begin (write (+ 1 2)) (newline))", "3\r\n"],
+  ["ROUNDING.SK8", "(begin (display 2049.0) (newline))", "2048.0\r\n"],
+  [
+    "ZEROPRED.SK8",
+    "(begin (write (zero? 0.0)) (write (zero? -0.0)) (write (zero? 1.5)) (newline))",
+    "#t#t#f\r\n",
   ],
   [
-    "CHARPRED.SK8",
-    "(begin (write (char? #\\A)) (write (char? 1)) (write (procedure? read-char)) (write (procedure? write-char)) (newline))",
-    "#t#f#t#t\r\n",
+    "NESTED.SK8",
+    "(begin (write (list 1.5 2.0)) (newline))",
+    "(1.5 2.0)\r\n",
   ],
   [
-    "READCHAR.SK8",
-    "(begin (display (read-char)) (newline))",
-    "QQ\r\n",
-    "Q",
-  ],
-  [
-    "EOFCHAR.SK8",
-    "(begin (write (eof-object? (read-char))) (newline))",
-    "\x1a#t\r\n",
-    "\x1a",
-  ],
-  [
-    "EOFWRITE.SK8",
-    "(begin (write (read-char)) (newline))",
-    "\x1a#<eof>\r\n",
-    "\x1a",
-  ],
-  [
-    "EOFDSPLY.SK8",
-    "(begin (display (read-char)) (newline))",
-    "\x1a#<eof>\r\n",
-    "\x1a",
-  ],
-  [
-    "ADVENTUR.SK8",
-    await Deno.readTextFile("examples/applications/adventur.sk8"),
-    "You are at a fork. Choose left or right: l\r\nYou take the left path.",
-    "l",
+    "ADJACENT.SK8",
+    "(begin (display 1.5) (display 2.0) (newline))",
+    "1.52.0\r\n",
   ],
 ];
 const errorCases = [
-  ["BADWCHAR.SK8", "(write-char 1)"],
-  ["BADRCHAR.SK8", "(read-char 1)"],
+  ["NODIV.SK8", "(/)"],
+  ["BADDIV.SK8", "(/ #t 2)"],
 ];
 for (const [name, source] of [...cases, ...errorCases]) {
   disk = installCpm22File(disk, {
@@ -136,23 +135,23 @@ function runUntilPrompt(offset, description) {
     }`,
   );
 }
-function command(command, expected, description) {
+function command(commandText, expected, description) {
   const start = transcript.length;
   assert.ok(
-    machine.enqueue_serial_input(new TextEncoder().encode(command + "\r")),
+    machine.enqueue_serial_input(new TextEncoder().encode(commandText + "\r")),
   );
   runUntilPrompt(start, description);
   const output = transcript.slice(start);
   assert.ok(output.includes(expected), JSON.stringify(output));
   return output;
 }
-function runProgram(name, input, expected) {
+function runProgram(name, expected) {
   const start = transcript.length;
-  const commandBytes = new TextEncoder().encode(
-    name.replace(".SK8", "") + "\r",
+  const stem = name.replace(".SK8", "");
+  assert.ok(
+    machine.enqueue_serial_input(new TextEncoder().encode(stem + "\r")),
   );
-  assert.ok(machine.enqueue_serial_input(commandBytes));
-  const commandEcho = `${name.replace(".SK8", "")}\r\r\n`;
+  const commandEcho = `${stem}\r\r\n`;
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const status = machine.run_slice(50_000, 500_000);
     transcript += decoder.decode(machine.take_serial_output());
@@ -160,16 +159,6 @@ function runProgram(name, input, expected) {
     if (transcript.slice(start).includes(commandEcho)) break;
   }
   assert.ok(transcript.slice(start).includes(commandEcho));
-  if (input.length > 0) {
-    // Let the running program reach its blocking console read before sending
-    // the byte.  This keeps the proof independent of execution speed.
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-      const status = machine.run_slice(50_000, 500_000);
-      transcript += decoder.decode(machine.take_serial_output());
-      assert.notEqual(status, 0, `CP/M halted before input for ${name}`);
-    }
-    assert.ok(machine.enqueue_serial_input(new TextEncoder().encode(input)));
-  }
   runUntilPrompt(start, `run ${name}`);
   const output = transcript.slice(start);
   assert.ok(output.includes(expected), JSON.stringify(output));
@@ -188,7 +177,7 @@ try {
   machine.install_drive(0, disk, true);
   runUntilPrompt(0, "the boot prompt");
   const measurements = [];
-  for (const [name, , expected, input = ""] of cases) {
+  for (const [name, , expected] of cases) {
     command(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
     const image = machine.export_drive(0);
     measurements.push({
@@ -196,13 +185,13 @@ try {
       comBytes: readCpm22File(image, name.replace(".SK8", ".COM")).length,
       nobjBytes: readCpm22File(image, name.replace(".SK8", ".NOB")).length,
     });
-    runProgram(name, input, expected);
+    runProgram(name, expected);
     command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
     command(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
   }
   for (const [name] of errorCases) {
     command(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
-    runProgram(name, "", "RUNTIME ERROR\r\n");
+    runProgram(name, "RUNTIME ERROR\r\n");
     command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
     command(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
   }

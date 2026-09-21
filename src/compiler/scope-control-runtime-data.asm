@@ -240,12 +240,12 @@ SRTPAIRP:
         CALL SRTPCHK
         JR C,SRTFPALS
         XOR A
-        LD HL,1
+        LD HL,0FE01H
         PUSH IX
         RET
 SRTFPALS:
         XOR A
-        LD HL,0
+        LD HL,0FE00H
         PUSH IX
         RET
 SRTNULLP:
@@ -259,7 +259,7 @@ SRTNULLP:
         SBC HL,DE
         JR NZ,SRTFPALS
         XOR A
-        LD HL,1
+        LD HL,0FE01H
         PUSH IX
         RET
 
@@ -451,9 +451,30 @@ SRTWRVAL:
         SBC HL,DE
         POP HL
         JR Z,SRTWUNS
+        PUSH HL                    ; Compare the false payload without changing it.
+        LD DE,0FE00H               ; #f is the reserved false scalar.
+        OR A                       ; Clear carry before the subtraction.
+        SBC HL,DE                  ; Test whether the payload is exactly FE00H.
+        POP HL                     ; Restore the value for the following formatter.
+        JR Z,SRTWBOOL              ; Preserve the established #t spelling.
+        PUSH HL                    ; Compare the true payload without changing it.
+        LD DE,0FE01H               ; #t is the reserved true scalar.
+        OR A                       ; Clear carry before the subtraction.
+        SBC HL,DE                  ; Test whether the payload is exactly FE01H.
+        POP HL                     ; Restore the value for the following formatter.
+        JR Z,SRTWBOOL              ; Preserve the established #t spelling.
+        PUSH HL
+        XOR A
+        CALL NCLASS
+        POP HL
+        JP NC,SRTFPRN
+SRTWBOOL:
         LD DE,SRTWQF
         LD A,H
-        OR L
+        CP 0FEH
+        JR NZ,SRTWMSG
+        LD A,L
+        OR A
         JR Z,SRTWMSG
         LD DE,SRTWQT
 SRTWMSG:
@@ -486,31 +507,34 @@ SRTWCHAR:
         CALL SRTCH                  ; Send the backslash through the BDOS-safe writer.
         LD A,'x'                    ; Hexadecimal spelling is valid for every byte.
         CALL SRTCH                  ; Send the hexadecimal marker.
-        LD A,L                      ; Preserve the byte while formatting its nibbles.
-        LD (SRTINB),A              ; Reuse the input scratch byte during output.
-        AND 0F0H                   ; Keep the high nibble of the character byte.
-        RRCA                        ; Shift the high nibble into the low position.
-        RRCA                        ; Shift the high nibble into the low position.
-        RRCA                        ; Shift the high nibble into the low position.
-        RRCA                        ; Shift the high nibble into the low position.
-        LD E,A                      ; Index the hexadecimal digit table.
-        LD D,0                      ; Form a word index from the nibble.
-        LD HL,SRTWHX                ; Point at the hexadecimal digit table.
-        ADD HL,DE                   ; Select the high-nibble digit.
-        LD A,(HL)                   ; Load the selected hexadecimal digit.
-        CALL SRTCH                  ; Send the high-nibble digit.
-        LD A,(SRTINB)              ; Restore the original character byte.
-        AND 0FH                     ; Keep the low nibble.
-        LD E,A                      ; Index the hexadecimal digit table again.
-        LD D,0                      ; Form the second word index.
-        LD HL,SRTWHX                ; Point at the hexadecimal digit table.
-        ADD HL,DE                   ; Select the low-nibble digit.
-        LD A,(HL)                   ; Load the selected hexadecimal digit.
-        CALL SRTCH                  ; Send the low-nibble digit.
-        RET                          ; The complete reader spelling is now emitted.
+        LD A,L                      ; Load the byte payload for hexadecimal output.
+        CALL SRTWBYTE               ; Emit its two lower-case hexadecimal digits.
+        RET                         ; The complete reader spelling is now emitted.
 SRTWOUT:
         LD A,L                     ; Emit the byte payload itself.
         JP SRTCH
+
+; Emit the two hexadecimal digits in one byte held in A.
+SRTWBYTE:
+        LD (SRTINB),A              ; Preserve the byte while selecting its nibbles.
+        AND 0F0H                   ; Keep the high nibble of the byte.
+        RRCA                       ; Shift the high nibble into the low position.
+        RRCA                       ; Shift the high nibble into the low position.
+        RRCA                       ; Shift the high nibble into the low position.
+        RRCA                       ; Shift the high nibble into the low position.
+        CALL SRTWHXD               ; Emit the selected high-nibble digit.
+        LD A,(SRTINB)              ; Restore the original byte for its low nibble.
+        AND 0FH                    ; Keep the low nibble.
+        JP SRTWHXD                 ; Emit the selected low-nibble digit.
+
+; Look up one hexadecimal digit and send it to the CP/M character writer.
+SRTWHXD:
+        LD E,A                     ; Use the nibble as a table offset.
+        LD D,0                     ; Form a word-sized table index.
+        LD HL,SRTWHX               ; Point at the lower-case digit table.
+        ADD HL,DE                  ; Select the requested digit.
+        LD A,(HL)                  ; Load the selected digit character.
+        JP SRTCH                   ; Send it while preserving the formatter state.
 
 SRTWPAIR:
         PUSH HL                     ; CP/M output is allowed to clobber HL.

@@ -31,6 +31,9 @@ SCPLOOK:
         LD DE,SCNMUL
         CALL SCPMATCH
         JP Z,SCPMULR
+        LD DE,SCNDIV
+        CALL SCPMATCH
+        JP Z,SCPDIV
         LD DE,SCNZERO
         CALL SCPMATCH
         JP Z,SCPZERO
@@ -127,6 +130,9 @@ SCPSUB:
         RET
 SCPMULR:
         LD A,3                     ; Kind three identifies multiplication.
+        RET
+SCPDIV:
+        LD A,32                    ; Kind thirty-two identifies floating division.
         RET
 SCPCONS:
         LD A,5                     ; Kind five identifies cons.

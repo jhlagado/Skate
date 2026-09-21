@@ -10,10 +10,10 @@
 ;=============================================================================
 
 ; The generated image and compiler tables occupy disjoint high TPA regions.
-SCSTAGE EQU 06000H               ; Object staging, including the image payload.
+SCSTAGE EQU 05800H               ; Object staging uses the free gap above the image.
 SCIMG   EQU SCSTAGE+79           ; NOBJ image payload begins after its header.
 SCCODE  EQU SCIMG+SRTLEN         ; Generated program follows the runtime image.
-SCEND   EQU 08F80H               ; Use the available gap before compiler tables.
+SCEND   EQU 09000H               ; The staged image ends exactly before compiler tables.
 SCGENEND EQU SCEND-32             ; Leave room for the fixed NOBJ tail and CRC.
 SCRECFR  EQU 0CE00H               ; Nested binding-list replay frames.
 SCRECFSZ EQU 16                   ; One saved replay scope record.
@@ -213,6 +213,8 @@ SCENDPK:
 SCEXPE:
         CP 7                       ; Numeric events use the scalar payload contract.
         JR Z,SCNUM                 ; Emit an exact integer literal.
+        CP 87H                     ; Binary16 source numerics carry a replay marker.
+        JP Z,FNUM                  ; Emit their tag-zero payload unchanged.
         CP 5                       ; Symbol events carry an interned reference.
         JR Z,SCREF                 ; Resolve a local or package-global slot.
         CP 8                       ; String events become copied immutable literals.
@@ -236,7 +238,7 @@ SCNUM:
         LD A,H                      ; Character scalars retain FFxx in their payload.
         CP 0FFH                     ; The lexer uses this reserved byte-character range.
         JP Z,SCCHAR                 ; Preserve the complete character value.
-        JR SCBOOLV                  ; Ordinary tag-zero values here are booleans.
+        JR SCBOOLV                  ; Remaining source scalars are booleans.
 SCNUMTAG:
         CP 3                       ; Tag 3 is the exact signed-integer form.
         JP NZ,SCUNSUP              ; Other scalar tags are outside this increment.
@@ -245,7 +247,7 @@ SCSTRLIT:
         LD A,5                     ; Runtime tag five identifies string literals.
         JP SCLITADD
 SCBOOLV:
-        LD A,L                     ; Boolean payloads are zero or one in the low byte.
+        LD A,L                     ; Reader booleans arrive as zero or one.
         JP SCBOOL                  ; Emit the checked boolean representation.
 
 ; Resolve a symbol reference, preferring the innermost active local binding.

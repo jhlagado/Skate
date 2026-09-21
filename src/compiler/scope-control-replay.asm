@@ -8,7 +8,26 @@ SCREBUF  EQU 0D600H              ; Four bytes per retained reader event.
 SCNEXT:
         LD A,(SCREP)              ; Zero selects the ordinary source stream.
         OR A
-        JP Z,RNEXT                ; Preserve the reader contract outside replay.
+        JP NZ,SCREPRD              ; Retained events already carry their numeric kind.
+        CALL RNEXT                 ; Read one event from the source reader.
+        RET C                      ; Preserve the reader's latched error code.
+        CP 7                       ; Scalar events may be exact or binary16 numerics.
+        JR NZ,SCNOK                ; Other event kinds need no reader-tag adjustment.
+        LD A,(RNUMFLT)             ; Check whether this scalar came from decimal text.
+        OR A
+        JR Z,SCNEX                 ; Exact integers retain the ordinary kind seven.
+        XOR A
+        LD (RNUMFLT),A             ; Consume the marker once it has become an event kind.
+        LD A,87H                   ; High bit seven marks a binary16 source literal.
+        RET                        ; RTAG:HL still contains the converted payload.
+SCNEX:
+        LD A,7                     ; Restore the event kind after reading the marker byte.
+        OR A                       ; Exact numeric events return with carry clear.
+        RET                        ; RTAG:HL still contains the exact payload.
+SCNOK:
+        OR A                       ; Source events return with carry clear.
+        RET                        ; Preserve the reader contract for the caller.
+SCREPRD:
         LD HL,(SCRECRP)           ; Read the next retained event.
         LD DE,(SCREWEND)          ; Stop at the retained stream's actual end.
         OR A                      ; Clear carry before comparing the cursors.

@@ -42,11 +42,11 @@ SCREAD:
 SCPC:       DW 0                   ; Staged generated-code cursor.
 SCWTMP:     DW 0                   ; Temporary word for opcode emission.
 SCVTMP:     DW 0                   ; Temporary literal payload.
+SCBTMP:     DB 0                   ; Temporary boolean payload.
 SCFPTR:     DW 0                   ; Staged address retained by SCFIX.
 SCPTMP:     DW 0                   ; Absolute target retained by SCPATCH.
 SCFKIND:    DB 0                   ; Pending slot kind for SCFIX.
 SCFSLOT:    DB 0                   ; Pending slot number for SCFIX.
-SCBTMP:     DB 0                   ; Temporary boolean payload.
 SCID:       DW 0                   ; Current full interner symbol identity.
 SCSLOT:     DB 0                   ; Current local or global slot number.
 SCGSLOT:    DB 0                   ; Global slot returned by SCGGET.
@@ -199,6 +199,7 @@ SCQUOTE:    DB 5,"quote"
 SCNPLUS:    DB 1,"+"
 SCNSUB:     DB 1,"-"
 SCNMUL:     DB 1,"*"
+SCNDIV:     DB 1,"/"
 SCNZERO:    DB 5,"zero?"
 SCNCONS:    DB 4,"cons"
 SCNCAR:     DB 3,"car"

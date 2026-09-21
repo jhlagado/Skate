@@ -54,6 +54,21 @@ SCLIT:
         LD A,3                    ; The generated value is an exact integer.
         JP SCBYTE                 ; Append the tag and return.
 
+; Emit a binary16 literal whose payload is already in HL.
+FNUM:
+        LD (SCVTMP),HL            ; Preserve the inexact payload during opcode emission.
+        LD A,21H                  ; LD HL,nn loads the binary16 payload.
+        CALL SCBYTE                ; Append the payload-load opcode.
+        RET C                     ; Preserve a staged-output capacity failure.
+        LD HL,(SCVTMP)            ; Recover the binary16 payload.
+        CALL SCWORD                ; Append the payload in little-endian order.
+        RET C                     ; Preserve a staged-output capacity failure.
+        LD A,3EH                  ; LD A,0 selects the scalar value tag.
+        CALL SCBYTE                ; Append the tag-load opcode.
+        RET C                     ; Preserve a staged-output capacity failure.
+        XOR A                      ; Binary16 values use scalar tag zero.
+        JP SCBYTE                  ; Append the tag and return.
+
 ; Emit an unbound predefined procedure as a reserved immediate value.
 ; A contains its one-based primitive kind; the runtime subtracts $20 from the
 ; payload low byte when it selects the dispatcher entry.
@@ -83,16 +98,16 @@ SCPRIMV:
         LD HL,SRTOPUSH             ; Preserve it while application arguments compile.
         JP SCCALL
 
-; Emit #f or #t.  A is zero for #f and one for #t.
+; Emit #f or #t.  Booleans use the reserved FE00/FE01 scalar payloads so
+; every other tag-zero payload remains available to binary16 numbers.
 SCBOOL:
-        LD (SCBTMP),A             ; Preserve the logical boolean value.
+        LD (SCBTMP),A             ; Preserve the reader's zero-or-one value.
         LD A,21H                  ; Load the boolean payload into HL.
         CALL SCBYTE               ; Append the payload-load opcode.
         RET C                     ; Preserve a staged-output capacity failure.
-        XOR A                     ; The boolean payload is a zero-extended byte.
-        LD H,A                    ; Clear the payload high byte.
-        LD A,(SCBTMP)             ; Recover the selected boolean value.
-        LD L,A                    ; Place it in the payload low byte.
+        LD H,0FEH                 ; Both booleans use the reserved FE scalar range.
+        LD A,(SCBTMP)             ; Recover the selected low payload byte.
+        LD L,A                    ; FE00H and FE01H distinguish the booleans.
         CALL SCWORD               ; Append the payload word.
         RET C                     ; Preserve a staged-output capacity failure.
         LD A,3EH                  ; Load the scalar tag into A.

@@ -107,6 +107,8 @@ SRTPRIM:
         JP C,SRTTYPE                ; Type predicates occupy the remaining IDs.
         CP 31
         JP C,SRTIO                   ; Character output and console input follow EOF.
+        CP 32
+        JP C,SRTPNUM                 ; Division is zero-based runtime kind thirty-one.
         JP SRTERROR                ; The reserved range has no other services.
 
 ; Validate one logical numeric value. Tag three is exact integer; tag zero is
@@ -118,14 +120,6 @@ SRTNCHK:
         OR A
         JR NZ,SRTNFAIL
         LD (SRTNVAL),HL
-        LD A,H
-        OR L
-        JR Z,SRTNFAIL
-        LD HL,(SRTNVAL)
-        LD DE,1
-        OR A
-        SBC HL,DE
-        JR Z,SRTNFAIL
         LD HL,(SRTNVAL)
         LD A,H
         CP 0FEH
@@ -137,7 +131,7 @@ SRTNCHK:
         JR C,SRTNFAIL
         CP 20H
         JR C,SRTNF16
-        CP 3FH
+        CP 40H
         JR C,SRTNFAIL
 SRTNF16:
         LD HL,(SRTNVAL)
@@ -186,13 +180,65 @@ SRTNVRET:
 SRTPNUM:
         CALL SRTNVALL               ; Validate the whole packet before arithmetic.
         LD A,(SRTPID)
+        CP 31
+        JP Z,SRTPDIV                 ; Division always produces a binary16 value.
         CP 3
         JP Z,SRTPZERO               ; Kind three is the unary zero? predicate.
         CP 0
-        JR Z,SRTPADDV
+        JP Z,SRTPADDV               ; The division implementation widened this dispatch span.
         CP 1
-        JR Z,SRPTSUBV
-        JR SRPTMULV
+        JP Z,SRPTSUBV               ; Use an absolute branch for the later subtraction block.
+        JP SRPTMULV                 ; The division block makes the old short jump too far.
+
+; Fold division from the binary16 value one.  This gives unary reciprocal
+; semantics and keeps every integer/integer result in the inexact domain.
+SRTPDIV:
+        LD A,(SRTARGC)               ; Read the number of operands in the packet.
+        OR A                         ; Division has no identity for an empty call.
+        JP Z,SRTERROR                ; Report the invalid zero-argument form.
+        CP 1                          ; A unary call computes the reciprocal of its value.
+        JR Z,SRTPDUNI                ; Keep the one accumulator identity for that case.
+        LD HL,SRTARGPK                ; Read the first operand as the binary16 dividend.
+        CALL SRTPVAL                  ; Recover its payload and logical tag.
+        LD (SRTNACCV),HL              ; The first operand starts a left fold.
+        LD (SRTNACCT),A               ; Preserve its exact or inexact representation.
+        LD A,(SRTARGC)                ; The first operand has already been consumed.
+        DEC A                         ; Leave the number of divisors to fold.
+        LD (SRTNLEFT),A               ; Preserve the remaining operand count.
+        LD HL,SRTARGPK+4              ; The next record is the second source operand.
+        LD (SRTNPTR),HL               ; Keep the packet cursor across NDIV.
+        JR SRTPDLP                    ; Fold the remaining operands from left to right.
+SRTPDUNI:
+        LD (SRTNLEFT),A               ; Unary division consumes its sole operand below.
+        XOR A                         ; Tag zero identifies the binary16 accumulator.
+        LD (SRTNACCT),A              ; Start with an inexact result representation.
+        LD HL,3C00H                  ; Binary16 1.0 is the left-fold identity.
+        LD (SRTNACCV),HL             ; Store the initial reciprocal accumulator.
+        LD HL,SRTARGPK               ; Begin at the first packed argument.
+        LD (SRTNPTR),HL              ; Keep the packet cursor across NDIV.
+SRTPDLP:
+        LD HL,(SRTNPTR)              ; Load the next four-byte argument record.
+        CALL SRTPVAL                 ; Recover its payload in HL and tag in A.
+        LD (SRTNVAL),HL              ; Preserve the right payload for the ABI.
+        LD (SRTNTAG),A               ; Preserve the right tag while loading the left.
+        LD HL,(SRTNACCV)             ; Load the current binary16 accumulator.
+        LD DE,(SRTNVAL)              ; Load the next operand payload.
+        LD A,(SRTNTAG)               ; Put the right operand tag in the ABI's B register.
+        LD B,A                       ; Preserve that tag while restoring the left tag.
+        LD A,(SRTNACCT)              ; Put the accumulator tag in the ABI's A register.
+        CALL NDIV                    ; Divide the accumulator by the next operand.
+        JP C,SRTERROR                ; Reject a bad operand or invalid result.
+        LD (SRTNACCV),HL             ; Save the binary16 quotient payload.
+        LD (SRTNACCT),A              ; Save its successful result tag.
+        LD HL,(SRTNPTR)              ; Advance one fixed-width argument record.
+        LD DE,4                      ; Each packed value occupies four bytes.
+        ADD HL,DE                    ; Point at the next value in the packet.
+        LD (SRTNPTR),HL              ; Preserve the advanced cursor.
+        LD A,(SRTNLEFT)              ; Decrement the number of values remaining.
+        DEC A                        ; One operand has now been folded.
+        LD (SRTNLEFT),A              ; Publish the updated count.
+        JR NZ,SRTPDLP                ; Continue until every operand is consumed.
+        JP SRTPFRET                  ; Return the accumulated binary16 result.
 SRTPADDV:
         LD A,3                      ; Exact integer zero is the empty-sum identity.
         LD (SRTNACCT),A
@@ -278,15 +324,32 @@ SRTPFRET:
         PUSH IX
         RET
 
-; zero? remains a checked unary exact-integer predicate.
+; zero? accepts exact integers and both signed binary16 zero encodings.
 SRTPZERO:
         LD A,(SRTARGC)
         CP 1
         JP NZ,SRTERROR
         LD HL,SRTARGPK
         CALL SRTPVAL
-        PUSH IX
-        JP SRTZERO
+        LD (SRTNVAL),HL              ; Preserve the payload while validating its tag.
+        LD (SRTNTAG),A               ; Keep the tag for the exact/inexact zero tests.
+        CALL SRTNCHK                 ; Reject booleans, characters and other sentinels.
+        JP C,SRTERROR                ; zero? reports a type error for non-numbers.
+        LD A,(SRTNTAG)               ; Select the exact integer or binary16 zero test.
+        CP 3
+        JR Z,SRTZINT                 ; Exact zero is the all-zero signed word.
+        LD HL,(SRTNVAL)              ; Binary16 zero ignores only its sign bit.
+        LD A,H
+        AND 7FH                       ; Discard the sign while retaining exponent/fraction.
+        OR L
+        JP Z,SRTBYES                 ; Both +0.0 and -0.0 compare as zero.
+        JP SRTBNO                    ; Every other finite or special number is nonzero.
+SRTZINT:
+        LD HL,(SRTNVAL)              ; Restore the exact integer payload.
+        LD A,H
+        OR L
+        JP Z,SRTBYES                 ; The exact zero payload is 0000H.
+        JP SRTBNO                    ; Any nonzero exact integer is false.
 
 ; quotient and remainder require exactly two exact-integer arguments.
 SRTPQRM:
@@ -461,12 +524,12 @@ SRTTBOOL:
         OR A
         JP NZ,SRTBNO
         LD HL,(SRTNVAL)
-        LD DE,0
+        LD DE,0FE00H
         OR A
         SBC HL,DE
         JP Z,SRTBYES
         LD HL,(SRTNVAL)
-        LD DE,1
+        LD DE,0FE01H
         OR A
         SBC HL,DE
         JP Z,SRTBYES
@@ -489,7 +552,7 @@ SRTTPRO:
         LD A,L
         CP 20H
         JP C,SRTBNO
-        CP 3FH
+        CP 40H
         JP C,SRTBYES
         JP SRTBNO
 SRTTSTR:
@@ -521,12 +584,12 @@ SRTPBRES:
         OR A
         JR Z,SRTBZERO
         XOR A
-        LD HL,1
+        LD HL,0FE01H
         PUSH IX
         RET
 SRTBZERO:
         XOR A
-        LD HL,0
+        LD HL,0FE00H
         PUSH IX
         RET
 SRTBNO:
@@ -641,7 +704,7 @@ SRTPPAR:
         CALL SRTPCHK
         JP C,SRTFPALS
         XOR A
-        LD HL,1
+        LD HL,0FE01H
         PUSH IX
         RET
 
@@ -655,7 +718,7 @@ SRTNPRED:
         SBC HL,DE
         JP NZ,SRTFPALS
         XOR A
-        LD HL,1
+        LD HL,0FE01H
         PUSH IX
         RET
 
@@ -713,7 +776,7 @@ SRTPEQ:
         SBC HL,DE
         JP NZ,SRTFPALS
         XOR A
-        LD HL,1
+        LD HL,0FE01H
         PUSH IX
         RET
 
