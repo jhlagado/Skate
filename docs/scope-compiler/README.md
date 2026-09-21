@@ -5,19 +5,21 @@ together with a native Z80 `.COM` program. The language currently includes
 exact signed integers, booleans, symbols, strings, quoted data, pairs, lists,
 `cons`, `car`, `cdr`, `pair?`, `null?`, `eq?`, `write`, `display`, `newline`,
 package definitions, lexical `let` and `let*`, `if`, `begin`, `and`, `or`, `+`,
-`-`, `*`, fixed-arity procedures, closures, mutation and proper tail calls.
+`-`, `*`, `quotient`, `remainder`, numeric comparisons, fixed-arity
+procedures, closures, `letrec`, named `let`, `cond`, internal definitions,
+mutation and proper tail calls.
 
 Each value slot stores a two-byte payload, a tag and an initialization flag.
 Lexical procedures use shared cells for captured bindings, and tail calls reuse
 the active activation map. An uninitialized reference or mutation reports
 `UNBOUND`; an invalid call reports `RUNTIME ERROR`.
 
-The compiler image is loaded at `$0100` and remains below the 16 KiB code
-limit. The current image is 12,706 bytes, leaving 3,678 bytes in that limit.
+The compiler image is loaded at `$0100`. The current image is 17,467 bytes
+origin-relative, which is 1,083 bytes above the 16 KiB code reference.
 Generated output is staged below `$8F80` in a 12,160-byte region. The complete
 compiler account, including fixed tables and a guarded 2,048-byte native
 stack, is measured against the `$0100` to `$E000` transient area: 57,088 bytes
-are available and the current account uses 44,834 bytes.
+are available and the current account uses 50,107 bytes.
 
 The fixed tables provide 256 package-global slots, 128 simultaneous local
 slots, 320 address fixups and 320 symbol entries. The runtime keeps the pair

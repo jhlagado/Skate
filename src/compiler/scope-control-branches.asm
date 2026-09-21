@@ -2,7 +2,7 @@
 ; This file contains parser-side branch address resolution.
 
 SCEXPECT:
-        CALL RNEXT                 ; The enclosing form must close now.
+        CALL SCNEXT                ; The enclosing form must close now.
         RET C                      ; Preserve a source read failure.
         CP 2                       ; Event kind two is a closing parenthesis.
         JP NZ,SCEXPSYN              ; Reject a missing or overlong form.

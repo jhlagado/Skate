@@ -15,6 +15,9 @@ SCIMG   EQU SCSTAGE+79           ; NOBJ image payload begins after its header.
 SCCODE  EQU SCIMG+SRTLEN         ; Generated program follows the runtime image.
 SCEND   EQU 08F80H               ; Use the available gap before compiler tables.
 SCGENEND EQU SCEND-32             ; Leave room for the fixed NOBJ tail and CRC.
+SCRECFR  EQU 0CE00H               ; Nested binding-list replay frames.
+SCRECFSZ EQU 16                   ; One saved replay scope record.
+SCRECEND EQU 0D800H               ; Replay workspace ends above the stack guard.
 
 SCGKEYS  EQU 09000H              ; Two-byte interner IDs for package globals.
 SCGSLOTS EQU 09200H              ; One-byte slot number for each global ID.
@@ -26,10 +29,10 @@ SCFIXTAB EQU 09600H              ; Four-byte address/kind/slot fixup records.
 SCNAMEDS EQU 09C00H              ; Symbol descriptor table for the reader.
 SCNAMEPL EQU 0A000H              ; 5,120-byte symbol spelling pool.
 SCSTRDS  EQU 0B400H              ; String descriptor table required by RINIT.
-SCSTRPL  EQU 0B500H              ; Small string pool; strings are rejected here.
+SCSTRPL  EQU 0B500H              ; String pool leaves room below procedure tables.
 SCPMETA  EQU 0C000H              ; Procedure records stay outside reader tables.
 SCLOCOWN EQU 0C400H              ; Owner procedure for each reusable local slot.
-SCPMASK  EQU 0C500H              ; Per-procedure masks follow the owner bytes.
+SCRECBND EQU 0C500H              ; Declaration flags for the active letrec range.
 SCPRSZ   EQU 44                  ; Body, arity, slots and two 128-bit masks.
 SCOWNOF  EQU 12                  ; Owned-slot mask begins after four formals.
 SCCAPOF  EQU 28                  ; Captured-slot mask follows the owned mask.
@@ -44,13 +47,16 @@ SCIFEND  EQU 0CA80H              ; End-branch patch words for nested if forms.
 SCTAILPT EQU 0CB00H              ; Tail-call target words awaiting body closure.
 SCTAILK  EQU 0CB80H              ; One flag records a saved side-stack operator.
 SCTMAX   EQU 64                   ; Tail candidates per body expression scope.
+SCCNPT   EQU 0CC00H              ; End-jump patches for cond clauses.
+SCNBASE  EQU 0CD00H              ; Saved cond patch-table bases by nesting depth.
+SCNTOPS  EQU 0CD20H              ; Saved cond patch counts by nesting depth.
 ; Literal records and bytes use the compiler-only band below the private stack.
 SCLITREC EQU 0D000H               ; Four bytes per copied symbol or string.
 SCLITPL EQU 0D100H              ; One kilobyte of literal spelling storage.
 SCLITOUT EQU 0D500H               ; Staged output address for each literal record.
 SCLITPSZ EQU SCLITOUT-SCLITPL    ; Capacity check for copied literal spellings.
 SCLITEND EQU 0D600H               ; End of the fixed compiler workspace.
-SCWEND   EQU SCLITEND             ; Budget accounting includes literal storage.
+SCWEND   EQU SCRECEND             ; Replay workspace ends at the guarded-stack floor.
 
 ; Compiler entry and terminal paths.
 SCMAIN:
@@ -117,12 +123,31 @@ SCSETUP:
         LD (SCBDEP),A             ; No compiler lambda frame is active.
         LD (SCBMODE),A            ; No body is isolating its tail candidates.
         LD (SCBISOL),A            ; Nested body forms propagate candidates by default.
+        LD (SCRECMOD),A           ; No recursive binding scope is active.
+        LD (SCRECPHS),A           ; No recursive initializer is being read.
+        LD (SCRECST),A            ; No recursive slot range has been opened.
+        LD (SCRECPND),A           ; No deferred recursive initializer is pending.
+        LD (SCREP),A              ; The source reader is not in replay mode.
+        LD (SCRECFD),A            ; No retained binding scope is active.
+        LD (SCRECAUT),A           ; No replay will switch back to a source stream.
+        LD (SCBDEFIN),A           ; Package entry is not an internal-definition body.
+        LD (SCISDEF),A            ; The current expression is not a definition.
+        LD (SCCDTOP),A            ; No cond end jumps are pending.
+        LD (SCCNDEP),A             ; No cond patch frame is active.
+        LD (SCCNBASE),A            ; The first cond owns the start of the table.
+        LD (SCIDMODE),A            ; Internal definitions use local procedure cells.
         LD HL,SCLOCEV              ; Clear escape flags from the previous source run.
         LD B,0                    ; DJNZ with zero performs all 256 byte writes.
 SCSETEV:
         LD (HL),A
         INC HL
         DJNZ SCSETEV
+        LD HL,SCRECBND             ; Clear recursive-binding declaration flags.
+        LD B,0
+SCSETREC:
+        LD (HL),A
+        INC HL
+        DJNZ SCSETREC
         LD HL,SCGPRIM              ; Clear predefined-primitive marks as well.
         LD B,0
 SCSETPR:
@@ -159,7 +184,7 @@ SCOPENOK:
         CALL RINIT                 ; Reset lexer and structural reader state.
         RET C                      ; Treat a reader setup fault as a parse failure.
 SCTOPLP:
-        CALL RNEXT                 ; Read the next complete top-level event.
+        CALL SCNEXT                ; Read the next complete top-level event.
         RET C                      ; The reader latches its source diagnostic.
         OR A                       ; Event zero is the only valid package terminator.
         JR Z,SCENDPK               ; The caller closes the source before output.
@@ -195,12 +220,12 @@ SCEXPE:
         CP 3                       ; Quote prefixes introduce literal data.
         JP Z,SCQSHRT              ; Read and emit the following quoted datum.
         CP 1                       ; An open parenthesis introduces a form.
-        JR Z,SCFORM                ; Read the form's operator symbol and operands.
+        JP Z,SCFORM                ; Read the form's operator symbol and operands.
         JP SCSYN                   ; Strings, quote prefixes and bare punctuation fail.
 
 ; Read one fresh expression event from the reader.
 SCEXPR:
-        CALL RNEXT                 ; The caller has not consumed this expression.
+        CALL SCNEXT                ; The caller has not consumed this expression.
         RET C                      ; Preserve the reader's latched error code.
         JP SCEXPE                  ; Dispatch the returned event.
 
@@ -233,6 +258,20 @@ SCREF:
         CALL SCPLOOK                ; Unbound primitive names can stay immediate.
         OR A
         JR NZ,SCRPRIM               ; Emit the predefined value without a slot.
+        JP SCRRFWD                  ; Reserve recursive forward names or use globals.
+SCRRFWD:
+        LD A,(SCRECMOD)             ; Only a recursive initializer may reserve a cell.
+        OR A
+        JR Z,SCGGETP                ; Ordinary unresolved names become globals.
+        LD A,(SCRECPHS)
+        OR A
+        JR Z,SCGGETP                ; The recursive body has a closed binding range.
+        CALL SCRECREF                ; Reserve a bounded forward local cell.
+        RET C
+        LD L,A
+        LD A,1
+        JP SCLOAD                    ; Read the cell through the local path.
+SCGGETP:
         CALL SCGGET                ; Allocate a global slot on the first reference.
         RET C                      ; The 256-slot capacity is a compile diagnostic.
         LD L,A                     ; The emitter takes the slot number in L.
@@ -255,16 +294,22 @@ SCFORM:
         LD (SCTOP),A               ; Nested forms clear the permission below.
         XOR A                      ; No nested definition may be accepted.
         LD (SCALLOW),A             ; Only the package loop grants this permission.
-        CALL RNEXT                 ; Every supported form begins with a symbol.
+        CALL SCNEXT                ; Every supported form begins with a symbol.
         RET C                      ; Propagate a reader source failure.
         CP 1                       ; A list operator is a computed procedure value.
         JP Z,SCAPLIST              ; Compile it before reading application arguments.
         CP 5                       ; Event kind five is an interned symbol.
         JP NZ,SCOPRSYN             ; Scalar literals cannot be operators.
         LD (SCOPID),HL             ; Preserve the complete identity for fallback.
+        LD A,(SCBDEFIN)             ; Save whether this body still accepts definitions.
+        LD (SCBDSAV),A
+        XOR A                       ; Nested forms must not inherit that permission.
+        LD (SCBDEFIN),A
+        XOR A                       ; Clear the per-expression definition marker.
+        LD (SCISDEF),A
         LD DE,SCDEF                ; Compare the spelling with the define keyword.
         CALL SCMATCH               ; The lexer buffer remains valid until RNEXT.
-        JP Z,SCDEFINE              ; Definitions use the saved package-level flag.
+        JP Z,SCDEFSEL              ; Select a package or leading internal definition.
         LD DE,SCIF                 ; Compare with the conditional form.
         CALL SCMATCH               ; Match only complete identifier spellings.
         JP Z,SCIFORM               ; Emit the branch skeleton and both arms.
@@ -277,6 +322,12 @@ SCFORM:
         LD DE,SCLETST            ; Compare with sequential local bindings.
         CALL SCMATCH               ; Each initializer sees the earlier bindings.
         JP Z,SCLETSF               ; Compile let* with the same slot discipline.
+        LD DE,SCLETREC             ; Compare with mutually recursive bindings.
+        CALL SCMATCH               ; All letrec names share one initialized scope.
+        JP Z,SCLETRF               ; Compile letrec with forward local slots.
+        LD DE,SCCOND               ; Compare with the multi-clause conditional form.
+        CALL SCMATCH               ; cond clauses are tested from left to right.
+        JP Z,SCCONDF               ; Compile each clause and its fall-through.
         LD DE,SCAND                ; Compare with the short-circuit conjunction.
         CALL SCMATCH               ; The two operands are evaluated left to right.
         JP Z,SCANDF                ; Preserve the first false value.
@@ -338,27 +389,15 @@ SCAPGEN:
         RET C
         JP SCAPARGS                ; SCREF leaves the generated value in A:HL.
 
-SCDEFINE:
-        LD A,(SCTOP)               ; Nested define is outside this increment.
-        OR A                       ; Nonzero is the package-level permission.
-        JP Z,SCDEFSYN               ; Reject definitions inside an expression body.
-        CALL RNEXT                 ; Read the new global's symbol name.
-        RET C                      ; Propagate source failure before allocation.
-        CP 5                       ; Definitions require one identifier.
-        JP NZ,SCDEFNSY              ; A list or literal is not a binding name.
-        LD (SCID),HL               ; Preserve the full identity across the initializer.
-        CALL SCGGET                ; Forward references use this same slot.
-        RET C                      ; Reject the 257th distinct package name.
-        LD (SCDEFSL),A           ; The store below targets this global slot.
-        CALL SCEXPR                ; Compile the initializer before publishing it.
-        RET C                      ; A failed initializer leaves no output file.
-        LD A,(SCDEFSL)             ; Recover the selected global slot.
-        LD L,A                     ; Pass the slot number to SCSTORE.
-        XOR A                      ; Kind zero denotes a package-global slot.
-        CALL SCSTORE               ; Emit the initialized flag update at runtime.
-        RET C                      ; A fixup-capacity error is terminal.
-        CALL SCEXPECT              ; Require the definition's closing parenthesis.
-        RET                        ; The stored value remains the form result.
+; Select a package definition or a leading definition inside a procedure body.
+SCDEFSEL:
+        LD A,(SCTOP)               ; Package-level permission is saved per form.
+        OR A
+        JP NZ,SCDEFINE             ; Top-level definitions retain global storage.
+        LD A,(SCBDSAV)             ; A body may accept definitions only at its head.
+        OR A
+        JP NZ,SCIDEF               ; Internal definitions use recursive local slots.
+        JP SCDEFSYN                ; Definitions in an expression are malformed.
 
 ; Compile a two-operand numeric form selected by SCOP and close its list.
 SCBIN:
@@ -434,7 +473,7 @@ SCIFORM:
         CALL SCIFPATF            ; Patch the false branch before reading the arm.
         LD A,(SCIFTAIL)            ; The alternative inherits the enclosing position.
         LD (SCTCTX),A
-        CALL RNEXT                 ; A close means the optional alternative is absent.
+        CALL SCNEXT                ; A close means the optional alternative is absent.
         RET C                      ; Preserve a reader error after the consequent.
         CP 2                       ; Closing now selects the unspecified value.
         JR Z,SCIFNONE              ; Emit it and finish the branch skeleton.
@@ -507,6 +546,229 @@ SCORERR:
         SCF
         RET
 
+; Compile a sequence of cond clauses.  Each ordinary clause branches to the
+; next test when false and records one end jump for the common result address.
+SCCONDF:
+        LD A,(SCTCTX)              ; Clauses inherit the surrounding tail state.
+        PUSH AF                    ; Keep it below all nested expression frames.
+        CALL SCCNOPEN              ; Give this cond a private patch-table frame.
+        JP C,SCNOPEN                ; Reject a nesting depth beyond the patch bound.
+SCCNCLA:
+        CALL SCNEXT                ; Read a clause or the outer closing parenthesis.
+        JP C,SCCNERR
+        CP 2
+        JP Z,SCCNEMP               ; No matching clause yields unspecified.
+        CP 1
+        JP NZ,SCCNERR              ; Every clause is a parenthesised list.
+        CALL SCNEXT                ; The first item is either a test or else.
+        JP C,SCCNERR
+        LD (SCBEV),A               ; Save the event while checking the else spelling.
+        LD (SCBVAL),HL
+        LD A,(RTAG)
+        LD (SCBTAG),A
+        LD A,(SCBEV)
+        CP 5
+        JP NZ,SCCNTEST             ; Non-symbol events are ordinary test expressions.
+        LD DE,SCELSE
+        CALL SCMATCH
+        JP Z,SCCNELSE              ; Else is accepted only as the final clause.
+SCCNTEST:
+        CALL SCCNCTX               ; Restore the enclosing tail state for this clause.
+        XOR A                      ; The test itself is never in tail position.
+        LD (SCTCTX),A
+        LD A,(SCBTAG)
+        LD (RTAG),A
+        LD A,(SCBEV)
+        LD HL,(SCBVAL)
+        CALL SCEXPE                ; Compile the test expression already read.
+        JP C,SCCNERR
+        LD HL,SRTFAL
+        CALL SCCALL                ; Z means that the test value is #f.
+        CALL SCJZ                  ; Save the false path until this clause closes.
+        JP C,SCCNERR
+        CALL SCBRPUSH
+        JP C,SCCNERR
+        CALL SCCNCTX               ; Clause results inherit the cond tail state.
+        CALL SCBODY                ; Read result expressions through the clause close.
+        JP C,SCCNERR
+        CALL SCJP                  ; A selected clause skips the remaining tests.
+        JP C,SCCNERR
+        CALL SCCNADD               ; Save the common-end patch address.
+        JP C,SCCNERR
+        LD HL,(SCPC)               ; The next clause begins at this output address.
+        CALL SCABS
+        CALL SCBRPAT               ; Resolve the false path to the next test.
+        JP C,SCCNERR
+        JP SCCNCLA
+
+; Compile the final else clause and require the outer cond close immediately.
+SCCNELSE:
+        CALL SCCNCTX               ; Else result expressions inherit tail state.
+        CALL SCBODY
+        JP C,SCCNERR
+        CALL SCNEXT
+        JP C,SCCNERR
+        CP 2
+        JP NZ,SCCNERR              ; Else must be the final clause.
+        JP SCCNDONE
+
+SCCNEMP:
+        CALL SCUNS                  ; No clause matched, including an empty cond.
+SCCNDONE:
+        LD HL,(SCPC)
+        CALL SCABS
+        CALL SCCNPTCH              ; Point every selected clause at the result.
+        POP AF                     ; Restore the surrounding tail context.
+        LD (SCTCTX),A
+        XOR A
+        RET
+
+; Restore the saved cond tail context without consuming its stack word.
+SCCNCTX:
+        POP DE                    ; Move the helper return below the saved context.
+        POP AF                    ; Read the enclosing cond tail context.
+        LD (SCTCTX),A
+        PUSH AF                   ; Leave the saved context for the cond's final restore.
+        PUSH DE                   ; Restore the helper continuation above it.
+        RET
+
+; Open a nested cond patch frame while retaining every outer frame's records.
+SCCNOPEN:
+        LD A,(SCCNDEP)
+        CP 32
+        JP NC,SCCAP
+        LD L,A
+        LD H,0
+        LD DE,SCNBASE
+        ADD HL,DE
+        LD A,(SCCNBASE)
+        LD (HL),A
+        LD A,(SCCNDEP)
+        LD L,A
+        LD H,0
+        LD DE,SCNTOPS
+        ADD HL,DE
+        LD A,(SCCDTOP)
+        LD (HL),A
+        LD A,(SCCNBASE)
+        LD B,A
+        LD A,(SCCDTOP)
+        ADD A,B
+        CP 64
+        JP NC,SCCAP
+        LD (SCCNBASE),A
+        XOR A
+        LD (SCCDTOP),A
+        LD A,(SCCNDEP)
+        INC A
+        LD (SCCNDEP),A
+        RET
+
+; Restore the enclosing cond frame after a syntax or capacity failure.
+SCNABORT:
+        LD A,(SCCNDEP)
+        DEC A
+        LD (SCCNDEP),A
+        LD L,A
+        LD H,0
+        LD DE,SCNBASE
+        ADD HL,DE
+        LD A,(HL)
+        LD (SCCNBASE),A
+        LD A,(SCCNDEP)
+        LD L,A
+        LD H,0
+        LD DE,SCNTOPS
+        ADD HL,DE
+        LD A,(HL)
+        LD (SCCDTOP),A
+        RET
+
+; Save one unconditional end-jump patch in the bounded cond table.
+SCCNADD:
+        LD (SCBPTMP),HL
+        LD A,(SCCDTOP)
+        CP 64
+        JP NC,SCCAP
+        LD C,A
+        LD A,(SCCNBASE)
+        ADD A,C
+        CP 64
+        JP NC,SCCAP
+        LD L,A
+        LD H,0
+        ADD HL,HL
+        LD DE,SCCNPT
+        ADD HL,DE
+        LD DE,(SCBPTMP)
+        LD (HL),E
+        INC HL
+        LD (HL),D
+        LD A,(SCCDTOP)
+        INC A
+        LD (SCCDTOP),A
+        OR A
+        RET
+
+; Patch all recorded cond end jumps to the absolute address in HL.
+SCCNPTCH:
+        LD (SCBTARG),HL
+        LD A,(SCCDTOP)
+        LD B,A
+SCCNPLP:
+        LD A,B
+        OR A
+        JP Z,SCCNPDN
+        DEC B
+        LD A,B
+        LD C,A
+        LD A,(SCCNBASE)
+        ADD A,C
+        LD L,A
+        LD H,0
+        ADD HL,HL
+        LD DE,SCCNPT
+        ADD HL,DE
+        LD E,(HL)
+        INC HL
+        LD D,(HL)
+        EX DE,HL
+        LD DE,(SCBTARG)
+        CALL SCPATCH
+        JP SCCNPLP
+SCCNPDN:
+        LD A,(SCCNDEP)
+        DEC A
+        LD (SCCNDEP),A
+        LD L,A
+        LD H,0
+        LD DE,SCNBASE
+        ADD HL,DE
+        LD A,(HL)
+        LD (SCCNBASE),A
+        LD A,(SCCNDEP)
+        LD L,A
+        LD H,0
+        LD DE,SCNTOPS
+        ADD HL,DE
+        LD A,(HL)
+        LD (SCCDTOP),A
+        XOR A
+        RET
+
+SCCNERR:
+        CALL SCNABORT
+        POP AF                     ; Restore the caller's tail context on failure.
+        LD (SCTCTX),A
+        SCF
+        RET
+
+SCNOPEN:
+        POP AF                     ; Restore the caller's tail context.
+        LD (SCTCTX),A
+        SCF
+        RET
+
 ; Compile each body expression immediately, then use the following reader
 ; event to decide whether its recorded tail calls need ordinary continuations.
 SCBODY:
@@ -531,6 +793,20 @@ SCBODY:
         PUSH AF                    ; Frame word zero: previous scalar tag.
         LD HL,(SCBVAL)             ; Preserve the previous current payload.
         PUSH HL                    ; Body payload completes the saved frame.
+        LD A,(SCRECST)             ; Preserve any enclosing recursive slot range.
+        PUSH AF
+        LD A,(SCRECLIM)            ; Preserve its recursive range limit.
+        PUSH AF
+        LD A,(SCRECPR)             ; Preserve its owning procedure.
+        PUSH AF
+        LD A,(SCRECPND)            ; Preserve its deferred-record marker.
+        PUSH AF
+        LD A,(SCRECPHS)            ; Preserve its initializer phase.
+        PUSH AF
+        LD A,(SCRECMOD)            ; Preserve its recursive-scope mode.
+        PUSH AF
+        LD A,(SCBDEFIN)            ; Preserve the enclosing definition permission.
+        PUSH AF
         PUSH DE                    ; Restore the caller return above the frame.
         LD A,(SCTCTX)              ; The incoming context belongs to this body.
         LD (SCBTAIL),A             ; Only a final expression keeps this flag.
@@ -538,26 +814,48 @@ SCBODY:
         LD (SCBMODE),A
         XOR A                      ; Nested begin and let bodies share their list.
         LD (SCBISOL),A
-        LD A,(SCBMODE)
+        LD A,(SCRECMOD)             ; Keep a recursive initializer phase through lambdas.
         OR A
-        JR Z,SCBKEEP               ; Shared bodies retain outer tail candidates.
+        JR NZ,SCBKEEPR              ; letrec/internal-definition lambdas need forwards.
+        XOR A                      ; Ordinary bodies close the outer initializer phase.
+        LD (SCRECPHS),A             ; No forward cells are created after initialization.
+SCBKEEPR:
+        LD A,(SCBMODE)              ; Only a procedure-owned body accepts defines.
+        LD (SCBDEFIN),A             ; Nested begin and cond bodies leave it clear.
+        LD A,(SCBMODE)
+        CP 1
+        JR NZ,SCBKEEP              ; Shared and let bodies retain outer candidates.
         XOR A                      ; A procedure body starts a private candidate list.
         LD (SCTTOP),A
 SCBKEEP:
         XOR A                      ; Start with no expressions in this body.
         LD (SCBODYN),A             ; Empty bodies remain a syntax error.
+        LD A,(SCBMODE)             ; Procedure bodies may begin with definitions.
+        OR A
+        JR Z,SCBDEFNO
+        CALL SCDEFCAP              ; Install the leading names before replay.
+        JP C,SCBFAIL
+SCBDEFNO:
 SCBREAD:
-        CALL RNEXT                 ; Read one body expression or its closing parenthesis.
-        JP C,SCBFAIL               ; Restore the frame after a reader failure.
+        CALL SCNEXT                ; Read one body expression or its closing parenthesis.
+        JR NC,SCBRDOK
+        JP SCBFAIL                 ; Restore the frame after a reader failure.
+SCBRDOK:
         CP 2                       ; A close before an expression is invalid.
-        JP Z,SCBFAIL               ; Report an empty body after balanced cleanup.
+        JR NZ,SCBRNCL
+        JP SCBFAIL                 ; Report an empty body after balanced cleanup.
+SCBRNCL:
         OR A                       ; EOF cannot close an open body.
-        JP Z,SCBFAIL               ; Report an incomplete body after cleanup.
+        JR NZ,SCBRNEOF
+        JP SCBFAIL                 ; Report an incomplete body after cleanup.
+SCBRNEOF:
         LD (SCBEV),A               ; Preserve the event until SCEXPE dispatches it.
         LD (SCBVAL),HL             ; Preserve the event payload.
         LD A,(RTAG)                ; Preserve its scalar tag.
         LD (SCBTAG),A              ; Structural events ignore this field.
 SCBEXPR:
+        XOR A                      ; A definition marker belongs only to SCIDEF.
+        LD (SCISDEF),A
         LD A,(SCTTOP)              ; Remember tail records made by this expression.
         LD (SCTMARK),A             ; Non-final expressions will rewrite those calls.
         LD A,(SCBTAIL)             ; Give the expression the body's incoming context.
@@ -570,24 +868,37 @@ SCBEXPR:
         JR NC,SCBEXPOK             ; Continue after a successful body expression.
         JP SCBFAIL                 ; No later event is consumed on expression failure.
 SCBEXPOK:
+        LD A,(SCISDEF)              ; Definitions do not count as body expressions.
+        OR A
+        JP NZ,SCBDEFOK
+        XOR A                      ; The first ordinary expression seals definitions.
+        LD (SCBDEFIN),A
         LD (SCRESV),HL             ; Save the expression result before reading ahead.
         LD (SCREST),A              ; Preserve its tag across the reader call.
         LD A,(SCBODYN)             ; Count the completed body expression.
         INC A
         LD (SCBODYN),A
-        CALL RNEXT                 ; The next event distinguishes final from non-final.
-        JP C,SCBFAIL               ; The expression result is discarded on source failure.
+        CALL SCNEXT                ; The next event distinguishes final from non-final.
+        JR NC,SCBNXOK
+        JP SCBFAIL                 ; The expression result is discarded on source failure.
+SCBNXOK:
         CP 2                       ; A close leaves the preceding expression final.
         JP Z,SCBFINAL              ; Leave tail wrappers intact for the final value.
         OR A                       ; EOF cannot terminate a body.
-        JP Z,SCBFAIL               ; Reject an incomplete body.
+        JR NZ,SCBNXEOF
+        JP SCBFAIL                 ; Reject an incomplete body.
+SCBNXEOF:
         LD (SCBEV),A               ; Save the next expression while rewriting candidates.
         LD (SCBVAL),HL             ; Preserve its payload across SCTFIX.
         LD A,(RTAG)                ; Preserve its logical scalar tag.
         LD (SCBTAG),A
         CALL SCTFIX                ; Non-final tail calls become ordinary calls.
-        JP C,SCBFAIL
+        JR NC,SCBTFOK
+        JP SCBFAIL
+SCBTFOK:
         JP SCBEXPR                ; Compile the saved next event without rereading.
+SCBDEFOK:
+        JP SCBREAD                 ; Continue through the leading definition region.
 SCBFINAL:
         LD HL,(SCRESV)             ; Recover the final expression payload.
         LD A,(SCREST)              ; Recover its final expression tag.
@@ -597,6 +908,11 @@ SCBFINAL:
         OR A                       ; Return carry clear with the final value.
         RET
 SCBFAIL:
+        LD A,(SCRECAUT)             ; An unfinished definition replay owns a frame.
+        OR A
+        JR Z,SCBFAILR
+        CALL SCRECPOP
+SCBFAILR:
         CALL SCBREST               ; Restore all body fields and the continuation.
         SCF                        ; Preserve the reader or expression failure.
         RET                        ; No partially compiled body is accepted.
@@ -605,6 +921,20 @@ SCBFAIL:
 SCBREST:
         POP BC                     ; Save the continuation after this helper call.
         POP DE                     ; Recover the caller continuation below the frame.
+        POP AF                     ; Restore leading-definition permission.
+        LD (SCBDEFIN),A
+        POP AF                     ; Restore the enclosing recursive mode.
+        LD (SCRECMOD),A
+        POP AF                     ; Restore the enclosing recursive phase.
+        LD (SCRECPHS),A
+        POP AF                     ; Restore the enclosing deferred-record marker.
+        LD (SCRECPND),A
+        POP AF                     ; Restore the enclosing owning procedure.
+        LD (SCRECPR),A
+        POP AF                     ; Restore the enclosing recursive range limit.
+        LD (SCRECLIM),A
+        POP AF                     ; Restore the enclosing recursive-range start.
+        LD (SCRECST),A
         POP HL                     ; Restore the previous body payload.
         LD (SCBVAL),HL             ; Publish it before returning to the caller.
         POP AF                     ; Restore the previous scalar tag.
@@ -618,8 +948,8 @@ SCBREST:
         POP AF                     ; Restore the caller's isolation request.
         LD (SCBISOL),A
         LD A,(SCBMODE)             ; Private bodies restore their candidate top.
-        OR A
-        JR Z,SCBKEEPT
+        CP 1
+        JR NZ,SCBKEEPT
         POP AF                     ; Restore the enclosing body's candidate mode.
         LD (SCBMODE),A
         POP AF                     ; Restore the enclosing candidate top.
@@ -637,184 +967,3 @@ SCBMODDN:
         PUSH DE                    ; Restore the caller continuation below the helper.
         PUSH BC                    ; Return to the success or failure continuation.
         RET                        ; The frame is balanced on every exit path.
-
-; Report a bounded table or nesting failure.
-SCCAP:
-        LD HL,SCCAPTXT
-        LD (SCERRPTR),HL
-        SCF                       ; Carry distinguishes capacity from syntax.
-        RET                        ; No partial output is published after this return.
-
-SCSYN:
-        SCF                       ; The caller reports a compile-error diagnostic.
-        RET                        ; Reader state remains terminal until the next run.
-SCEXERR:
-        LD HL,SCEXTXT
-        LD (SCERRPTR),HL
-        JP SCSYN
-SCENDSYN:
-        LD HL,SCENDT
-        LD (SCERRPTR),HL
-        JP SCSYN
-SCOPRSYN:
-        LD HL,SCOPRT
-        LD (SCERRPTR),HL
-        JP SCSYN
-SCDEFSYN:
-        LD HL,SCDEFT
-        LD (SCERRPTR),HL
-        JP SCSYN
-SCDEFNSY:
-        LD HL,SCDEFNT
-        LD (SCERRPTR),HL
-        JP SCSYN
-SCUNSUP:
-        LD HL,SCUNSTXT
-        LD (SCERRPTR),HL
-        SCF                       ; Binary16 and unsupported forms are explicit errors.
-        RET                        ; The public command does not publish a partial file.
-SCREAD:
-        SCF                       ; Reader errors are reported through SCFAIL.
-        RET                        ; The reader itself retains the original code.
-
-; Compiler state and reader-owned contexts.  Descriptor and spelling storage
-; lives in the high TPA regions above; these small records remain in the image.
-SCPC:       DW 0                   ; Staged generated-code cursor.
-SCWTMP:     DW 0                   ; Temporary word for opcode emission.
-SCVTMP:     DW 0                   ; Temporary literal payload.
-SCFPTR:     DW 0                   ; Staged address retained by SCFIX.
-SCPTMP:     DW 0                   ; Absolute target retained by SCPATCH.
-SCFKIND:    DB 0                   ; Pending slot kind for SCFIX.
-SCFSLOT:    DB 0                   ; Pending slot number for SCFIX.
-SCBTMP:     DB 0                   ; Temporary boolean payload.
-SCID:       DW 0                   ; Current full interner symbol identity.
-SCSLOT:     DB 0                   ; Current local or global slot number.
-SCGSLOT:    DB 0                   ; Global slot returned by SCGGET.
-SCGIDX:     DB 0                   ; Candidate global slot during a key scan.
-SCPKIND:    DB 0                   ; Predefined primitive kind for the current name.
-SCDEFSL:  DB 0                   ; Definition initializer's global slot.
-SCOP:       DB 0                   ; Selected binary operation 0, 1 or 2.
-SCALLOW:    DB 0                   ; Package-level permission for define.
-SCTOP:      DB 0                   ; Saved define permission for SCFORM.
-SCBODYN:    DB 0                   ; Body expression count.
-SCFORMN:    DW 0                   ; Number of complete package-level forms.
-SCGCOUNT:   DW 0                   ; Number of allocated package-global slots.
-SCLOCTOP:   DB 0                   ; Number of active local binding records.
-SCLNEXT:    DB 0                   ; Next reusable local slot number.
-SCLOCMAX:   DB 0                   ; Maximum simultaneous local slot count.
-SCBNDTOP:  DB 0                   ; Pending binding-record stack top.
-SCMARK:     DB 0                   ; Pending-record cursor during SCBIND.
-SCBEND:     DB 0                   ; Pending-record limit for the current let.
-SCFIXN:     DW 0                   ; Number of recorded slot-address fixups.
-SCBRTOP:    DB 0                   ; Generic branch patch stack top.
-SCIFTOP:    DB 0                   ; Nested if patch stack top.
-SCBPTMP:    DW 0                   ; Temporary staged branch patch address.
-SCBTARG:    DW 0                   ; Temporary absolute branch target.
-SCFOUND:    DB 0                   ; Last matching local slot.
-SCFOUNDK:   DB 0                   ; Nonzero after a local match.
-SCOPID:     DW 0                   ; Operator identity for generic applications.
-SCPNADR:    DW 0                   ; Spelling address while classifying a primitive.
-SCPNLEN:    DB 0                   ; Spelling length used by SCPMATCH.
-SCPCOUNT:   DB 0                   ; Number of fixed procedure descriptors.
-SCCURPR:    DB 0FFH                ; Active procedure, or FFH at package level.
-SCTMPPR:    DB 0                   ; Descriptor being compiled.
-SCARGN:     DB 0                   ; Generic application argument count.
-SCTCTX:     DB 0                   ; Nonzero when the current expression is tail code.
-SCIFTAIL:   DB 0                   ; Tail context saved while compiling an if.
-SCTLSAV:    DB 0                   ; Saved tail context while evaluating arguments.
-SCSKIP:     DW 0                   ; Lambda jump-over patch address.
-SCPBODY:    DW 0                   ; Procedure body staged address during setup.
-SCLOCVAL:   DB 0                   ; Temporary local slot for owner marking.
-SCMSLOT:    DB 0                   ; Slot selected while setting a mask bit.
-SCMPR:      DB 0                   ; Procedure index selected for mask writes.
-SCMTADR:    DW 0                   ; Mask byte address during bit assembly.
-SCDESTK:    DB 0                   ; Mutation destination kind.
-SCMUT:  DB 0                   ; Nonzero selects the checked mutation store.
-SCORIGPR:   DB 0                   ; Active procedure while capture masks are chained.
-SCORIGTM:   DB 0                   ; Descriptor under construction during mask writes.
-SCCAPOWN:   DB 0                   ; Procedure that owns the captured local slot.
-SCCHAINN:   DB 0                   ; Remaining body frames in a capture chain.
-SCAPEV:     DB 0                   ; Saved generic-argument event kind.
-SCAPTAG:    DW 0                   ; Saved generic-argument scalar tag.
-SCAPVAL:    DW 0                   ; Saved generic-argument payload.
-SCAPMODE:   DB 0                   ; Nonzero selects the compact global-call marker.
-SCAPGSL:    DB 0                   ; Global slot carried by the compact call marker.
-SCRESV:     DW 0                   ; Procedure/body result payload during cleanup.
-SCREST:     DB 0                   ; Procedure/body result tag during cleanup.
-SCERRPTR:   DW 0                   ; Current compiler diagnostic string.
-SCBDEP:     DB 0                   ; Nested body-frame depth.
-SCBTAIL:    DB 0                   ; Incoming tail context for the current body.
-SCBMODE:    DB 0                   ; Nonzero bodies keep tail candidates private.
-SCBISOL:    DB 0                   ; Caller requests a private candidate scope.
-SCBEV:      DB 0                   ; Current body-frame event kind.
-SCBTAG:     DB 0                   ; Current body-frame scalar tag.
-SCBVAL:     DW 0                   ; Current body-frame payload.
-SCTTOP:     DB 0                   ; Number of tail-call target words in this body.
-SCTMARK:    DB 0                   ; Start of the current expression's tail records.
-SCTPTR:     DW 0                   ; Tail-call patch address during table writes.
-SCNCTX:     DW SCNAMEDS,320,SCNAMEPL,5120,0,0
-            DB 0,0                  ; Symbol context kind and ready flag.
-SCSCTX:     DW SCSTRDS,64,SCSTRPL,512,0,0
-            DB 1,0                  ; String context kind and ready flag.
-
-; Length-prefixed operator names.  Keeping these strings beside the parser
-; makes the accepted surface obvious without adding a keyword table to output.
-SCDEF:      DB 6,"define"
-SCIF:       DB 2,"if"
-SCBEGIN:    DB 5,"begin"
-SCLET:      DB 3,"let"
-SCLETST:  DB 4,"let*"
-SCAND:      DB 3,"and"
-SCOR:       DB 2,"or"
-SCLAMBK:    DB 6,"lambda"
-SCSETK:     DB 4,"set!"
-SCZEROK:    DB 5,"zero?"
-SCPADD:     DB 1,"+"
-SCPMIN:     DB 1,"-"
-SCPMUL:     DB 1,"*"
-SCOKTXT:    DB "COMPILED",13,10,"$"
-SCERRTXT:   DB "COMPILE ERROR",13,10,"$"
-SCCAPTXT:   DB "CAP",13,10,"$"
-SCSYNTXT:   DB "SYN",13,10,"$"
-SCUNSTXT:   DB "UNSUP",13,10,"$"
-SCOUTTXT:   DB "OUTPUT ERROR",13,10,"$"
-SCEXPTXT:   DB "EXPECT",13,10,"$"
-SCEXTXT:    DB "EXPR",13,10,"$"
-SCAPTXT:    DB "APPLY",13,10,"$"
-SCDESTT:    DB "DEST",13,10,"$"
-SCDUPTXT:   DB "DUP",13,10,"$"
-SCENDT:     DB "END",13,10,"$"
-SCOPRT:     DB "OP",13,10,"$"
-SCDEFT:     DB "DEF",13,10,"$"
-SCDEFNT:    DB "DEFNAME",13,10,"$"
-SCMEMTXT:   DB "INSUFFICIENT MEMORY",13,10,"$"
-SCQUOTE:    DB 5,"quote"
-SCNPLUS:    DB 1,"+"
-SCNSUB:     DB 1,"-"
-SCNMUL:     DB 1,"*"
-SCNZERO:    DB 5,"zero?"
-SCNCONS:    DB 4,"cons"
-SCNCAR:     DB 3,"car"
-SCNCDR:     DB 3,"cdr"
-SCNPAIR:    DB 5,"pair?"
-SCNNULL:    DB 5,"null?"
-SCNLIST:    DB 4,"list"
-SCNEQ:      DB 3,"eq?"
-SCNWRIT:    DB 5,"write"
-SCNDISP:    DB 7,"display"
-SCNNWL:     DB 7,"newline"
-SCNQUOT:    DB 8,"quotient"
-SCNREMA:    DB 9,"remainder"
-SCNEQNUM:   DB 1,"="
-SCNLT:      DB 1,"<"
-SCNGT:      DB 1,">"
-SCNLE:      DB 2,"<="
-SCNGE:      DB 2,">="
-SCNNOT:     DB 3,"not"
-SCNNUM:     DB 7,"number?"
-SCNBOOL:    DB 8,"boolean?"
-SCNSYM:     DB 7,"symbol?"
-SCNPRO:     DB 10,"procedure?"
-SCNSTR:     DB 7,"string?"
-SCNCHAR:    DB 5,"char?"
-SCNEOFQ:    DB 11,"eof-object?"

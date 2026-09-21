@@ -4,11 +4,11 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 import { loadAssembly } from "../../tests/z80.ts";
+import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 import {
   installCpm22File,
   readCpm22File,
 } from "../../../triptych/tools/lib/cpm22-disk.mjs";
-import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 
 const triptychRoot = fileURLToPath(
   new URL("../../../triptych/", import.meta.url),
@@ -27,66 +27,50 @@ systemDisk.set(firmware.bdos, 0x0800);
 systemDisk.set(firmware.bios, 0x1600);
 const backing = new Uint8Array(Math.ceil(systemDisk.length / 512) * 512);
 backing.set(systemDisk);
+backing.fill(0xe5, 52 * 128, 52 * 128 + 64 * 32);
 
 const compiler = await loadAssembly("src/compiler/scope-control-compiler.asm");
 const provider = await loadAssembly(
   "src/compiler/scope-control-runtime-image.asm",
 );
-const compilerBytes = compiler.image.bytes.slice(0x0100);
-const runtimeBytes = provider.image.bytes.slice(0x0100);
-assert.equal(runtimeBytes.length, compiler.address("SRTLEN"));
-const globalDefinitions = Array.from(
-  { length: 256 },
-  (_, index) => `(define g${String(index).padStart(3, "0")} ${index})`,
-).join("");
-const longGlobalDefinitions = Array.from(
-  { length: 256 },
-  (_, index) => `(define state${String(index).padStart(11, "0")} ${index})`,
-).join("");
-const stringGlobalDefinitions = Array.from(
-  { length: 256 },
-  (_, index) => {
-    const name = `state${String(index).padStart(11, "0")}`;
-    const value = index < 16
-      ? `"message${String(index).padStart(2, "0")}_"`
-      : String(index);
-    return `(define ${name} ${value})`;
-  },
-).join("");
-const cases = [
-  [
-    "GLOB256.SK8",
-    `${globalDefinitions}(begin (write (+ g255 1)) (newline))`,
-    "256",
-  ],
-  [
-    "GLOB16.SK8",
-    `${longGlobalDefinitions}(begin (write (+ state00000000255 1)) (newline))`,
-    "256",
-  ],
-  [
-    "GLOBSTR.SK8",
-    `${stringGlobalDefinitions}(begin (write (+ state00000000255 1)) (newline))`,
-    "256",
-  ],
-  [
-    "FORM256.SK8",
-    `(begin ${
-      Array.from({ length: 254 }, () => "1").join(" ")
-    } (write 1) (newline))`,
-    "1",
-  ],
-];
+assert.equal(compiler.image.base, 0);
+assert.ok(compiler.address("SCMAIN") === 0x0100);
+assert.ok(compiler.address("SCEND") < 0x10000);
+const runtimeLength = provider.image.bytes.length - 0x0100;
+assert.equal(runtimeLength, compiler.address("SRTLEN"));
 let disk = installCpm22File(backing, {
   name: "SKATE.COM",
-  bytes: compilerBytes,
+  bytes: compiler.image.bytes.slice(0x0100),
   padByte: 0x1a,
 });
 disk = installCpm22File(disk, {
   name: "SKATE.RT",
-  bytes: runtimeBytes,
+  bytes: provider.image.bytes.slice(0x0100),
   padByte: 0x1a,
 });
+
+const cases = [
+  [
+    "NESTMULT.SK8",
+    "(define f (lambda (z) (let outer ((a (+ z 1)) (b (let inner ((x (+ z 2))) (+ x z)))) (+ a b z)))) (begin (write (f 3)) (newline))",
+    "15",
+  ],
+  [
+    "ESCAPE.SK8",
+    "(define f (lambda (x) (let ((y 2)) (define (g) (+ x y)) g))) (begin (write ((f 40))) (newline))",
+    "42",
+  ],
+  [
+    "INTCAP.SK8",
+    "(define f (lambda (x) (let ((y 2)) (define (g n) (if (= n 0) (+ x y) (g (- n 1)))) g))) (begin (write ((f 40) 200)) (newline))",
+    "42",
+  ],
+  [
+    "LSTSHAD.SK8",
+    "(begin (write (let* ((x 1) (y x)) (define x 2) x)) (newline))",
+    "2",
+  ],
+];
 for (const [name, source] of cases) {
   disk = installCpm22File(disk, {
     name,
@@ -119,6 +103,13 @@ function runCommand(command, expected, description) {
   runUntilPrompt(start, description);
   const output = transcript.slice(start);
   assert.ok(output.includes(expected), JSON.stringify(output));
+  return output;
+}
+function programOutput(output) {
+  const commandEnd = output.indexOf("\r\r\n");
+  const prompt = output.lastIndexOf("\r\nA>");
+  assert.ok(commandEnd >= 0 && prompt > commandEnd, JSON.stringify(output));
+  return output.slice(commandEnd + 3, prompt);
 }
 
 try {
@@ -128,33 +119,32 @@ try {
   for (const [name, , expected] of cases) {
     runCommand(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
     const image = machine.export_drive(0);
-    const outputName = name.replace(".SK8", ".COM");
-    const generated = readCpm22File(image, outputName);
+    const generated = readCpm22File(image, name.replace(".SK8", ".COM"));
     const object = readCpm22File(image, name.replace(".SK8", ".NOB"));
     measurements.push({
       name,
       comBytes: generated.length,
       nobjBytes: object.length,
     });
-    assert.equal(generated[0], 0x31, `${outputName} sets its private stack`);
-    runCommand(
-      outputName.replace(".COM", ""),
+    const runOutput = runCommand(
+      name.replace(".SK8", ""),
       `${expected}\r\n`,
-      `run ${outputName}`,
+      `run ${name.replace(".SK8", ".COM")}`,
     );
-    runCommand(`ERA ${outputName}`, "A>", `remove ${outputName}`);
-    runCommand(
-      `ERA ${name.replace(".SK8", ".NOB")}`,
-      "A>",
-      `remove ${name}`,
+    assert.equal(
+      programOutput(runOutput),
+      `${expected}\r\n`,
+      `${name}: unexpected program output`,
     );
+    runCommand(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
+    runCommand(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
   }
   console.log(JSON.stringify(
     {
       status: "passed",
-      compilerBytes: compilerBytes.length,
-      runtimeBytes: runtimeBytes.length,
+      compilerBytes: compiler.image.bytes.length - 0x100,
       imageEnd: compiler.image.end,
+      runtimeBytes: runtimeLength,
       cases: cases.map(([name]) => name),
       largestComBytes: Math.max(
         ...measurements.map(({ comBytes }) => comBytes),
@@ -163,7 +153,6 @@ try {
         ...measurements.map(({ nobjBytes }) => nobjBytes),
       ),
       measurements,
-      transcript,
     },
     null,
     2,

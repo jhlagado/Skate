@@ -7,7 +7,7 @@
 
 ; Compile the explicit (quote datum) form.
 SCQUOTEF:
-        CALL RNEXT                 ; Read the one datum after quote.
+        CALL SCNEXT                ; Read the one datum after quote.
         RET C                      ; Preserve a source failure.
         CALL SCQDAT                ; Compile it without resolving symbols.
         RET C                      ; Reject malformed quoted structure.
@@ -16,7 +16,7 @@ SCQUOTEF:
 ; Compile the apostrophe shorthand.  A nested apostrophe is data and therefore
 ; becomes the ordinary two-element list (quote datum).
 SCQSHRT:
-        CALL RNEXT                 ; Read the datum following the prefix.
+        CALL SCNEXT                ; Read the datum following the prefix.
         RET C                      ; Preserve a reader failure.
         CP 3                       ; A second apostrophe is a quoted symbol.
         JP Z,SCQNEST               ; Preserve it as (quote datum).
@@ -38,7 +38,7 @@ SCQNEST:
         JP C,SCNFAIL
         CALL SCQPUT                ; Push quote as the first pair element.
         JP C,SCNFAIL
-        CALL RNEXT                 ; Read the datum after the nested prefix.
+        CALL SCNEXT                ; Read the datum after the nested prefix.
         JP C,SCNFAIL
         CALL SCQDAT
         JP C,SCNFAIL
@@ -105,7 +105,7 @@ SCQLIST:
         LD (SCQCOUNT),A
         LD (SCQDOT),A
 SCQLP:
-        CALL RNEXT                 ; Read an element, dot or the closing parenthesis.
+        CALL SCNEXT                ; Read an element, dot or the closing parenthesis.
         JP C,SCQFAIL               ; Restore the surrounding list state.
         CP 2                       ; A close finishes a proper list.
         JP Z,SCQEND                ; The list body can exceed a short-branch range.
@@ -147,7 +147,7 @@ SCQDOTF:
         LD A,(SCQCOUNT)            ; A dotted list needs at least one head.
         OR A
         JP Z,SCQFAIL
-        CALL RNEXT                 ; Read exactly one dotted-tail datum.
+        CALL SCNEXT                ; Read exactly one dotted-tail datum.
         JP C,SCQFAIL
         CP 2
         JP Z,SCQFAIL
@@ -178,7 +178,7 @@ SCQDOTF:
         LD (SCQCOUNT),A
         LD A,1
         LD (SCQDOT),A
-        CALL RNEXT                 ; The dotted tail must be followed by close.
+        CALL SCNEXT                ; The dotted tail must be followed by close.
         JP C,SCQFAIL
         CP 2
         JP NZ,SCQFAIL

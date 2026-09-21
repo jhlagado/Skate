@@ -139,6 +139,47 @@ SCPUSH:
         LD A,0E5H                 ; PUSH HL saves the value payload.
         JP SCBYTE                 ; Append the payload push and return.
 
+; Recover a value saved by SCPUSH.  The payload was pushed after its tag.
+SCPOP:
+        LD A,0E1H                 ; POP HL restores the payload first.
+        CALL SCBYTE               ; Append the payload pop.
+        RET C                     ; Preserve staged-output exhaustion.
+        LD A,0F1H                 ; POP AF restores the scalar tag and flags.
+        JP SCBYTE                 ; Append the tag pop and return.
+
+; Emit a clear of a recursive cell before its first initializer runs.
+SCCLEAR:
+        LD A,L
+        LD (SCFSLOT),A
+        LD A,1
+        CALL SCLOCALQ
+        JR Z,SCCLRS
+        LD A,06H
+        CALL SCBYTE
+        RET C
+        LD A,(SCFSLOT)
+        CALL SCBYTE
+        RET C
+        LD HL,SRTCLRI
+        JP SCCALL
+SCCLRS:
+        LD A,21H
+        CALL SCBYTE
+        RET C
+        LD HL,(SCPC)
+        LD A,1
+        LD (SCFKIND),A
+        LD A,(SCFSLOT)
+        CALL SCFIX
+        RET C
+        XOR A
+        CALL SCBYTE
+        RET C
+        CALL SCBYTE
+        RET C
+        LD HL,SRTCLRS
+        JP SCCALL
+
 ; Emit a direct load from a compiler-assigned slot.  A=0 selects a global
 ; slot; A=1 selects a local slot.  L contains the slot number.
 SCLOAD:

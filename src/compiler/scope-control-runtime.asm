@@ -63,8 +63,8 @@ SRTLOAD:
         LD A,(HL)                 ; Recover the stored scalar tag.
         LD (SRTTAG),A             ; Preserve it while testing initialization.
         INC HL                    ; Advance to the initialized flag.
-        LD A,(HL)                 ; A zero flag means the binding is unbound.
-        OR A                      ; Set Z for the unbound case.
+        LD A,(HL)                 ; Bit zero records whether the binding is ready.
+        AND 1                     ; Ignore the high escape mark kept for closures.
         JP Z,SRTUNBD           ; Never return a fabricated value.
         EX DE,HL                  ; Return the stored payload in HL.
         LD A,(SRTTAG)             ; Restore the stored value tag.
@@ -827,6 +827,24 @@ SRTSETI:
         LD HL,(SRTVAL)             ; Restore the caller's payload.
         LD A,(SRTATMP)             ; Restore the caller's tag.
         JP SRTSET                  ; Check initialization before storing.
+
+; Clear a recursive local cell through the current activation map.
+SRTCLRI:
+        LD A,B
+        CALL SRTADR
+        JP C,SRTERROR
+        JP SRTCLRC
+
+; Clear a fixed recursive cell while preserving its escape mark.
+SRTCLRS:
+SRTCLRC:
+        INC HL
+        INC HL
+        INC HL
+        LD A,(HL)
+        AND 80H
+        LD (HL),A
+        RET
 
 ; Copy packet values into the descriptor's formal slots.
 SRTSARGS:

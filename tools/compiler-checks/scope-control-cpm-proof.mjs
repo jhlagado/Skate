@@ -27,6 +27,8 @@ systemDisk.set(firmware.bdos, 0x0800);
 systemDisk.set(firmware.bios, 0x1600);
 const backing = new Uint8Array(Math.ceil(systemDisk.length / 512) * 512);
 backing.set(systemDisk);
+// Keep the CP/M system tracks, but leave the data directory free for this proof.
+backing.fill(0xe5, 52 * 128, 52 * 128 + 64 * 32);
 
 const compiler = await loadAssembly("src/compiler/scope-control-compiler.asm");
 const provider = await loadAssembly(
@@ -84,10 +86,187 @@ const cases = [
   ["IF-FALSE.SK8", "(begin (write (if #f 1 42)) (newline))", "42"],
   ["AND.SK8", "(begin (write (and #t 42)) (newline))", "42"],
   ["OR.SK8", "(begin (write (or #f 42)) (newline))", "42"],
+  [
+    "COND.SK8",
+    "(begin (write (cond ((= 1 2) 1) ((= 2 2) 42) (else 7))) (newline))",
+    "42",
+  ],
+  [
+    "CONDNO.SK8",
+    "(begin (write (cond (#f 1))) (newline))",
+    "#<unspecified>",
+  ],
+  [
+    "LETREC.SK8",
+    "(begin (write (letrec () 7)) (newline))",
+    "7",
+  ],
+  [
+    "LETEMPTY.SK8",
+    "(begin (write (let () 7)) (newline))",
+    "7",
+  ],
+  [
+    "LETSTEMP.SK8",
+    "(begin (write (let* () 7)) (newline))",
+    "7",
+  ],
+  [
+    "LETREC1.SK8",
+    "(begin (write (letrec ((one 42)) one)) (newline))",
+    "42",
+  ],
+  [
+    "FWDCALL.SK8",
+    "(begin (write (letrec ((first (lambda () (second))) (second (lambda () 42))) (first))) (newline))",
+    "42",
+  ],
+  [
+    "UNINITR.SK8",
+    "(begin (write (letrec ((x 1) (y x)) y)) (newline))",
+    "UNBOUND",
+  ],
+  [
+    "SHADREC.SK8",
+    "(begin (write (let ((x 9)) (letrec ((f (lambda () x)) (x 2)) (f)))) (newline))",
+    "2",
+  ],
+  [
+    "NESTREC.SK8",
+    "(begin (write (letrec ((x (letrec ((y 7)) y))) x)) (newline))",
+    "7",
+  ],
+  [
+    "NESTFW.SK8",
+    "(begin (write (letrec ((a (letrec ((x 1) (y x)) y)) (x 2)) (+ a x))) (newline))",
+    "UNBOUND",
+  ],
+  [
+    "GLFWD.SK8",
+    "(define first (lambda () (second))) (define second (lambda () 7)) (begin (write (first)) (newline))",
+    "7",
+  ],
+  [
+    "GDEF.SK8",
+    "(define (double x) (+ x x)) (begin (write (double 7)) (newline))",
+    "14",
+  ],
+  [
+    "NCOND.SK8",
+    "(begin (write (cond (#t 7) (else (cond (#t 8))))) (newline))",
+    "7",
+  ],
+  [
+    "INTDEF.SK8",
+    "(begin (write ((lambda () (define (f x) x) (f 7)))) (newline))",
+    "7",
+  ],
+  [
+    "INTFWD.SK8",
+    "(begin (write ((lambda () (define f (lambda () g)) (define g 7) (f)))) (newline))",
+    "7",
+  ],
+  [
+    "INTSHAD.SK8",
+    "(begin (write (let ((x 9)) ((lambda () (define f (lambda () x)) (define x 2) (f))))) (newline))",
+    "2",
+  ],
+  [
+    "MUTONE.SK8",
+    "(begin (write (letrec ((first (lambda (n) (if (zero? n) 42 (second (- n 1))))) (second (lambda (n) (if (zero? n) 42 (first (- n 1)))))) (first 1))) (newline))",
+    "42",
+  ],
+  [
+    "SELFREC.SK8",
+    "(begin (write (letrec ((count (lambda (n) (if (zero? n) 42 (count (- n 1)))))) (count 3))) (newline))",
+    "42",
+  ],
+  [
+    "NAMEDLET.SK8",
+    "(begin (write (let loop ((n 3)) (if (zero? n) 42 (loop (- n 1))))) (newline))",
+    "42",
+  ],
+  [
+    "NAMZERO.SK8",
+    "(begin (write (let loop () 7)) (newline))",
+    "7",
+  ],
+  [
+    "NESTNAME.SK8",
+    "(begin (write (let outer () (let inner () 9))) (newline))",
+    "9",
+  ],
+  [
+    "NINIT.SK8",
+    "(begin (write (let loop ((n (+ 1 2))) n)) (newline))",
+    "3",
+  ],
+  [
+    "NNINIT.SK8",
+    "(begin (write (let outer ((x (let inner ((y 7)) y))) x)) (newline))",
+    "7",
+  ],
+  [
+    "NPROC.SK8",
+    "(define f (lambda () (let loop ((n 3)) n))) (begin (write (f)) (newline))",
+    "3",
+  ],
+  [
+    "LTAIL.SK8",
+    "(define f (lambda () (let () (+ 1 2)) 9)) (begin (write (f)) (newline))",
+    "9",
+  ],
+  [
+    "LSHADDEF.SK8",
+    "(begin (write ((lambda (x) (let () (define x 2) x)) 1)) (newline))",
+    "2",
+  ],
+  [
+    "LETDEF.SK8",
+    "(begin (write (let ((x 1)) (define y 2) (+ x y))) (newline))",
+    "3",
+  ],
+  [
+    "LSTARDEF.SK8",
+    "(begin (write (let* ((x 1)) (define y 2) (+ x y))) (newline))",
+    "3",
+  ],
+  [
+    "CAPUNIN.SK8",
+    "(begin (write ((lambda () (define f (lambda () x)) (define x x) x))) (newline))",
+    "UNBOUND",
+  ],
   ["UNBOUND.SK8", "unbound-name", "UNBOUND"],
 ];
 const errorCases = [
   ["BADFORM.SK8", "(let ((value 1 2)) value)", "EXPECT\r\n"],
+  ["DUPREC.SK8", "(letrec ((value 1) (value 2)) value)", "DUP\r\n"],
+  [
+    "LDDUP.SK8",
+    "(let ((x 1)) (define x 2) x)",
+    "DUP\r\n",
+  ],
+  [
+    "LSDUP.SK8",
+    "(let* ((x 1) (y x)) (define y 2) y)",
+    "DUP\r\n",
+  ],
+  [
+    "DUPIDEF.SK8",
+    "((lambda () (define value 1) (define value 2) value))",
+    "DUP\r\n",
+  ],
+  ["LATEDEF.SK8", "((lambda () 1 (define value 2)))", "DEF\r\n"],
+  ["NESTDEF.SK8", "((lambda () (begin (define value 2) value)))", "DEF\r\n"],
+  ["CONDDEF.SK8", "((lambda () (cond (#t (define value 2)))))", "DEF\r\n"],
+  ["PARM2.SK8", "(lambda (value) (define value 2) value)", "DUP\r\n"],
+  ["PARAMDEF.SK8", "((lambda (value) (define value 2) value) 1)", "DUP\r\n"],
+  ["NAMEDBAD.SK8", "(let loop ((value 1 2)) value)", "EXPECT\r\n"],
+  [
+    "NESTBAD.SK8",
+    "((lambda () (let outer () (let inner ((value 1 2)) value))))",
+    "EXPECT\r\n",
+  ],
   ["TOOLONG.SK8", "1 ".repeat(2600), "CAP\r\n"],
 ];
 const noOutputCases = [["NOAUTO.SK8", "42"]];

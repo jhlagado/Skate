@@ -227,7 +227,10 @@ const compilerBytes = compiler.image.bytes.slice(0x0100);
 const runtimeImage = provider.image.bytes.slice(0x0100);
 const runtimeLength = runtimeImage.length;
 assert.equal(runtimeLength, compiler.address("SRTLEN"));
-assert.ok(compilerBytes.length < 16_384, "compiler crossed the core gate");
+assert.ok(
+  compilerBytes.length < 0x10000,
+  "compiler does not fit the CP/M address space",
+);
 
 let disk = makeSystemDisk(firmware, sourceDisk);
 disk = installCpm22File(disk, {

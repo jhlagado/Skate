@@ -57,6 +57,8 @@ const values = [
   `SRTLOADI EQU ${address("SRTLOADI")}`,
   `SRTSTORI EQU ${address("SRTSTORI")}`,
   `SRTSETI EQU ${address("SRTSETI")}`,
+  `SRTCLRI EQU ${address("SRTCLRI")}`,
+  `SRTCLRS EQU ${address("SRTCLRS")}`,
   `SRTHEP EQU ${address("SRTHEAPP")}`,
   `SRTLOW EQU ${address("SRTLOWSP")}`,
   `SRTZERO EQU ${address("SRTZERO")}`,

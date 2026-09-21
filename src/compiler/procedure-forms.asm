@@ -13,7 +13,7 @@ SCAPARGS:
         XOR A                      ; No argument has been staged yet.
         LD (SCARGN),A              ; The runtime receives this bounded count.
 SCAPLOOP:
-        CALL RNEXT                 ; Read one argument or the application's close.
+        CALL SCNEXT                ; Read one argument or the application's close.
         RET C                      ; Preserve a source failure before emission.
         CP 2                       ; A close ends the argument sequence.
         JR Z,SCAPDONE              ; Zero-argument calls are valid.
@@ -145,12 +145,12 @@ SCLAMBF:
         JP C,SCLAMERR              ; Restore the enclosing scope on capacity failure.
         LD (SCTMPPR),A             ; Keep the new descriptor while parsing params.
         LD (SCCURPR),A             ; Formal slots belong to this new descriptor.
-        CALL RNEXT                 ; Lambda requires a parenthesised parameter list.
+        CALL SCNEXT                ; Lambda requires a parenthesised parameter list.
         JP C,SCLAMERR              ; Restore scope state on a reader failure.
         CP 1                       ; The parameter container must be an opening list.
         JP NZ,SCLAMERR             ; Reject dotted and scalar parameter forms.
 SCLAMP:
-        CALL RNEXT                 ; Read a parameter name or the list close.
+        CALL SCNEXT                ; Read a parameter name or the list close.
         JP C,SCLAMERR              ; Restore the enclosing scope before returning.
         CP 2                       ; A close completes the formal parameter list.
         JR Z,SCLAMPD               ; The body follows immediately after the list.
@@ -308,6 +308,133 @@ SCPDUPOK:
         SCF                        ; The caller rejects the parameter list.
         RET
 
+; Return carry when SCID names one of the current procedure's formal slots.
+SCPFORM:
+        LD A,(SCCURPR)             ; Package-level definitions have no formals.
+        CP 0FFH
+        RET Z
+        CALL SCPREC                ; Locate the active descriptor metadata.
+        INC HL                     ; Skip the body address low byte.
+        INC HL                     ; Skip the body address high byte.
+        LD B,(HL)                  ; B is the number of formal slots.
+        LD A,B
+        OR A                       ; Preserve a clear result for a nullary procedure.
+        RET Z
+        INC HL                     ; Skip the formal-count byte.
+        INC HL                     ; Skip the capture-mask byte.
+SCFLOOP:
+        LD C,(HL)                  ; Read one formal's local slot number.
+        INC HL
+        INC HL                     ; Skip the reserved high slot byte.
+        PUSH HL                    ; Keep the next formal cursor across lookup.
+        LD L,C
+        LD H,0
+        ADD HL,HL                  ; Active IDs use two bytes per slot.
+        LD DE,SCLOCIDS
+        ADD HL,DE
+        LD A,(SCID)
+        CP (HL)
+        JR NZ,SCFNO
+        INC HL
+        LD A,(SCID+1)
+        CP (HL)
+        JR NZ,SCFNO
+        POP HL
+        SCF
+        RET
+SCFNO:
+        POP HL
+        DJNZ SCFLOOP
+        XOR A
+        RET
+
+; Keep recursive forward cells while discarding the lambda's private locals.
+; A forward name may have been discovered after the lambda's formals, so its
+; active-directory entry must survive the frame restore for a later declaration
+; to claim the same slot.
+SCRETAIN:
+        LD A,(SCLOCTOP)
+        LD A,(SCRECO)
+        LD A,(SCRECMOD)
+        OR A
+        JR NZ,SCRTSCAN
+        LD A,(SCRECO)
+        LD (SCLOCTOP),A
+        LD A,(SCRECN)
+        LD (SCLNEXT),A
+        RET
+SCRTSCAN:
+        LD A,(SCLOCTOP)
+        LD (SCRECCUR),A
+        LD A,(SCRECO)
+        LD B,A
+        LD C,A
+SCRTLOOP:
+        LD A,(SCRECCUR)
+        CP B
+        JR Z,SCRTDONE
+        LD A,B
+        LD (SCRECSRC),A
+        LD L,A
+        LD H,0
+        LD DE,SCLOCSLT
+        ADD HL,DE
+        LD A,(HL)
+        LD (SCRCSLOT),A
+        LD L,A
+        LD H,0
+        LD DE,SCLOCOWN
+        ADD HL,DE
+        LD A,(HL)
+        LD E,A
+        LD A,(SCRECPR)
+        CP E
+        JR NZ,SCRTNEXT
+        LD A,(SCRECSRC)
+        LD L,A
+        LD H,0
+        ADD HL,HL
+        LD DE,SCLOCIDS
+        ADD HL,DE
+        LD E,(HL)
+        INC HL
+        LD D,(HL)
+        LD (SCID),DE
+        LD A,C
+        LD (SCRECDST),A
+        LD L,A
+        LD H,0
+        ADD HL,HL
+        LD DE,SCLOCIDS
+        ADD HL,DE
+        LD DE,(SCID)
+        LD (HL),E
+        INC HL
+        LD (HL),D
+        LD A,C
+        LD L,A
+        LD H,0
+        LD DE,SCLOCSLT
+        ADD HL,DE
+        LD A,(SCRCSLOT)
+        LD (HL),A
+        INC C
+SCRTNEXT:
+        LD A,(SCRECSRC)
+        INC A
+        LD B,A
+        JR SCRTLOOP
+SCRTDONE:
+        LD A,C
+        LD (SCLOCTOP),A
+        LD E,A
+        LD A,(SCRECO)
+        CP E
+        RET NZ
+        LD A,(SCRECN)
+        LD (SCLNEXT),A
+        RET
+
 ; Restore one enclosing lambda frame from the compiler-side frame table.
 SCUNWIND:
         LD A,(SCBDEP)              ; A zero depth means no frame can be restored.
@@ -327,12 +454,15 @@ SCUNWIND:
         ADD HL,DE
         LD DE,SCBFRAME
         ADD HL,DE
-        LD A,(HL)                  ; Restore the active local directory extent.
-        LD (SCLOCTOP),A
+        LD A,(HL)                  ; Save the enclosing active-directory extent.
+        LD (SCRECO),A
         INC HL
-        LD A,(HL)                  ; Restore the reusable slot cursor.
-        LD (SCLNEXT),A
+        LD A,(HL)                  ; Save the enclosing reusable slot cursor.
+        LD (SCRECN),A
         INC HL
+        LD (SCUNPTR),HL            ; Recursive retention uses this frame cursor.
+        CALL SCRETAIN               ; Keep forward cells before restoring the frame.
+        LD HL,(SCUNPTR)
         LD A,(HL)                  ; Restore the enclosing procedure owner.
         LD (SCCURPR),A
         INC HL
@@ -505,6 +635,15 @@ SCMSKBIT:
 ; Emit a descriptor load, fresh-closure allocation and JP over the body.
 ; The descriptor pointer is a kind-two fixup filled after slot layout closes.
 SCPREFX:
+        CALL SCMAKE                ; Build the closure value before the body.
+        RET C                      ; Preserve staged-output or fixup exhaustion.
+        CALL SCJP                  ; Jump over the body during closure creation.
+        LD (SCSKIP),HL             ; Save the jump-over patch for SCPFIN.
+        RET                        ; SCPC now points at the procedure body.
+
+; Emit the descriptor load and fresh closure allocation used by definitions and
+; named let.  The caller decides where to store the value and how to skip code.
+SCMAKE:
         LD A,21H                   ; LD HL,nn loads the immutable descriptor address.
         CALL SCBYTE                ; Append the load opcode.
         RET C                      ; Preserve staged-output exhaustion.
@@ -523,9 +662,7 @@ SCPREFX:
         LD HL,SRTMAKE               ; Runtime allocates a fresh closure object.
         CALL SCCALL                ; The returned value carries tag two.
         RET C                      ; Preserve staged-output exhaustion.
-        CALL SCJP                  ; Jump over the body during closure creation.
-        LD (SCSKIP),HL             ; Save the jump-over patch for SCPFIN.
-        RET                        ; SCPC now points at the procedure body.
+        RET                        ; The generated value is in the runtime registers.
 
 ; Reserve and clear one procedure metadata record.
 SCPNEW:
@@ -624,7 +761,7 @@ SCPFIN:
 
 ; Compile set!, preserving the selected slot while the value expression runs.
 SCSETF:
-        CALL RNEXT                 ; Read the target binding name.
+        CALL SCNEXT                ; Read the target binding name.
         RET C                      ; Preserve source failure.
         CP 5                       ; A mutation target must be an identifier.
         JP NZ,SCDESTSY              ; Reject a literal or nested list target.

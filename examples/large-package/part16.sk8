@@ -14,4 +14,4 @@
 (define state00000000253 1)
 (define state00000000254 1)
 (define state00000000255 256)
-state00000000255
+(begin (write state00000000255) (newline))
