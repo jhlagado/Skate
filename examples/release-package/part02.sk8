@@ -1,0 +1,11 @@
+; Release package definitions 006 through 011.
+; Each part is independent source text so package order is checked.
+; The names are deliberately longer than the compiler's short examples.
+; The final part reads the last definition after all parts are loaded.
+; The compact source remains clear when listed with CP/M TYPE.
+(define state00000000006 "message06_________________________")
+(define state00000000007 "message07_________________________")
+(define state00000000008 "message08_________________________")
+(define state00000000009 "message09_________________________")
+(define state00000000010 "message10_________________________")
+(define state00000000011 "message11_________________________")

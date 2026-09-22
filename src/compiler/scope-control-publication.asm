@@ -187,7 +187,67 @@ SCPENTRY:
         LD (HL),E                  ; Patch the low byte of the CALL operand.
         INC HL                     ; Advance to the high byte.
         LD (HL),D                  ; Complete the runtime entry patch.
+        CALL SCPIMG                 ; Publish the exact end of the loaded image.
         RET                        ; Return with the runtime image ready.
+
+; Patch the runtime's image-end field with the complete executable extent.
+SCPIMG:
+        LD HL,(SCIMGL)              ; SCIMGL includes runtime, code and data.
+        LD DE,SCIMG                 ; Add the staged payload base to that length.
+        ADD HL,DE                  ; HL now names the staged image end.
+        CALL SCABS                 ; Convert the staged end to a COM address.
+        LD (SCTARG),HL             ; Keep the absolute end across the patch address.
+        LD HL,SCIMG+SRTIMGE         ; Locate the runtime's image-end field.
+        LD DE,(SCTARG)             ; Recover the absolute published image end.
+        LD (HL),E                  ; Store the low address byte for page setup.
+        INC HL                     ; Advance to the high address byte.
+        LD (HL),D                  ; Complete the runtime image-end value.
+        CALL SCPROOTS               ; Publish exact global and literal root bounds.
+        RET                        ; The runtime can now derive its first free page.
+
+; Patch the runtime's static root ranges after the complete image is sized.
+; Globals and quoted-list cache cells are four-byte records with absolute
+; addresses; zero-length ranges are represented by equal start and end words.
+SCPROOTS:
+        LD HL,(SCGBASE)
+        CALL SCABS
+        LD (SCTARG),HL
+        LD HL,SCIMG+SRTGBASE
+        CALL SCPROOTW
+        LD HL,(SCGCOUNT)
+        ADD HL,HL
+        ADD HL,HL
+        LD DE,(SCGBASE)
+        ADD HL,DE
+        CALL SCABS
+        LD (SCTARG),HL
+        LD HL,SCIMG+SRTGEND
+        CALL SCPROOTW
+        LD HL,(SCQBASE)
+        CALL SCABS
+        LD (SCTARG),HL
+        LD HL,SCIMG+SRTQROOT
+        CALL SCPROOTW
+        LD A,(SCQCNT)
+        LD L,A
+        LD H,0
+        ADD HL,HL
+        ADD HL,HL
+        LD DE,(SCQBASE)
+        ADD HL,DE
+        CALL SCABS
+        LD (SCTARG),HL
+        LD HL,SCIMG+SRTQENDR
+        CALL SCPROOTW
+        RET
+
+; Store the absolute word held in SCTARG at the staged runtime field in HL.
+SCPROOTW:
+        LD DE,(SCTARG)
+        LD (HL),E
+        INC HL
+        LD (HL),D
+        RET
 
 ; Resolve every four-byte slot fixup recorded by the emitter.
 SCPSLOTS:

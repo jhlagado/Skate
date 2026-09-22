@@ -34,11 +34,26 @@ const compiler = await loadAssembly("src/compiler/scope-control-compiler.asm");
 const provider = await loadAssembly(
   "src/compiler/scope-control-runtime-image.asm",
 );
+const ceilingArgument = Deno.args.find((argument) =>
+  argument.startsWith("--ceiling=")
+);
+const managedCeiling = ceilingArgument === undefined
+  ? 0xc000
+  : Number.parseInt(ceilingArgument.slice("--ceiling=".length), 16);
+assert.ok(
+  Number.isInteger(managedCeiling) && managedCeiling >= 0xb800 &&
+    managedCeiling <= 0xc000 && (managedCeiling & 0xff) === 0,
+  "managed ceiling must be a page-aligned B800H..C000H value",
+);
 assert.equal(compiler.image.base, 0);
 assert.ok(compiler.address("SCMAIN") === 0x0100);
 assert.ok(compiler.address("SCEND") < 0x10000);
 const runtimeLength = provider.image.bytes.length - 0x0100;
 assert.equal(runtimeLength, compiler.address("SRTLEN"));
+const runtimeImage = Uint8Array.from(provider.image.bytes);
+const ceilingAddress = provider.address("SRTHEAPP");
+runtimeImage[ceilingAddress] = managedCeiling & 0xff;
+runtimeImage[ceilingAddress + 1] = managedCeiling >>> 8;
 let disk = installCpm22File(backing, {
   name: "SKATE.COM",
   bytes: compiler.image.bytes.slice(0x0100),
@@ -46,7 +61,7 @@ let disk = installCpm22File(backing, {
 });
 disk = installCpm22File(disk, {
   name: "SKATE.RT",
-  bytes: provider.image.bytes.slice(0x0100),
+  bytes: runtimeImage.slice(0x0100),
   padByte: 0x1a,
 });
 const cases = [
@@ -365,6 +380,7 @@ try {
       compilerBytes: compiler.image.bytes.length - 0x100,
       imageEnd: compiler.image.end,
       runtimeBytes: runtimeLength,
+      managedCeiling,
       cases: cases.map(([name]) => name),
       largestComBytes: Math.max(
         ...measurements.map(({ comBytes }) => comBytes),

@@ -567,6 +567,7 @@ function validateObject(object, com, name) {
       `${name}: non-padding after COM image`,
     );
   }
+  return image.length;
 }
 
 try {
@@ -579,7 +580,15 @@ try {
     const image = machine.export_drive(0);
     const generated = readCpm22File(image, outputName);
     const object = readCpm22File(image, name.replace(".SK8", ".NOB"));
-    validateObject(object, generated, name);
+    const imageLength = validateObject(object, generated, name);
+    const imageEndOffset = provider.address("SRTIMGE") - 0x0100;
+    const publishedImageEnd = generated[imageEndOffset] |
+      generated[imageEndOffset + 1] << 8;
+    assert.equal(
+      publishedImageEnd,
+      0x0100 + imageLength,
+      `${name}: runtime image end was not published from the final image length`,
+    );
     assert.equal(generated[0], 0x31, `${outputName} sets its private stack`);
     if (guard) {
       machine.write_ram(0xce00, new Uint8Array(0x100).fill(0xa5));

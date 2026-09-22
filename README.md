@@ -7,7 +7,7 @@ programs. It is a work in progress aimed at useful Scheme programs on a 64K
 machine, with a small native compiler, a compact runtime and checked CP/M
 publication.
 
-Skate 0.5.6 supports exact signed integers, binary16 numbers, booleans, byte
+Skate 0.5.7 supports exact signed integers, binary16 numbers, booleans, byte
 characters, symbols, strings, quoted data, pairs, lists, `cons`, `car`, `cdr`,
 `pair?`, `null?`, `eq?`, `write`, `display`, `newline`, `write-char`,
 `read-char`, package definitions, lexical `let`, `let*`, `letrec` and named
@@ -46,4 +46,4 @@ deno task measure
 
 The compiler writes checked NOBJ and `.COM` output for use from a CP/M prompt.
 
-See the [release notes](release/v0.5.6/README.md) for examples, sizes and current limitations.
+See the [release notes](release/v0.5.7/README.md) for examples, sizes and current limitations.

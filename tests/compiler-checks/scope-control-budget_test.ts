@@ -20,14 +20,14 @@ Deno.test("scope compiler stays within the transient allocation budget", async (
   assert.equal(budget.localSlotCapacity, 128);
   assert.equal(budget.fixupCapacity, 320);
   assert.equal(budget.symbolCapacity, 320);
-  assert.equal(budget.imageBytes, 17_602);
+  assert.equal(budget.imageBytes, 17_732);
   assert.equal(budget.coreRemaining, SCOPE_CORE_LIMIT - budget.imageBytes);
   assert.equal(
     budget.allocationRemaining,
     SCOPE_ALLOCATION_LIMIT - budget.allocationBytes,
   );
-  assert.equal(budget.stagedOutputLimit, 14_336);
+  assert.equal(budget.stagedOutputLimit, 16_384);
   assert.equal(budget.fixedTableBytes, 18_432);
-  assert.equal(budget.allocationBytes, 52_418);
+  assert.equal(budget.allocationBytes, 54_596);
   assert.match(renderScopeControlBudget(budget), /256 globals/);
 });

@@ -146,8 +146,12 @@ SCUNS:
         XOR A                      ; Tag zero identifies immediate values.
         JP SCBYTE                  ; Append the tag and return.
 
-; Emit PUSH AF followed by PUSH HL for the value currently in registers.
+; Record the value before emitting PUSH AF/PUSH HL.  The runtime collector
+; uses the parallel records while a nested allocation is in progress.
 SCPUSH:
+        LD HL,SRTNROOT             ; Keep this operand visible across a GC.
+        CALL SCCALL
+        RET C
         LD A,0F5H                 ; PUSH AF saves the value tag and flags.
         CALL SCBYTE               ; Append the tag push.
         RET C                     ; Preserve a staged-output capacity failure.
@@ -160,7 +164,10 @@ SCPOP:
         CALL SCBYTE               ; Append the payload pop.
         RET C                     ; Preserve staged-output exhaustion.
         LD A,0F1H                 ; POP AF restores the scalar tag and flags.
-        JP SCBYTE                 ; Append the tag pop and return.
+        CALL SCBYTE
+        RET C
+        LD HL,SRTNPOP1            ; Retire the matching exact-root record.
+        JP SCCALL
 
 ; Emit a clear of a recursive cell before its first initializer runs.
 SCCLEAR:

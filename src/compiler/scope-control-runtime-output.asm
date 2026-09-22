@@ -117,6 +117,19 @@ SRTBOOL:      DB 0                 ; Branch decision retained while restoring A.
 SRTOP:        DB 0                 ; Selected checked arithmetic operation.
 SRTPID:       DB 0                 ; Predefined primitive kind for the active call.
 SRTARGC:      DB 0                 ; Number of values in the current call packet.
+SRTNCT:       DB 0                 ; Number of generated operands not yet consumed.
+; The exact-root operand table and allocation maps use a fixed work band
+; outside the provider image.  The page domain ends its low band before 9000H,
+; skips this band through B800H and manages B800H..C000H.
+SRTNRTAB:     EQU 0A200H           ; Four-byte exact roots for up to 255 operands.
+SRTNRVAL:     DW 0                 ; Shadow-root payload staging.
+SRTNRTAG:     DB 0                 ; Shadow-root tag staging.
+; These maps are outside the serialized provider image and occupy the 9000H
+; through B800H work band reserved by the page manager.  Their larger extents
+; cover the full 3000H..C000H address span, including images below 4000H.
+SRTCLBM      EQU 09000H           ; 2304 bytes mark every allocated closure start.
+SRTCLMK      EQU 09900H           ; 2304 bytes mark closures queued in this GC.
+SRTBMB       EQU 0A600H           ; 4608 bytes mark every allocated binding start.
 SRTNLEFT:     DB 0                 ; Remaining values in an arithmetic or compare fold.
 SRTNACCT:     DB 0                 ; Accumulator tag for a variadic numeric fold.
 SRTNTAG:      DB 0                 ; Current packet value tag during numeric work.
@@ -129,12 +142,17 @@ SRTLCP:       DW 0                 ; Packet cursor for the list builder.
 SRTATMP:      DB 0                 ; Temporary tag while packing one argument.
 SRTVAL:       DW 0                 ; Temporary payload while packing one argument.
 SRTDESC:      DW 0                 ; Descriptor for the active procedure call.
+SRTCDESC:     DW 0                 ; Descriptor belonging to the caller frame.
+SRTFRMD:      DW 0                 ; Descriptor paired with the current frame map.
+SRTCLPTR:     DW 0                 ; Binding pointer held across closure tracing.
+SRTFRAME:     DW 0                 ; Active map base, zero while a frame is forming.
 SRTOBJ:       DW 0                 ; Closure object currently being entered.
 SRTENV:       DW 0                 ; Pointer array for the active procedure.
 SRTCENV:      DW 0                 ; Caller environment restored at return.
+SRTCENVN:     DB 0                 ; Active caller-map slot count for exact roots.
 SRTNEWD:      DW 0                 ; Descriptor being copied into a closure.
 SRTNENV:    DW 0                 ; Destination map during closure creation.
-SRTHEAPP:     DW SRTHEAP           ; Bump cursor for closure cells and objects.
+SRTHEAPP:     DW SRTHEPEN          ; Exclusive end of the closure/binding pool.
 SRTBYTES:     DW 0                 ; Pointer-map byte count for the active shape.
 SRTOLDSP:     DW 0                 ; Stack boundary before an activation map.
 SRTLOWSP:     DW 0E000H            ; Lowest native stack boundary observed.
@@ -151,7 +169,15 @@ SRTMASKN:     DB 0                 ; Capture-mask bytes left in a tail transfer.
 SRTBITN:      DB 0                 ; Capture-mask bits left in the current byte.
 SRTSLOTI:     DB 0                 ; Slot number represented by the mask cursor.
 SRTSLOTS:     DB 0                 ; Number of pointer slots in the current shape.
+SRTCSLOT:     DB 0                 ; Slot count used only while making a closure.
+SRTCLSZ:      DW 0                 ; Rounded closure extent for allocation and sweep.
+SRTCLIDX:     DB 0                 ; Four-byte size-class index for the active closure.
 SRTCURS:      DB 0                 ; Pointer-slot extent of the current frame.
+SRTIMGE:      DW 0                 ; Absolute end of the published runtime image.
+SRTGBASE:     DW 0                 ; Absolute start of published global records.
+SRTGEND:      DW 0                 ; Exclusive end of published global records.
+SRTQROOT:     DW 0                 ; Absolute start of quoted-list cache records.
+SRTQENDR:     DW 0                 ; Exclusive end of quoted-list cache records.
 SRTARGPK:     DS 32                ; Eight four-byte argument records.
 SRTOPS:       DW SRTOPB        ; Operator side-stack cursor between heap and guard.
 SRTBUF:   DS 32                ; Decimal output buffer terminated for BDOS function 9.

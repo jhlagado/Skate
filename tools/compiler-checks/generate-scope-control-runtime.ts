@@ -52,6 +52,9 @@ const values = [
   `SRTOTAIL EQU ${address("SRTOTAIL")}`,
   `SRTOTCL EQU ${address("SRTOTCL")}`,
   `SRTOPUSH EQU ${address("SRTOPUSH")}`,
+  `SRTNROOT EQU ${address("SRTNROOT")}`,
+  `SRTNPOPB EQU ${address("SRTNPOPB")}`,
+  `SRTNPOP1 EQU ${address("SRTNPOP1")}`,
   `SRTTAIL EQU ${address("SRTTAIL")}`,
   `SRTTCALL EQU ${address("SRTTCALL")}`,
   `SRTLOADI EQU ${address("SRTLOADI")}`,
@@ -60,6 +63,11 @@ const values = [
   `SRTCLRI EQU ${address("SRTCLRI")}`,
   `SRTCLRS EQU ${address("SRTCLRS")}`,
   `SRTHEP EQU ${address("SRTHEAPP")}`,
+  `SRTIMGE EQU ${offset("SRTIMGE")}`,
+  `SRTGBASE EQU ${offset("SRTGBASE")}`,
+  `SRTGEND EQU ${offset("SRTGEND")}`,
+  `SRTQROOT EQU ${offset("SRTQROOT")}`,
+  `SRTQENDR EQU ${offset("SRTQENDR")}`,
   `SRTLOW EQU ${address("SRTLOWSP")}`,
   `SRTZERO EQU ${address("SRTZERO")}`,
   `SRTPRI EQU ${address("SRTPRINT")}`,
@@ -75,8 +83,8 @@ const lines = [
   "; Runtime image generated from scope-control-runtime-image.asm.",
   "SRTIMAGE:",
 ];
-for (let index = 0; index < payload.length; index += 16) {
-  const bytes = [...payload.slice(index, index + 16)].map((byte) =>
+for (let index = 0; index < payload.length; index += 32) {
+  const bytes = [...payload.slice(index, index + 32)].map((byte) =>
     `$${byte.toString(16).padStart(2, "0")}`
   );
   lines.push(`        DB ${bytes.join(",")}`);

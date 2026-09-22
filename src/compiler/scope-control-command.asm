@@ -10,7 +10,7 @@
 ;=============================================================================
 
 ; The generated image and compiler tables occupy disjoint high TPA regions.
-SCSTAGE EQU 05800H               ; Object staging uses the free gap above the image.
+SCSTAGE EQU 05000H               ; Object staging uses the measured gap above the image.
 SCIMG   EQU SCSTAGE+79           ; NOBJ image payload begins after its header.
 SCCODE  EQU SCIMG+SRTLEN         ; Generated program follows the runtime image.
 SCEND   EQU 09000H               ; The staged image ends exactly before compiler tables.

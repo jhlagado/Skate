@@ -22,13 +22,13 @@ const triptychRoot = fileURLToPath(
   new URL("../../../triptych/", import.meta.url),
 );
 const require = createRequire(import.meta.url);
-const { TriptychCpu } = require(
+const { CpmDisk, TriptychCpu } = require(
   join(triptychRoot, "dist", "wasm", "triptych_host_wasm.js"),
 );
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("ascii");
-const sourceRoot = join(skateRoot, "examples", "large-package");
+const sourceRoot = join(skateRoot, "examples", "release-package");
 const partNames = Array.from(
   { length: 16 },
   (_, index) => `PART${String(index + 1).padStart(2, "0")}.SK8`,
@@ -110,6 +110,7 @@ function validateObject(object, com, name) {
       `${name}: non-padding after COM image`,
     );
   }
+  return { imageBytes: image.length, objectBytes: object.length };
 }
 
 function directoryFiles(image) {
@@ -215,6 +216,104 @@ async function addSources(disk) {
   return result;
 }
 
+async function cpmText(path) {
+  const text = await Deno.readTextFile(path);
+  return encoder.encode(text.replace(/\r?\n/g, "\r\n"));
+}
+
+/** Build and mount the exact two-MiB filesystem used by the Triptych profile. */
+async function buildHostedReleaseImage(
+  sourceDisk,
+  compilerBytes,
+  runtimeImage,
+) {
+  const qualified = {
+    system: await Deno.readFile(
+      join(
+        triptychRoot,
+        "dist",
+        "wasm-browser",
+        "system-triptych-cpm-2m-n04-v1.bin",
+      ),
+    ),
+    bootstrap: await Deno.readFile(
+      join(
+        triptychRoot,
+        "dist",
+        "wasm-browser",
+        "bootstrap-triptych-cpm-2m-n04-v1.bin",
+      ),
+    ),
+    descriptor: { residentProfile: "triptych-cpu-v0.1-2m-n04" },
+  };
+  assert.equal(qualified.system.length, 16384);
+  assert.equal(qualified.bootstrap.length, 256);
+  assert.equal(
+    sha256(qualified.system),
+    "61dd21e3f89be888e3530ec3b414691c343f7ad2c29aa15fac4ff2510c3a5a3e",
+  );
+  assert.equal(
+    sha256(qualified.bootstrap),
+    "54c6bfd356b4b42f8c51f3b85777a9d2be7aa680945335783c4dd7a6dae8921e",
+  );
+  const files = [
+    { name: "SKATE.COM", bytes: Uint8Array.from(compilerBytes) },
+    { name: "SKATE.RT", bytes: Uint8Array.from(runtimeImage) },
+    { name: "EDIT.COM", bytes: readCpm22File(sourceDisk, "EDIT.COM") },
+    {
+      name: "README.TXT",
+      bytes: await cpmText(
+        join(skateRoot, "examples", "applications", "readme.txt"),
+      ),
+    },
+  ];
+  for (
+    const name of ["account.sk8", "adventur.sk8", "receipt.sk8", "route.sk8"]
+  ) {
+    files.push({
+      name: name.toUpperCase(),
+      bytes: await cpmText(join(skateRoot, "examples", "applications", name)),
+    });
+  }
+  files.push({
+    name: releaseManifest,
+    bytes: await Deno.readFile(join(sourceRoot, "release.skm")),
+  });
+  for (const name of partNames) {
+    files.push({
+      name,
+      bytes: await Deno.readFile(join(sourceRoot, name.toLowerCase())),
+    });
+  }
+
+  const disk = CpmDisk.create_two_mib();
+  try {
+    for (const file of files) disk.add_import(file.name, file.bytes);
+    const image = Uint8Array.from(disk.export_candidate());
+    assert.equal(image.length, 2 * 1024 * 1024);
+    image.set(qualified.system, 0);
+    const mounted = new CpmDisk(image);
+    try {
+      assert.equal(mounted.geometry_id(), "triptych-cpm-2m-v1");
+      assert.deepEqual(
+        mounted.file_names().sort(),
+        files.map(({ name }) => CpmDisk.canonical_name(name)).sort(),
+      );
+      return {
+        image,
+        qualified,
+        files,
+        freeBytes: mounted.free_bytes(),
+        freeDirectoryEntries: mounted.free_directory_entries(),
+      };
+    } finally {
+      mounted.free();
+    }
+  } finally {
+    disk.free();
+  }
+}
+
 const firmware = await assembleTriptychCpuFirmware(triptychRoot);
 const sourceDisk = await Deno.readFile(
   join(triptychRoot, "third_party", "cpm22", "cpm22.img"),
@@ -269,9 +368,9 @@ try {
   const com = readCpm22File(stableImage, "RELEASE.COM");
   const objectPhysical = readCpm22File(stableImage, "RELEASE.NOB");
   const object = committedObject(objectPhysical, "RELEASE.NOB");
-  validateObject(object, com, "RELEASE.NOB");
+  const objectLengths = validateObject(object, com, "RELEASE.NOB");
   assert.equal(com[0], 0x31, "generated program did not set its private stack");
-  const run = first.command("RELEASE", "256\r\n", "run the release program");
+  const run = first.command("RELEASE", "95\r\n", "run the release program");
   const lowSp = readWord(machine, lowStackAddress);
   const heapEnd = readWord(machine, heapPointerAddress);
   assert.ok(lowSp >= 0xd400, "generated program crossed the stack guard");
@@ -280,7 +379,9 @@ try {
   records.initial = {
     sourceBytes: sourceTotal,
     comBytes: com.length,
+    comImageBytes: objectLengths.imageBytes,
     nobjBytes: objectPhysical.length,
+    nobjCommittedBytes: objectLengths.objectBytes,
     compile,
     run,
     lowSp,
@@ -295,7 +396,7 @@ try {
   remounted.boot();
   records.remount = remounted.command(
     "RELEASE",
-    "256\r\n",
+    "95\r\n",
     "run the release program after remount",
   );
 
@@ -368,7 +469,7 @@ try {
   reopened.boot();
   records.reopened = reopened.command(
     "RELEASE",
-    "256\r\n",
+    "95\r\n",
     "run the preserved release after remount",
   );
   stableImage = reopenedImage;
@@ -376,10 +477,47 @@ try {
   machine.free();
 }
 
+let publishedImage = null;
+let hostedRecords = null;
 if (imagePath) {
   assert.ok(releaseImage, "release image was not produced");
   await Deno.mkdir(dirname(imagePath), { recursive: true });
-  await Deno.writeFile(imagePath, releaseImage);
+  const hosted = await buildHostedReleaseImage(
+    sourceDisk,
+    compilerBytes,
+    runtimeImage,
+  );
+  const hostedMachine = newMachine(
+    { bootRom: hosted.qualified.bootstrap },
+    hosted.image,
+  );
+  try {
+    const hostedSession = session(hostedMachine);
+    hostedSession.boot();
+    const compile = hostedSession.command(
+      `SKATE ${releaseManifest}`,
+      "COMPILED\r\n",
+      "compile the hosted release source",
+    );
+    const run = hostedSession.command(
+      "RELEASE",
+      "95\r\n",
+      "run the hosted release program",
+    );
+    hostedRecords = {
+      profile: hosted.qualified.descriptor.residentProfile,
+      geometry: "triptych-cpm-2m-v1",
+      files: hosted.files.map(({ name }) => name),
+      freeBytes: hosted.freeBytes,
+      freeDirectoryEntries: hosted.freeDirectoryEntries,
+      compile,
+      run,
+    };
+  } finally {
+    hostedMachine.free();
+  }
+  publishedImage = hosted.image;
+  await Deno.writeFile(imagePath, publishedImage);
 }
 
 console.log(JSON.stringify(
@@ -389,15 +527,17 @@ console.log(JSON.stringify(
     runtimeBytes: runtimeLength,
     sourceBytes: sourceTotal,
     outputBytes: records.initial.comBytes,
+    outputImageBytes: records.initial.comImageBytes,
     objectBytes: records.initial.nobjBytes,
+    objectCommittedBytes: records.initial.nobjCommittedBytes,
     disk: diskStats(stableImage),
     ...(imagePath
       ? {
         image: {
           path: imagePath,
-          bytes: releaseImage.length,
-          sha256: sha256(releaseImage),
-          disk: diskStats(releaseImage),
+          bytes: publishedImage.length,
+          sha256: sha256(publishedImage),
+          guestRecords: hostedRecords,
         },
       }
       : {}),

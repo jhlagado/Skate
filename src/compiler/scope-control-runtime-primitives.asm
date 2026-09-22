@@ -38,6 +38,11 @@ SRTPKGL:
         DJNZ SRTPKGL
 SRTPKGZ:
         CALL SRTOPPOP            ; Recover the value evaluated before arguments.
+        LD (SRTATMP),A
+        LD A,(SRTARGC)           ; Arguments have been copied out of the native stack.
+        LD B,A
+        CALL SRTNPOPB
+        LD A,(SRTATMP)
         PUSH IX                  ; Restore the SRTPACKO helper return address.
         RET
 
@@ -93,6 +98,8 @@ SRTOPPOP:
 ; normal application continuation or the current procedure epilogue. Packet
 ; values are read directly so a primitive call adds no argument stack frame.
 SRTPRIM:
+        LD (SRTRET),IX              ; Every packet result returns through the clearer.
+        LD IX,SRTPKRET              ; The clearer removes the packet roots first.
         LD A,(SRTPID)              ; Kinds zero through three are numeric primitives.
         CP 4
         JP C,SRTPNUM               ; +, -, *, and zero? share numeric validation.
@@ -110,6 +117,18 @@ SRTPRIM:
         CP 32
         JP C,SRTPNUM                 ; Division is zero-based runtime kind thirty-one.
         JP SRTERROR                ; The reserved range has no other services.
+
+; Primitive paths use PUSH IX/RET, so one common continuation can retire the
+; packet after the operation has finished and any constructor GC has returned.
+SRTPKRET:
+        LD (SRTATMP),A
+        LD (SRTVAL),HL
+        XOR A
+        LD (SRTARGC),A
+        LD A,(SRTATMP)
+        LD HL,(SRTVAL)
+        LD IX,(SRTRET)
+        JP (IX)
 
 ; Validate one logical numeric value. Tag three is exact integer; tag zero is
 ; binary16 except for the reserved booleans, sentinels and primitive values.

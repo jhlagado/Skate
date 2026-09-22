@@ -1,9 +1,10 @@
 ; Pair, quoted-list and literal output services for the generated runtime.
 ;
-; Pair cells are fixed eight-byte records in the separately collected arena:
-; state, CAR payload/tag, CDR payload/tag, and one reserved byte.  Logical pair
-; values use tag one and the record address as their payload.  Symbols and
-; strings use tags four and five and point at a length-prefixed output literal.
+; Pair slabs contain 51 five-byte records.  A record stores the CAR payload,
+; CDR payload and one packed byte: three bits for each value tag, one allocated
+; bit and one mark bit.  Logical pair values use tag one and the record address
+; as their payload.  Symbols and strings use tags four and five and point at a
+; length-prefixed output literal.
 
 ; Save one value on the quoted-data stack.
 SRTQPUT:
@@ -57,6 +58,8 @@ SRTQPOP:
 ; Fold the values on the quoted-data stack into a proper or dotted list.
 SRTQBLD:
         LD (SRTQNR),A              ; A counts heads plus the optional tail.
+        LD A,1
+        LD (SRTQACTV),A            ; The accumulator remains live across cons GC.
         LD A,B
         LD (SRTQDOTR),A            ; B is nonzero for a dotted tail.
         OR A
@@ -94,207 +97,165 @@ SRTQLP:
 SRTQDONE:
         LD A,(SRTQATAG)
         LD HL,(SRTQAVAL)
-        RET
-
-; Construct a pair from the two scratch values used by both cons and lists.
-SRTCONS:
-        POP IX                     ; Preserve the generated continuation.
-        POP DE                     ; Recover the CDR payload.
-        POP BC                     ; Recover the CDR tag in B.
-        POP HL                     ; Recover the CAR payload.
-        POP AF                     ; Recover the CAR tag in A.
-        LD (SRTQCDR),DE
-        LD (SRTQCTAG),A
-        LD A,B
-        LD (SRTQDTAG),A
-        LD (SRTQCAR),HL
-        CALL SRTMAKEP
-        PUSH IX
-        RET
-
-; Allocate, initialise and return one pair cell.
-SRTMAKEP:
-        CALL SRTFINDP
-        JR NC,SRTPINIT
-        CALL SRTGC                  ; Reclaim unreachable cells when full.
-        CALL SRTFINDP
-        JP C,SRTERROR
-SRTPINIT:
-        LD (SRTQPAIR),HL
-        LD DE,(SRTQCAR)
-        INC HL
-        LD (HL),E
-        INC HL
-        LD (HL),D
-        INC HL
-        LD A,(SRTQCTAG)
-        LD (HL),A
-        INC HL
-        LD DE,(SRTQCDR)
-        LD (HL),E
-        INC HL
-        LD (HL),D
-        INC HL
-        LD A,(SRTQDTAG)
-        LD (HL),A
-        LD HL,(SRTQPAIR)
-        LD A,1
-        RET
-
-; Find and reserve a free pair record.
-SRTFINDP:
-        LD HL,SRTPAIRB
-        LD BC,1024
-SRTFPLP:
-        LD A,(HL)
-        OR A
-        JR Z,SRTFPGET
-        LD DE,8
-        ADD HL,DE
-        DEC BC
-        LD A,B
-        OR C
-        JR NZ,SRTFPLP
-        SCF
-        RET
-SRTFPGET:
-        LD (HL),1
         XOR A
+        LD (SRTQACTV),A            ; The returned value is now held by its caller.
+        LD A,(SRTQATAG)
         RET
 
-; Check A:HL and return carry clear only for a live pair pointer.
-SRTPCHK:
-        CP 1
-        JR NZ,SRTNPAIR
-        LD A,H
-        CP 0A0H
-        JR C,SRTNPAIR
-        CP 0C0H
-        JR NC,SRTNPAIR
-        LD A,L
-        AND 7
-        JR NZ,SRTNPAIR
-        LD A,(HL)
-        OR A
-        JR Z,SRTNPAIR
+
+
+; Stop-the-world mark-and-sweep for every five-byte pair slab.  Root discovery
+; is exact: compiler-patched static records, active value stacks, frames and
+; construction scratch are visited by type rather than by byte pattern.
+SRTGC:
+        CALL SRTPCLE                ; Clear only mark bits from the last cycle.
+        CALL SRTCLCLR               ; Start this collection with an empty mark map.
+        LD HL,SRTMKBS               ; Restart the bounded pair worklist.
+        LD (SRTMSTK),HL             ; The next mark is written at its base.
         XOR A
-        RET
-SRTNPAIR:
-        SCF
-        RET
-
-; car and cdr selectors.
-SRTCAR:
-        POP IX
-        POP HL
-        POP AF
-        CALL SRTCARV
-        JP C,SRTERROR
-        PUSH IX
-        RET
-
-SRTCARV:
-        LD (SRTQAVAL),HL
-        LD (SRTQATAG),A
-        CALL SRTPCHK
-        RET C
-        LD HL,(SRTQAVAL)
-        INC HL
-        LD E,(HL)
-        INC HL
-        LD D,(HL)
-        INC HL
-        LD A,(HL)
-        EX DE,HL
-        RET
-SRTCDR:
-        POP IX
-        POP HL
-        POP AF
-        CALL SRTCDRV
-        JP C,SRTERROR
-        PUSH IX
+        LD (SRTMOVER),A             ; No queue overflow has occurred yet.
+        LD (SRTMNEW),A              ; Clear the fallback pass indicator.
+        CALL SRTROOTS               ; Visit only declared live value locations.
+        CALL SRTDRAIN               ; Process every queued object before overflow checks.
+        LD A,(SRTMOVER)
+        OR A
+        JR Z,SRTSWEEP               ; A complete queue has visited every reachable edge.
+SRTGFIX:
+        XOR A
+        LD (SRTMNEW),A              ; Report only marks created by this fallback pass.
+        CALL SRTFSCRN               ; Visit every marked pair to recover missed edges.
+        CALL SRTCLSCR               ; Visit every marked closure without recursion.
+        CALL SRTDRAIN               ; Process entries found by the fallback scan.
+        LD A,(SRTMNEW)
+        OR A
+        JR NZ,SRTGFIX               ; Continue until a fixed point is reached.
+SRTSWEEP:
+        CALL SRTBSW                 ; Reclaim dead three-byte bindings.
+        CALL SRTCLSW                ; Reclaim dead rounded closure blocks.
+        CALL SRTPSW                ; Rebuild free records and clear surviving marks.
         RET
 
-SRTCDRV:
-        LD (SRTQAVAL),HL
-        LD (SRTQATAG),A
-        CALL SRTPCHK
-        RET C
-        LD HL,(SRTQAVAL)
+; Mark the two typed inputs held across an allocation retry.  These roots use
+; their own storage because the ordinary pair tracing scratch is overwritten
+; while a queued pair is being inspected.
+SRTCRMK:
+        LD A,(SRTCRON)
+        OR A
+        RET Z
+        LD A,(SRTCRCTA)
+        LD HL,(SRTCRCAR)
+        CALL SRTMVALU
+SRTCRCD:
+        LD A,(SRTCRDTA)
+        LD HL,(SRTCRCDR)
+        JP SRTMVALU
+
+; Clear mark bits in every allocated or free record before tracing.
+SRTPCLE:
+        LD A,(SRTPSLBN)
+        OR A
+        RET Z
+        LD B,A                      ; B counts the pair slabs.
+        LD HL,SRTPSLT
+SRTPCLAB:
+        LD A,(HL)                  ; A zero page byte denotes a released descriptor.
+        OR A
+        JR Z,SRTPCLSK               ; Skip holes without scanning address zero.
+        LD D,A                     ; Read the page number; its low address byte is zero.
+        LD E,0
+        INC HL
+        INC HL                      ; Skip the next-list and free-head fields.
+        INC HL
+        LD (SRTPSST),HL
+        LD (SRTPSBA),DE
+        LD (SRTPSCAN),DE
+        LD C,51                     ; Each page contains 51 five-byte records.
+SRTPCLP:
+        LD HL,(SRTPSCAN)
         LD DE,4
         ADD HL,DE
-        LD E,(HL)
-        INC HL
-        LD D,(HL)
-        INC HL
         LD A,(HL)
-        EX DE,HL
-        RET
-
-; Return booleans for pair? and null?.
-SRTPAIRP:
-        POP IX
-        POP HL
-        POP AF
-        CALL SRTPCHK
-        JR C,SRTFPALS
-        XOR A
-        LD HL,0FE01H
-        PUSH IX
-        RET
-SRTFPALS:
-        XOR A
-        LD HL,0FE00H
-        PUSH IX
-        RET
-SRTNULLP:
-        POP IX
-        POP HL
-        POP AF
-        OR A
-        JR NZ,SRTFPALS
-        LD DE,0FE02H
-        OR A
-        SBC HL,DE
-        JR NZ,SRTFPALS
-        XOR A
-        LD HL,0FE01H
-        PUSH IX
-        RET
-
-; Conservative mark-and-sweep for the pair arena.  Every live pair pointer
-; found outside the arena is treated as a root, which preserves safety when a
-; value is temporarily held in a generated stack frame.
-SRTGC:
-        LD HL,SRTPAIRB
-        LD BC,1024
-SRTGCLR:
-        LD A,(HL)
-        CP 2
-        JR NZ,SRTGCNX
-        LD (HL),1
-SRTGCNX:
-        LD DE,8
+        AND 7FH                     ; Preserve tags and allocation, clear marking.
+        LD (HL),A
+        LD HL,(SRTPSCAN)
+        LD DE,5
         ADD HL,DE
-        DEC BC
-        LD A,B
-        OR C
-        JR NZ,SRTGCLR
-        LD HL,SRTMKBS
-        LD (SRTMSTK),HL
-        LD HL,0100H
-        LD DE,0A000H
-        CALL SRTSCAN
-        LD HL,0C000H
-        LD DE,0E000H
-        CALL SRTSCAN
-SRTGWORK:
+        LD (SRTPSCAN),HL
+        DEC C
+        JR NZ,SRTPCLP
+        LD HL,(SRTPSST)
+        DJNZ SRTPCLAB
+        RET
+SRTPCLSK:
+        LD DE,3                     ; Advance over a released descriptor slot.
+        ADD HL,DE
+        DJNZ SRTPCLAB
+        RET
+
+; Sweep all pair slabs.  Dead records become zero-state records; live records
+; retain their tags and allocation bit but lose the mark bit.
+SRTPSW:
+        LD A,(SRTPSLBN)
+        OR A
+        RET Z
+        LD B,A
+        LD HL,SRTPSLT
+SRTPSWL:
+        LD A,(HL)                  ; A zero page byte denotes a released descriptor.
+        OR A
+        JR Z,SRTPSWSK               ; Skip holes without sweeping address zero.
+        LD D,A                     ; Read the page number; its low address byte is zero.
+        LD E,0
+        INC HL
+        INC HL                      ; Skip the next-list and free-head fields.
+        INC HL
+        LD (SRTPSST),HL
+        LD (SRTPSBA),DE
+        LD (SRTPSCAN),DE
+        LD C,51
+SRTPSWLP:
+        LD HL,(SRTPSCAN)
+        LD DE,4
+        ADD HL,DE
+        LD A,(HL)
+        AND 40H                     ; An unallocated record is already dead.
+        JR Z,SRTPSWF
+        LD A,(HL)
+        AND 80H                     ; A marked allocation remains reachable.
+        JR NZ,SRTPSWV
+SRTPSWF:
+        XOR A                       ; Clear stale tags and both ownership bits.
+        LD (HL),A
+        JR SRTPSWN
+SRTPSWV:
+        LD A,(HL)
+        AND 7FH                     ; Keep the live record allocated for reuse.
+        LD (HL),A
+SRTPSWN:
+        LD HL,(SRTPSCAN)
+        LD DE,5
+        ADD HL,DE
+        LD (SRTPSCAN),HL
+        DEC C
+        JR NZ,SRTPSWLP
+        LD HL,(SRTPSST)
+        DJNZ SRTPSWL
+        CALL SRTPSRB                ; Rebuild links after dead records were cleared.
+        RET
+SRTPSWSK:
+        LD DE,3                     ; Advance over a released descriptor slot.
+        ADD HL,DE
+        DJNZ SRTPSWL
+        CALL SRTPSRB
+        RET
+
+; Drain the bounded worklist.  A full queue is handled by the fallback scan.
+SRTDRAIN:
         LD HL,(SRTMSTK)
         LD DE,SRTMKBS
         OR A
         SBC HL,DE
-        JR Z,SRTGSWEP
+        RET Z
         LD HL,(SRTMSTK)
         LD DE,2
         OR A
@@ -304,37 +265,93 @@ SRTGWORK:
         INC HL
         LD D,(HL)
         EX DE,HL
+        ; The shared pool no longer assigns closures a fixed address band.
+        ; Consult the exact closure-start map instead of guessing from H.
+        LD (SRTCLOBJ),HL
+        PUSH HL
+        CALL SRTCLSTA
+        POP HL
+        JR Z,SRTDPAIR
+        CALL SRTMCLOS
+        JR SRTDRAIN
+SRTDPAIR:
         LD A,1
         CALL SRTMARKV
-        JR SRTGWORK
-SRTGSWEP:
-        LD HL,SRTPAIRB
-        LD BC,1024
-SRTGSLP:
-        LD A,(HL)
-        CP 2
-        JR NZ,SRTGSN
-        LD (HL),1
-        JR SRTGSN2
-SRTGSN:
-        XOR A
-        LD (HL),A
-SRTGSN2:
-        LD DE,8
+        JR SRTDRAIN
+
+; Scan every marked pair after the bounded queue has overflowed.  Repeated
+; passes compute the same fixed point as an unbounded worklist.
+SRTFSCRN:
+        LD A,(SRTPSLBN)
+        OR A
+        RET Z
+        LD B,A
+        LD HL,SRTPSLT
+SRTGFS:
+        LD A,(HL)                  ; A zero page byte denotes a released descriptor.
+        OR A
+        JR Z,SRTGFSK               ; Skip holes without scanning address zero.
+        LD D,A                     ; Read the page number; its low address byte is zero.
+        LD E,0
+        INC HL
+        INC HL                      ; Skip the next-list and free-head fields.
+        INC HL
+        LD (SRTPSST),HL
+        LD (SRTPSBA),DE
+        LD (SRTPSCAN),DE
+        LD C,51
+SRTGFSLP:
+        LD HL,(SRTPSCAN)
+        LD DE,4
         ADD HL,DE
-        DEC BC
-        LD A,B
-        OR C
-        JR NZ,SRTGSLP
+        LD A,(HL)
+        AND 80H                     ; Only marked records need another visit.
+        JR Z,SRTGFSN
+        LD DE,(SRTPSST)             ; Preserve the fallback cursor across validation.
+        LD (SRTFSST),DE
+        LD DE,(SRTPSBA)
+        LD (SRTFSBA),DE
+        LD DE,(SRTPSCAN)
+        LD (SRTFSCAN),DE
+        PUSH BC                     ; Preserve both slab and record counters.
+        PUSH HL                     ; Preserve the record address across tracing.
+        LD HL,(SRTPSCAN)
+        CALL SRTMARKV               ; The queued value is the record start.
+        POP HL
+        POP BC
+        LD DE,(SRTFSST)             ; Restore the slab cursor changed by SRTPCHK.
+        LD (SRTPSST),DE
+        LD DE,(SRTFSBA)
+        LD (SRTPSBA),DE
+        LD DE,(SRTFSCAN)
+        LD (SRTPSCAN),DE
+SRTGFSN:
+        LD HL,(SRTPSCAN)
+        LD DE,5
+        ADD HL,DE
+        LD (SRTPSCAN),HL
+        DEC C
+        JR NZ,SRTGFSLP
+        LD HL,(SRTPSST)
+        DJNZ SRTGFS
+        RET
+SRTGFSK:
+        LD DE,3                     ; Advance over a released descriptor slot.
+        ADD HL,DE
+        DJNZ SRTGFS
         RET
 
 ; Scan a half-open byte range for the three-byte pattern payload,tag-one.
+; The cursor may stop at end-3, but never at either of the two positions
+; whose payload or tag byte would lie beyond the declared range.
 SRTSCAN:
         LD (SRTSCP),HL
         LD (SRTSCE),DE
 SRTSCLP:
         LD HL,(SRTSCP)
         LD DE,(SRTSCE)
+        LD BC,2
+        ADD HL,BC
         OR A
         SBC HL,DE
         JR NC,SRTSCEND
@@ -358,22 +375,28 @@ SRTSCEND:
 
 ; Mark one pair and queue it for child scanning.
 SRTMARK:
-        LD A,H
-        CP 0A0H
+        LD A,1                      ; Validate the candidate as a pair value.
+        CALL SRTPCHK
         RET C
-        CP 0C0H
-        RET NC
-        LD A,L
-        AND 7
+        LD HL,(SRTPSAD)             ; Recover the validated record address.
+        LD DE,4
+        ADD HL,DE
+        LD A,(HL)
+        AND 40H                     ; A swept or never-published record is ignored.
+        RET Z
+        LD A,(HL)
+        AND 80H                     ; Already marked records are already queued.
         RET NZ
         LD A,(HL)
-        CP 1
-        RET NZ
-        LD (HL),2
+        OR 80H                      ; Set the mark bit without changing tags/allocation.
+        LD (HL),A
+        LD A,1
+        LD (SRTMNEW),A             ; This object must be visited by the trace.
+        LD HL,(SRTPSAD)             ; Queue the record address, not its state byte.
         LD DE,(SRTMSTK)
         LD A,D
         CP 0D4H
-        RET NC
+        JR NC,SRTMQOV              ; Preserve the mark and defer its children.
         LD A,L
         LD (DE),A
         INC DE
@@ -382,6 +405,10 @@ SRTMARK:
         INC DE
         LD (SRTMSTK),DE
         RET
+SRTMQOV:
+        LD A,1
+        LD (SRTMOVER),A            ; The fallback scanner will revisit marked pairs.
+        RET
 
 ; Trace the CAR and CDR pair edges of one queued record.
 SRTMARKV:
@@ -389,34 +416,39 @@ SRTMARKV:
         LD A,1
         CALL SRTPCHK
         RET C
-        ; Mark the CAR edge when it is itself a pair.
+        ; Copy both payloads before marking either edge; SRTMARK may use HL/DE.
         LD HL,(SRTMVAL)
+        LD E,(HL)
+        INC HL
+        LD D,(HL)
+        LD (SRTQCAR),DE
+        LD HL,(SRTMVAL)
+        INC HL
         INC HL
         LD E,(HL)
         INC HL
         LD D,(HL)
-        INC HL
-        LD A,(HL)
-        CP 1
-        JR NZ,SRTMVC
-        EX DE,HL
-        CALL SRTMARK                ; Mark CAR, then continue with the CDR edge.
-        JR SRTMVC
-
-SRTMVC:
-        ; The CDR payload begins four bytes after the pair state byte.
+        LD (SRTQCDR),DE
         LD HL,(SRTMVAL)
         LD DE,4
         ADD HL,DE
-        LD E,(HL)
-        INC HL
-        LD D,(HL)
-        INC HL
         LD A,(HL)
-        CP 1
-        RET NZ
-        EX DE,HL
-        JP SRTMARK
+        LD (SRTQFLG),A
+        AND 7                       ; The CAR tag occupies the low three bits.
+        LD (SRTQCTAG),A
+        LD A,(SRTQFLG)
+        SRL A                       ; Shift the CDR tag down from bits three to five.
+        SRL A
+        SRL A
+        AND 7
+        LD (SRTQDTAG),A
+        LD A,(SRTQCTAG)
+        LD HL,(SRTQCAR)
+        CALL SRTMVALU                ; Trace pair or closure CAR values.
+SRTMVC:
+        LD A,(SRTQDTAG)
+        LD HL,(SRTQCDR)
+        JP SRTMVALU
 
 ; Write a value using CP/M function two, including nested pair structure.
 SRTWRVAL:
@@ -542,25 +574,16 @@ SRTWPAIR:
         CALL SRTCH
         POP HL
         PUSH HL                     ; Keep the outer pair while printing its CAR.
-        INC HL
-        LD E,(HL)
-        INC HL
-        LD D,(HL)
-        INC HL
-        LD A,(HL)
-        EX DE,HL
+        LD A,1                       ; The outer value has already selected pair output.
+        CALL SRTCARV                ; Decode the packed CAR field through one helper.
+        JP C,SRTERROR               ; A corrupt pair cannot be printed safely.
         CALL SRTWRVAL
         POP HL
         PUSH HL                     ; Keep the outer pair while inspecting its CDR.
-        LD DE,4
-        ADD HL,DE
-        LD E,(HL)
-        INC HL
-        LD D,(HL)
-        INC HL
-        LD A,(HL)
+        LD A,1                       ; Decode the packed CDR tag and payload together.
+        CALL SRTCDRV
+        JP C,SRTERROR               ; A corrupt pair cannot be printed safely.
         LD (SRTQATAG),A
-        EX DE,HL
         LD (SRTQAVAL),HL
         LD A,(SRTQATAG)
         CP 1
@@ -606,25 +629,16 @@ SRTWCLS:
 ; Print the tail of a proper list without opening another parenthesis.
 SRTWTAIL:
         PUSH HL                     ; Preserve this pair across its CAR output.
-        INC HL
-        LD E,(HL)
-        INC HL
-        LD D,(HL)
-        INC HL
-        LD A,(HL)
-        EX DE,HL
+        LD A,1
+        CALL SRTCARV                ; Read the next CAR from the packed record.
+        JP C,SRTERROR
         CALL SRTWRVAL
         POP HL
         PUSH HL                     ; Preserve this pair while inspecting its CDR.
-        LD DE,4
-        ADD HL,DE
-        LD E,(HL)
-        INC HL
-        LD D,(HL)
-        INC HL
-        LD A,(HL)
+        LD A,1
+        CALL SRTCDRV                ; Read the next CDR and its packed tag.
+        JP C,SRTERROR
         LD (SRTQATAG),A
-        EX DE,HL
         LD (SRTQAVAL),HL
         LD A,(SRTQATAG)
         CP 1
@@ -787,10 +801,75 @@ SRTQAVAL: DW 0
 SRTQPAIR: DW 0
 SRTQCTAG: DB 0
 SRTQDTAG: DB 0
+SRTQFLG:  DB 0                  ; Packed pair flags retained while tracing or printing.
+SRTPTAG:  DB 0                  ; Temporary packed CAR tag during pair construction.
 SRTQATAG: DB 0
 SRTQNR:   DB 0
 SRTQDOTR: DB 0
+SRTQACTV: DB 0                ; Nonzero while the list accumulator is a root.
+SRTCRCAR: DW 0                  ; CAR payload rooted across a collecting allocation.
+SRTCRCDR: DW 0                  ; CDR payload rooted across a collecting allocation.
+SRTCRCTA: DB 0                  ; CAR tag for the pending constructor root.
+SRTCRDTA: DB 0                  ; CDR tag for the pending constructor root.
+SRTCRON:  DB 0                  ; Nonzero while constructor roots are active.
+SRTBADDR: DW 0                  ; Binding pointer being validated or traced.
+SRTBFLG:  DB 0                  ; Binding flags retained across value decoding.
+SRTROOTP: DW 0                  ; Exact-root cursor shared by range walkers.
+SRTROOTE: DW 0                  ; Exclusive end for an exact-root range.
+SRTROOTV: DW 0                  ; Payload address of the current root record.
+SRTROOTT: DB 0                  ; Tag of the current exact-root record.
+SRTENVP:  DW 0                  ; Environment-map cursor during root tracing.
+SRTENVN:  DB 0                  ; Remaining environment entries.
+SRTCLOBJ: DW 0                  ; Closure object being validated.
+SRTCLDSC: DW 0                  ; Descriptor pointer read from a closure header.
+SRTCLN:   DB 0                  ; Closure slot count from its descriptor.
+SRTCLMP:  DW 0                  ; Capture-mask cursor during closure tracing.
+SRTCLMV:  DB 0                  ; Current capture-mask byte.
+SRTCLSLT: DB 0                  ; Slot index represented by the mask cursor.
+SRTCLER:  DB 0                  ; Nonzero reports a closure worklist overflow.
+SRTCLCUR: DW 0                  ; High-water cursor for upward closure allocation.
+SRTCLSCN: DW 0                  ; Address-unit cursor for closure scans.
+SRTCFREE:  DS 130                ; Heads for rounded four-byte closure classes.
+SRTCLOWN:  DS 128                ; Class owner for each logical closure page.
+                                  ; Zero is free; 41H owns a two-page run; FFH continues it.
+SRTCLUSE:  DS 128                ; Live object count for each owned page.
+SRTCLPBA:  DS 128                ; Physical page high byte for each owner entry.
+SRTCLCAP:  DB 64,32,21,16,12,10,9,8,7,6,5,5,4,4,4,4
+            DB 3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2
+            DB 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+            DB 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+SRTCLFP:  DW 0                  ; Active closure free-list head address.
+SRTCLBAS:  DW 0                 ; Base of the active closure allocation.
+SRTCLPGI:   DB 0                 ; Closure page index being selected or rebuilt.
+SRTCLPGN:   DB 0                 ; Slots remaining while a slab chain is built.
+SRTCLPGQ:   DB 0                 ; Remaining slots during a page sweep.
+SRTCLPGH:   DB 0                 ; Physical high byte during owner lookup.
+SRTCLPGA:   DW 0                 ; Physical base of the active closure page.
+SRTCLPGE:   DW 0                 ; Exclusive end of a selected page or run.
+SRTCLPGF:   DW 0                 ; Current object while building a slab chain.
+SRTCLPGL:   DW 0                 ; Next object while building a slab chain.
+SRTCLSTR:   DW 0                 ; Stride of the class currently being swept.
+SRTBHEAD: DW 0                  ; Head of the reclaimed three-byte binding list.
+SRTBEND:  DW 0                  ; End of the current binding page for reports.
+SRTBPGP:  DW 0                  ; Next three-byte binding slot in the current page.
+SRTBPGED: DW 0                  ; Exclusive end of the current binding page.
+SRTBPGBA: DW 0                  ; Physical base of the current binding page.
+SRTBPGC:  DW 0                  ; Physical base saved across a binding sweep.
+SRTBPGN:  DB 0                  ; Number of pages assigned to bindings.
+SRTBPGI:  DB 0                  ; Binding page index during a sweep.
+SRTBPGS:  DS 128                ; Physical page high bytes assigned to bindings.
+SRTBPFRE: DW 0                  ; Page-local free-chain head during a sweep.
+SRTBPLST: DW 0                  ; Tail of the page-local free chain.
+SRTBPLIV: DB 0                  ; Live binding count on the current page.
+SRTBSCAN: DW 0                  ; Binding address during sweep.
+SRTBMAP:  DW 0                  ; Binding bitmap byte during sweep.
+SRTBMSK:  DB 0                  ; Binding bitmap bit during sweep.
+SRTBLEFT: DW 0                  ; Binding bytes left in the sweep interval.
+SRTCLMAP: DW 0                  ; Closure mark-map cursor during sweep.
+SRTCLMKV: DB 0                  ; Closure mark bit during sweep.
 SRTMSTK:  DW SRTMKBS
+SRTMOVER: DB 0                    ; Nonzero means the bounded mark queue filled.
+SRTMNEW:  DB 0                    ; Nonzero means a fallback pass marked an object.
 SRTSCP:   DW 0
 SRTSCE:   DW 0
 SRTMVAL:  DW 0
@@ -798,6 +877,25 @@ SRTMTAG:  DB 0
 SRTWRP:   DW 0
 SRTWBEG:  DB 0
 SRTWMODE: DB 0                    ; Zero displays contents; one writes readable syntax.
+
+; Pair-class table and scan cursors.  Each entry is a page-aligned slab base.
+SRTPSLBN: DB 0                    ; Number of five-byte pair slabs currently assigned.
+SRTPSLT:  DS 384                  ; One hundred twenty-eight three-byte descriptors.
+SRTPSLHD: DB 0                    ; One-based index of the first available slab.
+SRTPSLIM: DB 0                    ; Maximum descriptor slots for the page domain.
+SRTPSNXT: DB 0                    ; Temporary free-record or slab-list successor.
+SRTPSIDX: DB 0                    ; Current descriptor index during a rebuild.
+SRTPSLV:  DB 0                    ; Live-record count while rebuilding one slab.
+SRTPSFST: DW 0                    ; First free record while chains are rebuilt.
+SRTPSFLK: DW 0                    ; Last free record while chains are rebuilt.
+SRTPSDP:   DW 0                   ; Current slab descriptor during a rebuild.
+SRTPSBA:   DW 0                   ; Current slab base during allocation or tracing.
+SRTPSCAN:  DW 0                   ; Current five-byte record during a slab walk.
+SRTPSAD:   DW 0                   ; Candidate pair address being validated or marked.
+SRTPSST:   DW 0                   ; Next slab-table entry saved during a record walk.
+SRTFSST:   DW 0                   ; Fallback scan's saved descriptor cursor.
+SRTFSBA:   DW 0                   ; Fallback scan's saved slab base.
+SRTFSCAN:  DW 0                   ; Fallback scan's saved record cursor.
 
 ; One-byte staging for a BDOS console input call that may clobber registers.
 SRTINB:    DB 0

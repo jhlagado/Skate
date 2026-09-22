@@ -1,0 +1,11 @@
+; Release package definitions 030 through 035.
+; Each part is independent source text so package order is checked.
+; The names are deliberately longer than the compiler's short examples.
+; The final part reads the last definition after all parts are loaded.
+; The compact source remains clear when listed with CP/M TYPE.
+(define state00000000030 30)
+(define state00000000031 31)
+(define state00000000032 32)
+(define state00000000033 33)
+(define state00000000034 34)
+(define state00000000035 35)

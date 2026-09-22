@@ -1,0 +1,11 @@
+; Release package definitions 078 through 083.
+; Each part is independent source text so package order is checked.
+; The names are deliberately longer than the compiler's short examples.
+; The final part reads the last definition after all parts are loaded.
+; The compact source remains clear when listed with CP/M TYPE.
+(define state00000000078 78)
+(define state00000000079 79)
+(define state00000000080 80)
+(define state00000000081 81)
+(define state00000000082 82)
+(define state00000000083 83)

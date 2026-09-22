@@ -13,10 +13,10 @@
 
 ORG 0100H
 
-SRTHEAP    EQU 06000H              ; Closure environments use the lower TPA band.
-SRTHEPEN  EQU 0A000H              ; Closure heap stops before the pair arena.
-SRTPAIRB  EQU 0A000H              ; Pair cells occupy a separately collected arena.
-SRTPAIRE  EQU 0C000H              ; Pair arena end, exclusive.
+SRTHEAP    EQU 03000H              ; Base used by the full-pool allocation maps.
+SRTLOEND EQU 09000H              ; Low pages end before the external mark maps.
+SRTMPEND  EQU 0B800H              ; The managed high band begins after the maps.
+SRTHEPEN  EQU 0C000H              ; Managed objects stop before transient storage.
 SRTOPB EQU 0C000H              ; Operator values use the next transient band.
 SRTSTKGU  EQU 0D400H              ; Reserve frames, operands and helper scratch.
 SRTOPEND  EQU 0C800H              ; Leave a 3 KiB transient band below the guard.
@@ -24,6 +24,7 @@ SRTQBASE  EQU 0C800H              ; Quoted-data values use the following band.
 SRTQEND   EQU 0D000H              ; Quoted-data stack end, exclusive.
 SRTMKBS  EQU 0D000H              ; Collector mark worklist starts here.
 SRTMKBE  EQU 0D400H              ; Collector worklist ends at the stack guard.
+SRTMHIGH EQU 0                   ; The external map band needs no extra pool pages.
 SRTOWNOF   EQU 12                  ; Descriptor offset of the owned-slot mask.
 SRTCAPOF   EQU 28                  ; Descriptor offset of the capture mask.
 SRTMASKB   EQU 16                  ; Sixteen bytes cover 128 local slots.
@@ -32,23 +33,73 @@ SRTSTART:
         LD SP,0E000H              ; Keep the generated program below the guard.
         LD HL,0E000H              ; The native stack begins at the fixed ceiling.
         LD (SRTLOWSP),HL          ; Record its low-water mark for qualification.
-        LD HL,SRTOPB            ; The operator side stack starts above pair cells.
+        LD HL,(SRTIMGE)           ; Recover the compiler's final loaded image end.
+        CALL SRTGPINI              ; Derive and initialise the page-domain metadata.
+        JP C,SRTERROR              ; Refuse to enter generated code without pages.
+        CALL SRTPIN                ; Reserve and clear the first five-byte pair slab.
+        JP C,SRTERROR              ; Refuse to enter code without pair capacity.
+        LD HL,SRTOPB               ; The operator side stack starts above pair cells.
         LD (SRTOPS),HL            ; Reset it for this generated program run.
         LD HL,SRTQBASE             ; Reset the quoted-data stack cursor.
         LD (SRTQSP),HL
         LD HL,SRTMKBS               ; Reset the collector worklist cursor.
         LD (SRTMSTK),HL
-        LD HL,SRTPAIRB              ; Clear pair state left by the compiler process.
-        LD BC,1024                  ; One state byte is cleared for each fixed cell.
-SRTCLR:
+        XOR A                      ; No caller environment exists at program entry.
+        LD (SRTCENVN),A
+        LD (SRTNCT),A              ; No generated operands are pending at entry.
+        LD HL,SRTCLBM              ; Clear closure-start metadata for this run.
+        LD DE,SRTCLBM+1
+        LD BC,08FFH
+        LD (HL),A
+        LDIR
+        LD HL,SRTCLMK              ; Clear closure mark metadata for this run.
+        LD DE,SRTCLMK+1
+        LD BC,08FFH
+        LD (HL),A
+        LDIR
+        LD HL,SRTBMB               ; Clear binding allocation-start metadata.
+        LD DE,SRTBMB+1
+        LD BC,11FFH
+        LD (HL),A
+        LDIR
+        LD HL,SRTCFREE              ; Empty every rounded closure size class.
+        LD DE,SRTCFREE+1
+        LD BC,129
         XOR A
         LD (HL),A
-        LD DE,8
-        ADD HL,DE
-        DEC BC
-        LD A,B
-        OR C
-        JR NZ,SRTCLR
+        LDIR
+        LD HL,SRTCLOWN              ; No closure slab owns a page at startup.
+        LD DE,SRTCLOWN+1
+        LD BC,255
+        LD (HL),A
+        LDIR
+        LD HL,SRTCLUSE              ; No closure object occupies a slab yet.
+        LD DE,SRTCLUSE+1
+        LD BC,127
+        LD (HL),A
+        LDIR
+        LD HL,SRTCLPBA              ; No closure page has a physical base yet.
+        LD DE,SRTCLPBA+1
+        LD BC,127
+        LD (HL),A
+        LDIR
+        LD HL,SRTBPGS               ; No binding page has a physical base yet.
+        LD DE,SRTBPGS+1
+        LD BC,127
+        LD (HL),A
+        LDIR
+        LD HL,SRTHEAP               ; Keep a map base for the first allocation.
+        LD (SRTCLCUR),HL
+        LD HL,0                     ; Binding pages supply their own cursors.
+        LD (SRTBEND),HL
+        XOR A
+        LD (SRTBHEAD),A
+        LD (SRTBHEAD+1),A
+        LD (SRTCDESC),A            ; The top-level caller has no descriptor.
+        LD (SRTCDESC+1),A
+        LD (SRTFRAME),A            ; No suspended procedure frame exists yet.
+        LD (SRTFRAME+1),A
+        LD (SRTQACTV),A            ; No quoted-list accumulator is live yet.
 SRTCALL:
         CALL 0000H                ; The compiler patches the generated entry.
         JP 0                      ; Return to CP/M through the warm start.
@@ -104,8 +155,8 @@ SRTSTORE:
         LD A,(SRTTAG)             ; Copy the caller's tag into the slot.
         LD (DE),A                 ; Publish the tag after both payload bytes.
         INC DE                    ; Advance to the initialized flag.
-        LD A,(DE)                 ; Preserve an escape mark already on this cell.
-        AND 80H
+        LD A,(DE)                 ; Preserve allocation, capture and mark bits.
+        AND 0FEH
         OR 1                       ; Mark the slot initialized after all value bytes.
         LD (DE),A                 ; A later load can now observe the value.
         LD A,(SRTTAG)             ; Return the stored value tag to generated code.
@@ -187,101 +238,10 @@ SRTDOSUB:
         CALL NSUB                 ; Checked subtraction uses A/B and HL/DE.
 SRTBRES:
         JP C,SRTERROR             ; Overflow or an invalid value is terminal.
+        LD B,2                    ; The two native operands are now consumed.
+        CALL SRTNPOPB
         PUSH IX                   ; Restore the generated caller's return address.
         RET                       ; Return the checked value in A and HL.
-
-; Allocate a fresh closure object.  HL names its descriptor and the current
-; environment supplies the shared cell pointers for a nested lambda.
-SRTMAKE:
-        LD (SRTNEWD),HL           ; Retain the immutable procedure descriptor.
-        LD DE,3                    ; Descriptor byte three stores the slot count.
-        ADD HL,DE                  ; Read the fixed environment extent.
-        LD A,(HL)                  ; Every closure receives that bounded slot area.
-        LD (SRTSLOTS),A            ; Preserve the count while sizing the object.
-        LD L,A                     ; Widen the slot count before doubling it.
-        LD H,0
-        ADD HL,HL                  ; Two bytes represent each shared cell pointer.
-        LD (SRTBYTES),HL           ; Save the environment byte count.
-        LD BC,2                    ; Two descriptor bytes precede the environment.
-        ADD HL,BC                  ; HL is the complete closure-object size.
-        LD BC,(SRTHEAPP)           ; BC is the next free heap address.
-        PUSH BC                    ; Keep the object base for its header.
-        ADD HL,BC                  ; Form the candidate new heap cursor.
-        LD DE,SRTHEPEN           ; The guarded heap ceiling is exclusive.
-        OR A                       ; Clear carry before the bound comparison.
-        SBC HL,DE                  ; A nonnegative result would cross the ceiling.
-        JP NC,SRTERROR             ; Refuse an allocation before touching memory.
-        POP DE                     ; DE is the fresh closure object base.
-        LD (SRTOBJ),DE             ; Return this pointer after copying the frame.
-        LD HL,(SRTBYTES)           ; Recompute the complete object size.
-        LD BC,2
-        ADD HL,BC
-        ADD HL,DE                  ; HL is the new heap cursor.
-        LD (SRTHEAPP),HL           ; Publish the allocation before any copy loop.
-        LD HL,(SRTNEWD)            ; Store the descriptor pointer in the object.
-        LD A,L                     ; Descriptor low byte.
-        LD (DE),A
-        INC DE
-        LD A,H                     ; Descriptor high byte.
-        LD (DE),A
-        INC DE                     ; DE now names the new environment area.
-        LD (SRTNENV),DE          ; Keep the destination across the copy.
-        LD HL,(SRTENV)             ; An outer environment may seed this closure.
-        LD A,H
-        OR L
-        JR Z,SRTMAKE0              ; Top-level closures receive cleared slots.
-        LD BC,(SRTBYTES)           ; Copy complete logical slots, including tags.
-        LD A,B                     ; A nullary closure has no map to copy.
-        OR C
-        JR Z,SRTMAKEM              ; Skip LDIR when its count is zero.
-        LDIR                       ; Source and destination are nonoverlapping.
-SRTMAKEM:
-        CALL SRTMARKC              ; Captured cells must survive later tail calls.
-        JR SRTMAKER                ; Return the object pointer and procedure tag.
-SRTMAKE0:
-        LD HL,(SRTNENV)          ; Clear the fresh environment when no parent exists.
-        LD BC,(SRTBYTES)           ; BC is the bounded byte count.
-        LD A,B                     ; A zero-sized map needs no clearing pass.
-        OR C
-        JR Z,SRTMAKER              ; Nullary closures return immediately.
-        XOR A                      ; Uninitialized values start at zero bytes.
-SRTMAK0L:
-        XOR A                      ; Keep every cleared byte at zero.
-        LD (HL),A                  ; Clear one value byte.
-        INC HL                     ; Advance through the new environment.
-        DEC BC                     ; Consume one byte from the bounded extent.
-        LD A,B
-        OR C
-        JR NZ,SRTMAK0L            ; Stop exactly at the environment boundary.
-SRTMAKER:
-        LD HL,(SRTOBJ)             ; Return the closure object as the payload.
-        LD A,2                     ; Tag two denotes a callable closure object.
-        RET                        ; The generated prefix jumps over its body.
-
-; Allocate and clear one four-byte logical value cell from the runtime heap.
-SRTCELL:
-        LD HL,(SRTHEAPP)           ; The bump cursor names the new cell base.
-        LD (SRTCELLP),HL           ; Preserve it while checking the heap guard.
-        LD BC,4                    ; Every cell uses payload, tag and initialized flag.
-        ADD HL,BC                  ; Form the candidate heap cursor.
-        LD (SRTNEXT),HL            ; Keep it while the guard comparison runs.
-        LD DE,SRTHEPEN           ; The guarded heap ceiling is exclusive.
-        OR A                       ; Clear carry before the bound comparison.
-        SBC HL,DE                  ; A nonnegative result would cross the ceiling.
-        JP NC,SRTERROR             ; Refuse a cell before touching the heap.
-        LD HL,(SRTNEXT)            ; Recover the candidate cursor after comparison.
-        LD (SRTHEAPP),HL           ; Publish the new cursor after the check.
-        LD HL,(SRTCELLP)           ; Recover the cell base for the clear loop.
-        XOR A                      ; Unbound cells start with zero bytes.
-        LD (HL),A                  ; Clear the payload low byte.
-        INC HL
-        LD (HL),A                  ; Clear the payload high byte.
-        INC HL
-        LD (HL),A                  ; Clear the value tag.
-        INC HL
-        LD (HL),A                  ; A zero flag keeps the cell unbound.
-        LD HL,(SRTCELLP)           ; Return the new cell address in HL.
-        RET
 
 ; Allocate a stack environment for an ordinary call and install fresh cells
 ; for every slot owned by the target procedure.
@@ -358,10 +318,10 @@ SRTOWNBT:
         CALL SRTADR                ; A pointer already present can be reused.
         JR C,SRTOWNN               ; A null pointer needs a fresh cell.
         LD (SRTCELLP),HL           ; Inspect the existing cell before clearing it.
-        LD DE,3                    ; The initialized byte carries the escape bit.
+        LD DE,2                    ; The packed flags follow the payload.
         ADD HL,DE
-        LD A,(HL)                  ; A high bit means an escaping closure owns it.
-        AND 80H
+        LD A,(HL)                  ; A capture bit means an escaping closure owns it.
+        AND 10H
         JR NZ,SRTOWNN              ; Allocate a distinct cell for escaped storage.
         JP SRTOWNC                 ; Reuse the cell and clear its old value.
 SRTOWNN:
@@ -386,14 +346,13 @@ SRTOWNN:
         JR SRTOWNNX                ; The new cell is already clear.
 SRTOWNC:
         LD HL,(SRTCELLP)           ; Restore the cell base after checking its mark.
-        LD (SRTCELLP),HL           ; Keep the reused cell while clearing four bytes.
+        LD (SRTCELLP),HL           ; Keep the reused cell while clearing its value.
         XOR A                      ; A reused slot must not retain its old value.
         LD (HL),A
         INC HL
         LD (HL),A
         INC HL
-        LD (HL),A
-        INC HL
+        LD A,20H                   ; Preserve allocation, clear tag and initialization.
         LD (HL),A
 SRTOWNNX:
         LD A,(SRTMASKV)            ; Shift this mask bit out before the next slot.
@@ -527,10 +486,10 @@ SRTESCAP:
         OR E
         RET Z                      ; An unbound capture has no cell to mark.
         EX DE,HL                   ; HL now names the shared cell.
-        LD DE,3                    ; The initialized byte is the fourth byte.
+        LD DE,2                    ; The packed binding flags follow the payload.
         ADD HL,DE
         LD A,(HL)
-        OR 80H                     ; Keep the initialized bit and add escape state.
+        OR 10H                     ; Keep the initialized bit and add escape state.
         LD (HL),A
         RET
 
@@ -539,8 +498,14 @@ SRTESCAP:
 SRTOPINV:
         POP IX                    ; Save this helper's generated continuation.
         LD (SRTRET),IX            ; Packet helpers use IX for their own return.
+        LD B,A                    ; Preserve the generated argument count.
         LD HL,(SRTENV)            ; Save the caller environment for a closure call.
         LD (SRTCENV),HL
+        LD HL,(SRTDESC)           ; Save the caller descriptor before dispatch.
+        LD (SRTCDESC),HL
+        LD A,(SRTSLOTS)            ; The caller map remains a precise root.
+        LD (SRTCENVN),A
+        LD A,B
         LD (SRTARGC),A            ; The count remains available to the packet pass.
         CALL SRTPACKO             ; Pack arguments, then recover the saved value.
         JP C,SRTERROR
@@ -553,8 +518,14 @@ SRTOPINV:
 SRTINVOK:
         POP IX                    ; Save this helper's return address in IX.
         LD (SRTRET),IX            ; SRTPACK uses IX for its own helper return.
+        LD B,A                    ; Preserve the generated argument count.
         LD HL,(SRTENV)            ; Save the caller environment for the new frame.
         LD (SRTCENV),HL           ; The body may invoke another closure.
+        LD HL,(SRTDESC)           ; Save the caller descriptor before dispatch.
+        LD (SRTCDESC),HL
+        LD A,(SRTSLOTS)            ; Save the caller map's exact slot extent.
+        LD (SRTCENVN),A
+        LD A,B
         LD (SRTARGC),A            ; The count remains available to the packet pass.
         CALL SRTPACK               ; Move reverse-pushed values into the packet.
         JP C,SRTERROR              ; A malformed packet is a runtime failure.
@@ -589,12 +560,14 @@ SRTDISP:
         CALL SRTENVIN              ; Build an activation map below the stack.
         CALL SRTSARGS              ; Copy packet values into the formal slots.
         JP C,SRTERROR              ; A descriptor slot outside the image is invalid.
+        XOR A                      ; The closure now owns the argument values.
+        LD (SRTARGC),A             ; Retire the packet before entering its body.
         PUSH IX                    ; Preserve the generated caller return address.
         LD DE,(SRTOLDSP)           ; Release the activation map when the body returns.
         PUSH DE                    ; The old stack boundary follows the return word.
         LD DE,(SRTCENV)            ; Preserve the caller environment below the frame.
         PUSH DE                    ; SRTINEND restores it after the body returns.
-        LD HL,(SRTDESC)            ; Keep the descriptor for the epilogue restore.
+        LD HL,(SRTCDESC)           ; Keep the caller descriptor for the epilogue.
         PUSH HL                    ; The epilogue restores this descriptor state.
         LD HL,(SRTDESC)            ; Read the descriptor body pointer.
         LD E,(HL)                  ; Body address low byte is descriptor offset zero.
@@ -602,6 +575,8 @@ SRTDISP:
         LD D,(HL)                  ; DE now names the generated procedure body.
         LD HL,SRTINEND             ; Body RET returns through this frame epilogue.
         PUSH HL                    ; Keep descriptor and caller return below it.
+        LD HL,(SRTENV)             ; The map base identifies this fixed frame.
+        LD (SRTFRAME),HL           ; Exact roots can derive suspended frames from it.
         EX DE,HL                   ; HL receives the target body address.
         JP (HL)                    ; Enter without adding a second native return.
 
@@ -679,8 +654,11 @@ SRTTERR:
 SRTTKEEP:
         CALL SRTSARGS              ; Install the target's formal values.
         JP C,SRTERROR             ; Reject an invalid descriptor slot.
+        XOR A                      ; The tail target now owns the argument values.
+        LD (SRTARGC),A             ; Retire the packet before entering its body.
         POP DE                    ; Discard the current body epilogue address.
-        POP DE                    ; Discard the current procedure descriptor.
+        POP DE                    ; Recover the caller descriptor for the target.
+        LD (SRTCDESC),DE
         POP DE                    ; Recover the caller environment below this frame.
         LD (SRTCENV),DE
         POP DE                    ; Recover the stack boundary below this frame.
@@ -691,7 +669,7 @@ SRTTKEEP:
         PUSH DE
         LD DE,(SRTCENV)            ; Preserve the caller environment below the frame.
         PUSH DE
-        LD HL,(SRTDESC)           ; Keep the target descriptor on the new frame.
+        LD HL,(SRTCDESC)          ; Keep the caller descriptor on the new frame.
         PUSH HL                   ; The target returns through SRTINEND.
         LD HL,SRTINEND            ; Install the target's single epilogue.
         PUSH HL                   ; Tail recursion therefore uses constant stack.
@@ -763,6 +741,12 @@ SRTPACKL:
 SRTPACKC:
         POP HL                   ; Recover the callee payload.
         POP AF                   ; Recover the callee tag.
+        LD (SRTATMP),A
+        LD A,(SRTARGC)           ; The callee and every argument leave the shadow stack.
+        INC A
+        LD B,A
+        CALL SRTNPOPB
+        LD A,(SRTATMP)
         PUSH IX                  ; Restore the SRTPACK call return.
         RET                      ; The caller selects closure or primitive dispatch.
 
@@ -805,7 +789,7 @@ SRTADRok:
 SRTLOADI:
         CALL SRTADR               ; A contains the compiler-emitted slot index.
         JP C,SRTERROR             ; An unbound or missing cell is terminal.
-        JP SRTLOAD                ; Reuse the checked four-byte cell loader.
+        JP SRTBLOAD               ; Active maps point at three-byte heap cells.
 
 ; Store A:HL through the current activation map; B contains the slot index.
 SRTSTORI:
@@ -817,7 +801,7 @@ SRTSTORI:
         EX DE,HL                  ; SRTSTORE receives its cell address in DE.
         LD HL,(SRTVAL)            ; Restore the caller's payload.
         LD A,(SRTATMP)            ; Restore the caller's tag.
-        JP SRTSTORE               ; Publish the value and return it unchanged.
+        JP SRTBSTOR               ; Publish the value and return it unchanged.
 
 ; Store through a local activation map while requiring prior initialization.
 SRTSETI:
@@ -829,7 +813,7 @@ SRTSETI:
         EX DE,HL                   ; SRTSET receives the cell address in DE.
         LD HL,(SRTVAL)             ; Restore the caller's payload.
         LD A,(SRTATMP)             ; Restore the caller's tag.
-        JP SRTSET                  ; Check initialization before storing.
+        JP SRTBSET                 ; Check initialization before storing.
 
 ; Clear a recursive local cell through the current activation map.
 SRTCLRI:
@@ -840,12 +824,18 @@ SRTCLRI:
 
 ; Clear a fixed recursive cell while preserving its escape mark.
 SRTCLRS:
-SRTCLRC:
         INC HL
         INC HL
         INC HL
         LD A,(HL)
         AND 80H
+        LD (HL),A
+        RET
+SRTCLRC:
+        INC HL
+        INC HL
+        LD A,(HL)
+        AND 70H
         LD (HL),A
         RET
 
@@ -883,7 +873,9 @@ SRTSETLP:
         LD A,(HL)                ; A contains the logical value tag.
         EX DE,HL                 ; HL receives the payload expected by SRTSTORE.
         LD DE,(SRTSLOT)          ; Restore the formal slot address.
-        CALL SRTSTORE             ; Publish payload, tag and initialized state.
+        PUSH BC                   ; SRTBSTOR uses B while preserving the count.
+        CALL SRTBSTOR             ; Publish the three-byte heap binding value.
+        POP BC                    ; Continue with the remaining formal slots.
         INC C                    ; Advance to the next source argument.
         DJNZ SRTSETLP            ; Fill every formal slot.
         XOR A                    ; Carry clear reports a complete activation.
@@ -897,6 +889,21 @@ SRTINEND:
         LD (SRTDESC),HL          ; Restore the enclosing descriptor for nested calls.
         POP HL                   ; Restore the caller environment pointer.
         LD (SRTENV),HL           ; Nested closures resume their defining environment.
+        LD HL,(SRTDESC)           ; The descriptor, not the map, carries the shape.
+        LD A,H
+        OR L
+        JR Z,SRTTOPS
+        LD DE,3                   ; The restored descriptor names the active map shape.
+        ADD HL,DE
+        LD A,(HL)
+        JR SRTSETSP
+SRTTOPS:
+        XOR A
+SRTSETSP:
+        LD (SRTSLOTS),A
+        LD (SRTCENVN),A
+        LD HL,(SRTENV)
+        LD (SRTFRAME),HL         ; The caller map now identifies the active frame.
         POP DE                   ; Restore the stack boundary below the map.
         LD (SRTOLDSP),DE
         POP HL                   ; Recover the original caller return address.
