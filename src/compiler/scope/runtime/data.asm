@@ -749,7 +749,12 @@ SRTWDOUT:
         ADD A,'0'
         JP SRTCH
 
-; Preserve the caller's numeric remainder and procedure continuation across BDOS.
+; Preserve the caller's numeric remainder and procedure continuation across a
+; provider byte-gateway call.  SRTOUTV is a three-byte JP vector: CP/M keeps
+; its default target, while a native or WASM host may patch the target before
+; entering the generated image.  The vector target receives A=the byte and
+; must return through the CALL with the stack balanced; SRTCH restores every
+; other caller-visible register below.
 SRTCH:
         PUSH AF                    ; Retain the value tag and flags.
         PUSH BC                    ; Retain loop counters.
@@ -757,9 +762,7 @@ SRTCH:
         PUSH HL                    ; Retain the decimal remainder or literal cursor.
         PUSH IX                    ; Retain the primitive return continuation.
         PUSH IY                    ; Retain any active indexed runtime state.
-        LD E,A                     ; BDOS function two takes the character in E.
-        LD C,2                     ; Console character output.
-        CALL 5                     ; BDOS may overwrite general registers.
+        CALL SRTOUTV               ; Dispatch through the provider byte-gateway vector.
         POP IY                     ; Restore the caller's indexed state.
         POP IX                     ; Restore the primitive continuation.
         POP HL                     ; Restore the numeric remainder.
@@ -769,14 +772,15 @@ SRTCH:
         RET                        ; Continue formatting or return to the primitive.
 
 ; Read one console byte while preserving the runtime continuation and cursors.
+; SRTINV is the matching JP vector.  Its target returns A=the byte and may
+; clobber the ordinary working registers; SRTIN restores the caller state.
 SRTIN:
         PUSH BC                    ; Preserve the caller's packet count and counters.
         PUSH DE                    ; Preserve the caller's data pointer or divisor.
         PUSH HL                    ; Preserve the caller's value payload or cursor.
         PUSH IX                    ; Preserve the generated continuation across BDOS.
         PUSH IY                    ; Preserve indexed runtime state used by collection.
-        LD C,1                     ; BDOS function one reads one console byte.
-        CALL 5                     ; CP/M returns the byte in A and may clobber registers.
+        CALL SRTINV                ; Dispatch through the provider byte-gateway vector.
         LD (SRTINB),A              ; Stage the byte before restoring caller registers.
         POP IY                     ; Restore indexed runtime state.
         POP IX                     ; Restore the primitive return continuation.
@@ -785,6 +789,28 @@ SRTIN:
         POP BC                     ; Restore the caller's packet count and counters.
         LD A,(SRTINB)              ; Return the byte obtained from the console.
         RET                        ; The primitive maps Control-Z to the EOF value.
+
+; Running-program byte-gateway vectors.  A JP target is deliberately mutable:
+; the CP/M image uses the local BDOS adapters below, while a Triptych native or
+; WASM host can install a machine-profile entry point without changing the
+; generated program or its language semantics.
+SRTOUTV:
+        JP SRTCPMO
+SRTINV:
+        JP SRTCPMI
+
+; CP/M provider adapters.  These are the only generated-runtime instructions
+; that know the BDOS console ABI.  A non-CP/M provider does not enter them.
+SRTCPMO:
+        LD E,A                     ; BDOS function two takes the character in E.
+        LD C,2                     ; Console character output.
+        CALL 5                     ; BDOS may overwrite general registers.
+        RET
+
+SRTCPMI:
+        LD C,1                     ; BDOS function one reads one console byte.
+        CALL 5                     ; CP/M returns the byte in A and may clobber registers.
+        RET
 
 SRTWQF:    DB "#f$"
 SRTWQT:    DB "#t$"

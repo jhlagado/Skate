@@ -59,7 +59,7 @@ disk = installCpm22File(disk, {
 disk = installCpm22File(disk, {
   name: "TRACE.SK8",
   bytes: new TextEncoder().encode(
-    "(begin (write-char #\\A) (newline))\x1a",
+    "(begin (write-char (read-char)) (newline))\x1a",
   ),
   padByte: 0x1a,
 });
@@ -92,6 +92,28 @@ function runCommand(command, expected, description) {
   return output;
 }
 
+function runProgram(command, input, expected, description) {
+  const start = transcript.length;
+  assert.ok(machine.enqueue_serial_input(encoder.encode(`${command}\r`)));
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const status = machine.run_slice(50_000, 500_000);
+    transcript += decoder.decode(machine.take_serial_output());
+    assert.notEqual(status, 0, `CP/M halted while starting ${description}`);
+    if (transcript.slice(start).includes(`${command}\r\r\n`)) break;
+  }
+  assert.ok(transcript.slice(start).includes(`${command}\r\r\n`));
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const status = machine.run_slice(50_000, 500_000);
+    transcript += decoder.decode(machine.take_serial_output());
+    assert.notEqual(status, 0, `CP/M halted before input for ${description}`);
+  }
+  assert.ok(machine.enqueue_serial_input(encoder.encode(input)));
+  runUntilPrompt(start, description);
+  const output = programOutput(transcript.slice(start));
+  assert.equal(output, expected, `${description}: unexpected output`);
+  return output;
+}
+
 function programOutput(output) {
   const commandEnd = output.indexOf("\r\r\n");
   const prompt = output.lastIndexOf("\r\nA>");
@@ -114,31 +136,42 @@ function createTriptychEffectClient() {
   return { client: new EffectClient(transport), textWrites };
 }
 
-function runBareProgram(bytes, effects) {
+function runBareProgram(bytes, effects, vectors, inputBytes) {
   const memory = new Uint8Array(65_536);
   memory.set(bytes, 0x100);
   memory[0] = 0x76; // HALT after the generated runtime's CP/M return jump.
-  memory[5] = 0xc9; // Host-owned BDOS return stub.
+  memory[5] = 0xc9; // Guard: reaching the legacy CP/M vector is rejected below.
+  const outputTrap = 0xff00;
+  const inputTrap = 0xff03;
+  for (
+    const [vector, target] of [
+      [vectors.output, outputTrap],
+      [vectors.input, inputTrap],
+    ]
+  ) {
+    const offset = vector - 0x100;
+    assert.ok(offset >= 0 && offset + 2 < bytes.length);
+    memory[vector] = 0xc3; // JP target: the vector is part of the image ABI.
+    memory[vector + 1] = target & 0xff;
+    memory[vector + 2] = target >>> 8;
+  }
+  memory[outputTrap] = 0xc9;
+  memory[inputTrap] = 0xc9;
   const runtime = createZ80Runtime({ memory, startAddress: 0x100 });
-  const input = [];
+  const input = [...inputBytes];
   const output = [];
   for (let steps = 0; !runtime.isHalted(); steps += 1) {
     assert.ok(
       steps < 2_000_000,
       "generated program exceeded the step budget",
     );
-    if (runtime.cpu.pc === 5) {
-      if (runtime.cpu.c === 2) {
-        output.push(runtime.cpu.e);
-        effects.client.sendText(String.fromCharCode(runtime.cpu.e));
-        runtime.cpu.a = 0;
-      } else if (runtime.cpu.c === 1) {
-        runtime.cpu.a = input.shift() ?? 0;
-      } else {
-        throw new Error(
-          `generated program requested unsupported BDOS ${runtime.cpu.c}`,
-        );
-      }
+    if (runtime.cpu.pc === outputTrap) {
+      output.push(runtime.cpu.a);
+      effects.client.sendText(String.fromCharCode(runtime.cpu.a));
+    } else if (runtime.cpu.pc === inputTrap) {
+      runtime.cpu.a = input.shift() ?? 0;
+    } else if (runtime.cpu.pc === 5) {
+      throw new Error("generated program entered the CP/M BDOS vector");
     }
     runtime.step();
   }
@@ -151,12 +184,14 @@ try {
   runCommand("SKATE TRACE.SK8", "COMPILED\r\n", "compile TRACE.SK8");
   const compiledDisk = machine.export_drive(0);
   const generated = readCpm22File(compiledDisk, "TRACE.COM");
-  const cpmOutput = programOutput(
-    runCommand("TRACE", "A\r\n", "run TRACE.COM"),
-  );
+  const cpmSession = runProgram("TRACE", "Q", "QQ\r\n", "run TRACE.COM");
+  const cpmOutput = cpmSession.slice(1); // CP/M function 1 echoes the input byte.
 
   const effects = createTriptychEffectClient();
-  const bareOutput = runBareProgram(generated, effects);
+  const bareOutput = runBareProgram(generated, effects, {
+    output: providerImage.address("SRTOUTV"),
+    input: providerImage.address("SRTINV"),
+  }, ["Q".charCodeAt(0)]);
   assert.deepEqual(
     new TextEncoder().encode(cpmOutput),
     bareOutput,
@@ -179,7 +214,7 @@ try {
       generatedBytes: generated.length,
       trace: [...bareOutput],
       limitation:
-        "The generated runtime still uses the CP/M console ABI; the Deno/Triptych host translates that ABI into the provider contract.",
+        "The image includes a CP/M default adapter; native/WASM hosts patch SRTOUTV and SRTINV to their byte gateway before running.",
     },
     null,
     2,

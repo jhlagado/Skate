@@ -54,3 +54,14 @@ events, terminal control and Scheme-port handles remain separate capabilities.
 The provider modules and deterministic tests in `tools/` are the reference
 host implementation. They can be used by a terminal or harness without
 requiring a particular video or sound backend.
+
+## Generated Z80 console vectors
+
+The generated runtime image contains the CP/M console adapter for the ordinary
+CP/M profile, but generated code enters it through two three-byte `JP` vectors:
+`SRTOUTV` for output and `SRTINV` for input. A native or WASM machine profile
+may patch each vector's 16-bit target before starting the image. The target
+receives or returns one byte in `A` and must return with the call stack
+balanced; the surrounding runtime preserves the other caller-visible
+registers. This keeps the language-visible byte-gateway meaning independent of
+BDOS while retaining a period-appropriate CP/M default.
