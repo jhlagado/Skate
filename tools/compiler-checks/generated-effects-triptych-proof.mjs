@@ -25,6 +25,10 @@ const require = createRequire(import.meta.url);
 const { TriptychCpu } = require(
   join(triptychRoot, "dist", "wasm", "triptych_host_wasm.js"),
 );
+const artifactArgument = Deno.args.find((argument) =>
+  argument.startsWith("--write-artifact=")
+);
+const artifactPath = artifactArgument?.slice("--write-artifact=".length);
 const firmware = await assembleTriptychCpuFirmware(triptychRoot);
 const sourceDisk = await Deno.readFile(
   join(triptychRoot, "third_party", "cpm22", "cpm22.img"),
@@ -59,7 +63,9 @@ disk = installCpm22File(disk, {
 disk = installCpm22File(disk, {
   name: "TRACE.SK8",
   bytes: new TextEncoder().encode(
-    "(begin (write-char (read-char)) (newline))\x1a",
+    `${await Deno.readTextFile(
+      "examples/applications/provider-trace.sk8",
+    )}\x1a`,
   ),
   padByte: 0x1a,
 });
@@ -184,6 +190,7 @@ try {
   runCommand("SKATE TRACE.SK8", "COMPILED\r\n", "compile TRACE.SK8");
   const compiledDisk = machine.export_drive(0);
   const generated = readCpm22File(compiledDisk, "TRACE.COM");
+  if (artifactPath) await Deno.writeFile(artifactPath, generated);
   const cpmSession = runProgram("TRACE", "Q", "QQ\r\n", "run TRACE.COM");
   const cpmOutput = cpmSession.slice(1); // CP/M function 1 echoes the input byte.
 

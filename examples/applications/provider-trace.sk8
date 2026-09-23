@@ -1,0 +1,1 @@
+(begin (write-char (read-char)) (newline))
