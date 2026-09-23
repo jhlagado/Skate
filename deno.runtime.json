@@ -4,6 +4,6 @@
     "atom-z80": "../atom/src/host/index.mjs",
     "@jhlagado/debug80-runtime": "../atom/node_modules/@jhlagado/debug80-runtime/dist/index.js",
     "@jhlagado/z80-tool-services": "../atom/node_modules/@jhlagado/z80-tool-services/dist/index.js",
-    "@jhlagado/z80-tool-services/source-preparation": "../atom/node_modules/@jhlagado/z80-tool-services/source-preparation/index.mjs"
+    "@jhlagado/z80-tool-services/source-preparation": "https://raw.githubusercontent.com/jhlagado/z80-tool-services/6313682d4a9bc3d08d32c11fe054d153ce350720/source-preparation/index.mjs"
   }
 }

@@ -1,0 +1,6 @@
+(begin
+  (terminal-clear)
+  (terminal-home)
+  (terminal-red)
+  (terminal-line "Hello from Skate")
+  (terminal-reset))

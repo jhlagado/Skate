@@ -1,0 +1,11 @@
+{
+  "version": "5",
+  "remote": {
+    "https://raw.githubusercontent.com/jhlagado/z80-tool-services/6313682d4a9bc3d08d32c11fe054d153ce350720/source-preparation/errors.mjs": "ff796d869d4d93d027b0dc16ea937ca08c9977ae73d73d90b9b3846a55b8f8b4",
+    "https://raw.githubusercontent.com/jhlagado/z80-tool-services/6313682d4a9bc3d08d32c11fe054d153ce350720/source-preparation/index.mjs": "17fbd0d0edb8b9a4c33b6787455b5e43f8d5d501683cef662840c299155830d7",
+    "https://raw.githubusercontent.com/jhlagado/z80-tool-services/6313682d4a9bc3d08d32c11fe054d153ce350720/source-preparation/node-source-reader.mjs": "e4974427744dc76cfc1a68363441eaf8e2f175a390ea63d497a66ac62a21ae41",
+    "https://raw.githubusercontent.com/jhlagado/z80-tool-services/6313682d4a9bc3d08d32c11fe054d153ce350720/source-preparation/passthrough-profile.mjs": "c82ad58262f7130d82b3ffbf16d5d487d6edf82561345b14ef202bd3873424d4",
+    "https://raw.githubusercontent.com/jhlagado/z80-tool-services/6313682d4a9bc3d08d32c11fe054d153ce350720/source-preparation/placement.mjs": "d09572aeafa46e44c0b58ba74b44a34e8f229468b62a9cdfed26cfef118abbe9",
+    "https://raw.githubusercontent.com/jhlagado/z80-tool-services/6313682d4a9bc3d08d32c11fe054d153ce350720/source-preparation/resolver.mjs": "692aa82fdedc25d310453e1e0a29808e0aaa980feed48f33405a98d0fa6df58d"
+  }
+}

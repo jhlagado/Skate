@@ -7,7 +7,7 @@ programs. It is a work in progress aimed at useful Scheme programs on a 64K
 machine, with a small native compiler, a compact runtime and checked CP/M
 publication.
 
-Skate 0.5.7 supports exact signed integers, binary16 numbers, booleans, byte
+Skate 0.5.8 supports exact signed integers, binary16 numbers, booleans, byte
 characters, symbols, strings, quoted data, pairs, lists, `cons`, `car`, `cdr`,
 `pair?`, `null?`, `eq?`, `write`, `display`, `newline`, `write-char`,
 `read-char`, package definitions, lexical `let`, `let*`, `letrec` and named
@@ -22,6 +22,21 @@ reproducible CP/M disk run with remount and output-recovery checks.
 The compiler and runtime are written in Z80 assembly using the ATOM assembler.
 The repository also contains the Deno build commands and CP/M checks needed to
 assemble the compiler, publish an object file and run the generated program.
+
+The provider tools define an optional byte protocol for terminal, input, video,
+sound and bounded file services. They leave ordinary console text unchanged;
+the environment supplies the hardware-specific provider.
+
+For source trees using leading `(include "LIB.SK8")` forms, the host can
+prepare the same ordered `.SKM` package accepted by the CP/M compiler:
+
+```sh
+deno task prepare:source path/to/sources MAIN.SK8 path/to/staged-sources
+```
+
+The output contains the included source parts and a manifest. Include forms
+must come before ordinary source, and the resolver rejects cycles, paths outside
+the source tree and names that cannot be represented on a CP/M disk.
 
 ```scheme
 (define make-counter
@@ -46,4 +61,4 @@ deno task measure
 
 The compiler writes checked NOBJ and `.COM` output for use from a CP/M prompt.
 
-See the [release notes](release/v0.5.7/README.md) for examples, sizes and current limitations.
+See the [release notes](release/v0.5.8/README.md) for examples, sizes and current limitations.

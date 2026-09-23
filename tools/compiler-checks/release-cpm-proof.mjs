@@ -318,9 +318,9 @@ const firmware = await assembleTriptychCpuFirmware(triptychRoot);
 const sourceDisk = await Deno.readFile(
   join(triptychRoot, "third_party", "cpm22", "cpm22.img"),
 );
-const compiler = await loadAssembly("src/compiler/scope-control-compiler.asm");
+const compiler = await loadAssembly("src/compiler/scope/compiler.asm");
 const provider = await loadAssembly(
-  "src/compiler/scope-control-runtime-image.asm",
+  "src/compiler/scope/runtime/image.asm",
 );
 const compilerBytes = compiler.image.bytes.slice(0x0100);
 const runtimeImage = provider.image.bytes.slice(0x0100);
