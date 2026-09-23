@@ -27,6 +27,17 @@ export interface CpmByteChannel {
   configure(settings: CpmConsoleSettings): void;
 }
 
+/**
+ * The two running-program operations used by Skate's `read-char` and
+ * `write-char` primitives. The operation meanings and status values belong
+ * to z80-services' byteGateway/0 contract; this structural interface keeps
+ * Skate independent of a particular provider package.
+ */
+export interface SkateConsoleByteGateway {
+  writeOutputByte(value: number): void;
+  readInputByte(): number | null;
+}
+
 /** Byte-channel fixture for CP/M and Triptych adapter tests. */
 export class RecordingCpmByteChannel implements CpmByteChannel {
   readonly output: number[] = [];
@@ -55,6 +66,39 @@ export class RecordingCpmByteChannel implements CpmByteChannel {
 
   feed(bytes: Uint8Array): void {
     this.input.push(...bytes);
+  }
+}
+
+/**
+ * Adapt the shared byte gateway to Skate's CP/M console channel. Echo, line
+ * editing, CR/LF and Control-Z policy remain in the surrounding Skate
+ * adapter; this class only forwards validated bytes.
+ */
+export class ByteGatewayCpmByteChannel implements CpmByteChannel {
+  readonly settings: CpmConsoleSettings[] = [];
+
+  constructor(private readonly gateway: SkateConsoleByteGateway) {}
+
+  writeByte(value: number): void {
+    if (!Number.isInteger(value) || value < 0 || value > 0xff) {
+      throw new RangeError("CP/M byte must be an integer from 0 through 255");
+    }
+    this.gateway.writeOutputByte(value);
+  }
+
+  readByte(): number | null {
+    const value = this.gateway.readInputByte();
+    if (value === null) return null;
+    if (!Number.isInteger(value) || value < 0 || value > 0xff) {
+      throw new RangeError(
+        "byte gateway returned a value outside 0 through 255",
+      );
+    }
+    return value;
+  }
+
+  configure(settings: CpmConsoleSettings): void {
+    this.settings.push({ ...settings });
   }
 }
 
