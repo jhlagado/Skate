@@ -44,6 +44,13 @@ is sufficient. Full raw framing and device commands require a provider that
 can carry every byte, such as a Triptych serial channel. The bridge does not
 expose Z80 port addresses or hardware-specific Scheme primitives.
 
+The two ordinary console primitives have a small shared projection: Skate's
+`read-char` consumes `readInputByte`, and `write-char` produces
+`writeOutputByte` from z80-services byteGateway/0. The adapter in
+`tools/cpm-effects.ts` forwards validated bytes without moving echo,
+line-editing, CR/LF or Control-Z/EOF policy into the shared contract. Storage,
+events, terminal control and Scheme-port handles remain separate capabilities.
+
 The provider modules and deterministic tests in `tools/` are the reference
 host implementation. They can be used by a terminal or harness without
 requiring a particular video or sound backend.
