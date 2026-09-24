@@ -34,8 +34,10 @@ Triptych CP/M host. The logical sizes are:
 | Included source package | 8,361 |
 
 The release program uses 49,152 bytes as its managed-heap ceiling and reached
-the CP/M stack guard without a collision. The 2 MiB Triptych disk image contains
-43 files, uses 218 disk blocks and leaves 23 blocks free.
+the CP/M stack guard without a collision. The release proof's 256 KiB CP/M
+working image contains 43 files, uses 218 disk blocks and leaves 23 blocks
+free. The hosted 2 MiB Triptych image contains the 25 Skate files and leaves
+1,961,984 bytes and 997 directory entries free.
 
 ## Verification
 
