@@ -1,7 +1,7 @@
-/** Development-only adapter: ATOM assembly and Debug80 execution under Deno. */
+/** Development-only adapter: ATOM assembly and portable Z80 execution under Deno. */
 import { assembleAtomProject, materializeAtomGeneration } from "atom-z80";
-// @deno-types="../../atom/node_modules/@jhlagado/debug80-runtime/dist/index.d.ts"
-import { createZ80Runtime } from "@jhlagado/debug80-runtime";
+// @deno-types="../../atom/node_modules/@jhlagado/z80-runtime/dist/index.d.ts"
+import { createZ80Runtime } from "@jhlagado/z80-runtime";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 

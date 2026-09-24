@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { createZ80Runtime } from "@jhlagado/debug80-runtime";
+import { createZ80Runtime } from "@jhlagado/z80-runtime";
 
 import { loadAssembly } from "../../tests/z80.ts";
 import { EffectClient, ProviderTransport } from "../../tools/effect-client.ts";
