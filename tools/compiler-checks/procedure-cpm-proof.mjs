@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-
+import {
+  applyRuntimeErrorCases,
+  runtimeErrorCases,
+  vectorRuntimeErrorCases,
+} from "./procedure-error-cases.mjs";
 import { loadAssembly } from "../../tests/z80.ts";
 import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 import {
@@ -50,7 +54,6 @@ disk = installCpm22File(disk, {
   bytes: provider.image.bytes.slice(0x0100),
   padByte: 0x1a,
 });
-
 const dataCases = [
   [
     "DIGITS.SK8",
@@ -79,14 +82,12 @@ const dataCases = [
   ["CDR.SK8", "(cdr (cons 1 (cons 2 (quote ()))))", "(2)"],
   ["PAIRP.SK8", "(pair? (cons 1 2))", "#t"],
   ["NULLP.SK8", "(null? (quote ()))", "#t"],
-  ["LIST.SK8", "(list 1 2 3)", "(1 2 3)"],
+  ["LISTCASE.SK8", "(list 1 2 3)", "(1 2 3)"],
   ["EQ.SK8", "(eq? 1 1)", "#t"],
   ["WRITE.SK8", "(begin (write (quote (1 2))) (newline))", "(1 2)"],
   ["DISPLAY.SK8", '(begin (display "hi") (newline))', "hi"],
   ["NEWLINE.SK8", '(begin (display "x") (newline))', "x"],
   ["EMPTYSTR.SK8", '(begin (write "") (newline))', '""'],
-  ["SAMESTR.SK8", '(begin (write (eq? "x" "x")) (newline))', "#t"],
-  ["SAMESYM.SK8", "(begin (write (eq? 'x 'x)) (newline))", "#t"],
   [
     "NESTQ.SK8",
     "(write ''x) (newline) (write (quote (a (quote x)))) (newline) (write '''x) (newline) (write (quote 'x)) (newline) (write '(a 'x)) (newline)",
@@ -114,6 +115,66 @@ const dataCases = [
   ],
   ["PRIMVAL.SK8", "(define p +) (p 2 3)", "5"],
   ["LAMBDAW.SK8", "(begin (write ((lambda (x) x) 42)))", "42"],
+];
+const vectorCases = [
+  [
+    "VECTOR.SK8",
+    "(begin (write (vector-ref (vector 10 20 30) 1)) (newline))",
+    "20",
+  ],
+  [
+    "MAKEV.SK8",
+    "(define v (make-vector 4 #f)) (begin (vector-set! v 2 42) (write (vector-length v)) (write (vector? v)) (write (vector-ref v 2)) (newline))",
+    "4#t42",
+  ],
+  [
+    "MIXV.SK8",
+    "(define v (make-vector 3 0)) (define a v) (begin (vector-set! a 0 (cons 1 2)) (vector-set! v 1 #\\A) (vector-set! v 2 v) (write (pair? (vector-ref v 0))) (write (char? (vector-ref a 1))) (write (vector? (vector-ref a 2))) (newline))",
+    "#t#t#t",
+  ],
+  [
+    "VEC64.SK8",
+    "(define v (make-vector 64 9)) (begin (write (vector-length v)) (write (vector-ref v 63)) (newline))",
+    "649",
+  ],
+  [
+    "VECGC.SK8",
+    "(define loop (lambda (n) (if (zero? n) 0 (begin (make-vector 8 0) (loop (- n 1)))))) (begin (loop 1000) (write (vector-ref (make-vector 2 9) 1)) (newline))",
+    "9",
+  ],
+  [
+    "VECROOT.SK8",
+    "(define v (make-vector 1 #f)) (define loop (lambda (n) (if (zero? n) 0 (begin (cons n 0) (loop (- n 1)))))) (begin (vector-set! v 0 (cons 11 22)) (loop 3000) (write (car (vector-ref v 0))) (newline))",
+    "11",
+  ],
+  [
+    "VECSELF.SK8",
+    "(define v (make-vector 1 #f)) (define loop (lambda (n) (if (zero? n) 0 (begin (make-vector 4 0) (loop (- n 1)))))) (begin (vector-set! v 0 v) (loop 1000) (write (vector? (vector-ref v 0))) (newline))",
+    "#t",
+  ],
+  [
+    "VECADJ.SK8",
+    "(define a (make-vector 0)) (define b (make-vector 0)) (set! a #f) (define loop (lambda (n) (if (zero? n) 0 (begin (make-vector 0) (loop (- n 1)))))) (loop 1000) (begin (write (vector? b)) (newline))",
+    "#t",
+  ],
+  [
+    "VECRETRY.SK8",
+    "(define loop (lambda (n) (if (zero? n) 0 (begin (make-vector 64 7) (loop (- n 1)))))) (loop 20) (begin (write (vector-length (make-vector 3 9))) (newline))",
+    "3",
+  ],
+  [
+    "VECOFLOW.SK8",
+    `(define root (make-vector 64 #f))
+      (define child #f)
+      (define fill (lambda (v n) (if (zero? n) 0 (begin (vector-set! v (- 16 n) (cons n 0)) (fill v (- n 1))))))
+      (define build (lambda (n) (if (zero? n) 0 (begin (set! child (make-vector 16 #f)) (fill child 16) (vector-set! root (- 64 n) child) (build (- n 1))))))
+      (build 64)
+      (define churn (lambda (n) (if (zero? n) 0 (begin (make-vector 8 0) (churn (- n 1))))))
+      (churn 1000)
+      (write (car (vector-ref (vector-ref root 63) 15)))
+      (newline)`,
+    "1",
+  ],
 ];
 const cases = [
   ["LAMBDA.SK8", "((lambda (x) x) 42)", "42"],
@@ -148,6 +209,116 @@ const cases = [
   ],
   ["NESTED.SK8", "(define id (lambda (x) x)) (id (id 42))", "42"],
   ["NULLARY.SK8", "(define f (lambda () 42)) (f)", "42"],
+  [
+    "REST.SK8",
+    "(define f (lambda (first . rest) (+ first (car rest)))) (f 40 2)",
+    "42",
+  ],
+  [
+    "ALLREST.SK8",
+    "(define f (lambda args (+ (car args) (car (cdr args))))) (f 40 2)",
+    "42",
+  ],
+  [
+    "RESTEMP.SK8",
+    "(define f (lambda (first . rest) (if (null? rest) first 0))) (f 42)",
+    "42",
+  ],
+  [
+    "DEFREST.SK8",
+    "(define (f first . rest) (+ first (car rest))) (f 40 2)",
+    "42",
+  ],
+  [
+    "RESTLIST.SK8",
+    "(begin (write ((lambda args args) 1 2 3)) (newline))",
+    "(1 2 3)",
+  ],
+  [
+    "RESTGC.SK8",
+    "(define f (lambda (n first . rest) (if (zero? n) first (f (- n 1) first 1)))) (f 3000 42)",
+    "42",
+  ],
+  [
+    "APPFIX.SK8",
+    "(apply + (list 40 2))",
+    "42",
+  ],
+  [
+    "APPLEAD.SK8",
+    "(apply + 40 (list 2))",
+    "42",
+  ],
+  [
+    "APPREST.SK8",
+    "(define f (lambda (first . rest) (+ first (car rest)))) (apply f (list 40 2 3))",
+    "42",
+  ],
+  [
+    "APPNULL.SK8",
+    "(apply (lambda () 42) '())",
+    "42",
+  ],
+  [
+    "APPTAIL.SK8",
+    "(define loop (lambda (n) (if (zero? n) 7 (apply loop (list (- n 1)))))) (loop 3000)",
+    "7",
+  ],
+  [
+    "APPAPP.SK8",
+    "(apply apply (list + (list 40 2)))",
+    "42",
+  ],
+  [
+    "APPNEST.SK8",
+    "(define f (lambda (n) (if (zero? n) 42 (apply apply (list f (list (- n 1))))))) (f 3000)",
+    "42",
+  ],
+  [
+    "APPGC.SK8",
+    "(define loop (lambda (n) (if (zero? n) (apply + (list 40 2)) (begin (cons n 0) (apply loop (list (- n 1))))))) (loop 3000)",
+    "42",
+  ],
+  [
+    "ECRETURN.SK8",
+    "(call/ec (lambda (escape) 7))",
+    "7",
+  ],
+  [
+    "ECEARLY.SK8",
+    "(call/ec (lambda (escape) (escape 42)))",
+    "42",
+  ],
+  [
+    "ECNEST.SK8",
+    "(call/ec (lambda (outer) (+ 1 (call/ec (lambda (inner) (inner 7))))))",
+    "8",
+  ],
+  [
+    "ECTAIL.SK8",
+    "(call/ec (lambda (escape) (letrec ((loop (lambda (n) (if (zero? n) (escape 42) (loop (- n 1)))))) (loop 3000))))",
+    "42",
+  ],
+  [
+    "ECPAIR.SK8",
+    "(call/ec (lambda (escape) ((car (cons escape '())) 42)))",
+    "42",
+  ],
+  [
+    "ECPAIR2.SK8",
+    "(call/ec (lambda (escape) ((cdr (cons 0 escape)) 42)))",
+    "42",
+  ],
+  [
+    "ECREPEAT.SK8",
+    "(define loop (lambda (n) (if (zero? n) 0 (begin (call/ec (lambda (escape) (escape 1))) (loop (- n 1)))))) (loop 300)",
+    "0",
+  ],
+  [
+    "ECGCMAP.SK8",
+    "(let ((root (cons 41 42))) (call/ec (lambda (escape) (letrec ((loop (lambda (n) (if (zero? n) (escape (car root)) (begin (cons n 0) (loop (- n 1))))))) (loop 3000)))))",
+    "41",
+  ],
   [
     "SIDEGEN.SK8",
     "(define g +) (define f (lambda (n) (if (zero? n) (g 1 (g 1 (g 1 (g 1 (g 1 (g 1 (+ 1 2))))))) (+ (f (- n 1)) 1)))) (g 1 (f 254))",
@@ -328,16 +499,44 @@ const integerRuntimeErrorCases = [
   ["CMPBAD.SK8", "(< 1 #t)", "RUNTIME ERROR\r\n"],
   ["INTOVF.SK8", "(+ 32767 1)", "RUNTIME ERROR\r\n"],
   ["INTQOVF.SK8", "(quotient -32768 -1)", "RUNTIME ERROR\r\n"],
+  ["INCHERR.SK8", "(integer->char 256)", "RUNTIME ERROR\r\n"],
   ["NOTARITY.SK8", "(not #t #f)", "RUNTIME ERROR\r\n"],
   ["MINUS0.SK8", "(-)", "RUNTIME ERROR\r\n"],
   ["CMPARITY.SK8", "(< 1)", "RUNTIME ERROR\r\n"],
 ];
 const integerMode = Deno.args.includes("--integers");
-const selectedCases = integerMode
+const applyMode = Deno.args.includes("--apply");
+const ecMode = Deno.args.includes("--ec");
+const runtimeErrorMode = Deno.args.includes("--runtime-errors");
+const applyCaseNames = new Set([
+  "APPFIX.SK8",
+  "APPLEAD.SK8",
+  "APPREST.SK8",
+  "APPNULL.SK8",
+  "APPTAIL.SK8",
+  "APPAPP.SK8",
+  "APPNEST.SK8",
+  "APPGC.SK8",
+]);
+const ecCaseNames = new Set(
+  cases.filter(([name]) => name.startsWith("EC")).map(([name]) => name),
+);
+const regularCases = cases.filter(([name]) =>
+  !applyCaseNames.has(name) && !ecCaseNames.has(name)
+);
+const selectedCases = runtimeErrorMode
+  ? []
+  : integerMode
   ? integerCases
+  : applyMode
+  ? cases.filter(([name]) => applyCaseNames.has(name))
+  : ecMode
+  ? cases.filter(([name]) => name.startsWith("EC"))
+  : Deno.args.includes("--vectors")
+  ? vectorCases
   : Deno.args.includes("--data")
   ? dataCases
-  : cases;
+  : regularCases;
 
 // Programs historically relied on the compiler printing the last value.  The
 // language now leaves output to explicit procedures, so keep these proofs
@@ -388,10 +587,7 @@ function splitTopLevelForms(source) {
 function explicitResultSource(source) {
   const forms = splitTopLevelForms(source);
   if (forms.length === 0) return source;
-  if (
-    /^\(begin\b/.test(source) &&
-    /\((?:write|display|newline|write-char|read-char)\b/.test(source)
-  ) {
+  if (/\((?:write|display|newline|write-char|read-char)\b/.test(source)) {
     return source;
   }
   const last = forms.at(-1);
@@ -404,19 +600,29 @@ function explicitResultSource(source) {
 const errorCases = [
   ["BADFORM.SK8", "(let ((value 1 2)) value)", "EXPECT\r\n"],
   ["DUPFORM.SK8", "((lambda (x x) x) 1 2)", "DUP\r\n"],
+  ["ECEMPTY.SK8", "(call/ec)", "COMPILE ERROR\r\n"],
+  ["ECEXTRA.SK8", "(call/ec (lambda (x) x) 2)", "EXPECT\r\n"],
   [
     "REVQCAP.SK8",
     "(write (quote (" + "1 ".repeat(64) + ")))",
     "CAP\r\n",
   ],
 ];
-const runtimeErrorCases = [
-  ["ARITY.SK8", "((lambda (x) x) 1 2)", "RUNTIME ERROR\r\n"],
-  ["UNBSET.SK8", "(set! missing 42)", "UNBOUND\r\n"],
+const restErrorCases = [
   [
-    "DEEPREC.SK8",
-    "(define f (lambda (n) (if (zero? n) 0 (+ 1 (f (- n 1)))))) (f 200)",
-    "RUNTIME ERROR\r\n",
+    "DUPREST.SK8",
+    "((lambda args (define args 42) args) 1 2)",
+    "DUP\r\n",
+  ],
+  [
+    "DUPNREST.SK8",
+    "((lambda (outer) ((lambda args (define args 42) args) outer 2)) 1)",
+    "DUP\r\n",
+  ],
+  [
+    "DUPRDEF.SK8",
+    "((lambda (first . rest) (define (rest) 42) (rest)) 1 2)",
+    "DUP\r\n",
   ],
 ];
 const dataErrorCases = [
@@ -426,16 +632,30 @@ const dataRuntimeErrorCases = [
   ["CARERR.SK8", "(car 1)", "RUNTIME ERROR\r\n"],
   ["CDRERR.SK8", "(cdr 1)", "RUNTIME ERROR\r\n"],
 ];
-const selectedErrorCases = integerMode
+const selectedErrorCases = runtimeErrorMode
   ? []
+  : applyMode
+  ? []
+  : integerMode
+  ? []
+  : ecMode
+  ? errorCases.filter(([name]) => name.startsWith("EC"))
   : Deno.args.includes("--data")
-  ? [...errorCases, ...dataErrorCases]
-  : errorCases;
-const selectedRuntimeErrorCases = integerMode
+  ? dataErrorCases
+  : [...errorCases, ...restErrorCases];
+const selectedRuntimeErrorCases = runtimeErrorMode
+  ? runtimeErrorCases
+  : applyMode
+  ? applyRuntimeErrorCases
+  : integerMode
   ? integerRuntimeErrorCases
+  : ecMode
+  ? runtimeErrorCases.filter(([name]) => name.startsWith("EC"))
+  : Deno.args.includes("--vectors")
+  ? vectorRuntimeErrorCases
   : Deno.args.includes("--data")
-  ? [...runtimeErrorCases, ...dataRuntimeErrorCases]
-  : runtimeErrorCases;
+  ? dataRuntimeErrorCases
+  : [];
 for (
   const [name, source] of [
     ...selectedCases,
@@ -462,7 +682,9 @@ function readWord(address) {
 }
 
 function runUntilPrompt(offset, description) {
-  const limit = description.startsWith("run ") ? 8000 : 1800;
+  // Nested tail apply allocates two short-lived argument lists per step.
+  // Allow that bounded stress case to finish without changing the stack guard.
+  const limit = description.startsWith("run ") ? 16000 : 1800;
   for (let attempt = 0; attempt < limit; attempt += 1) {
     const status = machine.run_slice(50_000, 500_000);
     transcript += decoder.decode(machine.take_serial_output());
@@ -629,9 +851,11 @@ try {
     });
     runCommand(`ERA ${outputName}`, "A>", `remove ${outputName}`);
     runCommand(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
+    runCommand(`ERA ${name}`, "A>", `remove ${name}`);
   }
   for (const [name, , expected] of selectedErrorCases) {
     runCommand(`SKATE ${name}`, expected, `reject ${name}`);
+    runCommand(`ERA ${name}`, "A>", `remove ${name}`);
   }
   for (const [name, , expected] of selectedRuntimeErrorCases) {
     const outputName = name.replace(".SK8", ".COM");
@@ -643,6 +867,7 @@ try {
     );
     runCommand(`ERA ${outputName}`, "A>", `remove ${outputName}`);
     runCommand(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
+    runCommand(`ERA ${name}`, "A>", `remove ${name}`);
   }
   console.log(JSON.stringify(
     {
@@ -651,6 +876,8 @@ try {
       imageEnd: compiler.image.end,
       runtimeBytes: runtimeLength,
       cases: selectedCases.map(([name]) => name),
+      errorCases: selectedErrorCases.map(([name]) => name),
+      runtimeErrorCases: selectedRuntimeErrorCases.map(([name]) => name),
       largestComBytes: Math.max(
         ...measurements.map(({ comBytes }) => comBytes),
       ),

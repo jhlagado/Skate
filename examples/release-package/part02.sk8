@@ -3,9 +3,9 @@
 ; The names are deliberately longer than the compiler's short examples.
 ; The final part reads the last definition after all parts are loaded.
 ; The compact source remains clear when listed with CP/M TYPE.
-(define state00000000006 "message06_________________________")
-(define state00000000007 "message07_________________________")
-(define state00000000008 "message08_________________________")
-(define state00000000009 "message09_________________________")
-(define state00000000010 "message10_________________________")
-(define state00000000011 "message11_________________________")
+(define state00000000006 6)
+(define state00000000007 7)
+(define state00000000008 8)
+(define state00000000009 9)
+(define state00000000010 10)
+(define state00000000011 11)

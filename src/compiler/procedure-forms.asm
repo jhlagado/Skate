@@ -148,12 +148,20 @@ SCLAMBF:
         CALL SCNEXT                ; Lambda requires a parenthesised parameter list.
         JP C,SCLAMERR              ; Restore scope state on a reader failure.
         CP 1                       ; The parameter container must be an opening list.
-        JP NZ,SCLAMERR             ; Reject dotted and scalar parameter forms.
+        JR Z,SCLAMP                ; A list carries fixed and dotted formals.
+        CP 5                       ; A scalar name denotes an all-rest formal list.
+        JP NZ,SCLAMERR             ; Other parameter forms are malformed.
+        LD (SCID),HL               ; Preserve the all-rest name for slot allocation.
+        CALL SCRADD             ; Add the name as the procedure's rest binding.
+        JP C,SCLAMERR              ; Duplicate or exhausted locals are source errors.
+        JP SCLAMPD                 ; The body follows the scalar rest name directly.
 SCLAMP:
         CALL SCNEXT                ; Read a parameter name or the list close.
         JP C,SCLAMERR              ; Restore the enclosing scope before returning.
         CP 2                       ; A close completes the formal parameter list.
         JR Z,SCLAMPD               ; The body follows immediately after the list.
+        CP 4                       ; A dot introduces the single rest formal.
+        JR Z,SCLAMDOT              ; Parse the name and require the list close.
         CP 5                       ; Every formal is an interned identifier.
         JP NZ,SCLAMERR             ; Reject literals and nested lists as names.
         LD (SCID),HL               ; Preserve the parameter identity for SCADDLOC.
@@ -172,7 +180,21 @@ SCLAMPNW:
         CALL SCPARAM               ; Record the slot in the descriptor metadata.
         JP C,SCLAMERR              ; Reject an arity above the descriptor capacity.
         JR SCLAMP                  ; Read the next formal name.
+SCLAMDOT:
+        CALL SCNEXT                ; A dotted formal must name one identifier.
+        JP C,SCLAMERR              ; Preserve a reader failure before scope cleanup.
+        CP 5                       ; Only a symbol can receive the surplus list.
+        JP NZ,SCLAMERR             ; Reject a missing or non-symbol rest name.
+        LD (SCID),HL               ; Preserve the rest name for duplicate checking.
+        CALL SCRADD             ; Add the rest binding after fixed formals.
+        JP C,SCLAMERR              ; Duplicate or exhausted locals are source errors.
+        CALL SCNEXT                ; The dotted name must be followed by the close.
+        JP C,SCLAMERR              ; Preserve an incomplete parameter list error.
+        CP 2                       ; Dotted formals contain exactly one tail name.
+        JP NZ,SCLAMERR             ; Reject a second tail name or malformed close.
 SCLAMPD:
+        CALL SCRMETA             ; Mark the descriptor and record the rest slot.
+        JP C,SCLAMERR              ; A malformed metadata record is a compiler error.
         CALL SCPREFX               ; Emit the closure value and jump-over branch.
         LD HL,(SCPC)
         LD (SCPBODY),HL            ; The body starts immediately after the prefix.
@@ -308,6 +330,61 @@ SCPDUPOK:
         SCF                        ; The caller rejects the parameter list.
         RET
 
+; Add the current SCID as the procedure's one rest binding.  The binding is
+; an ordinary local slot, but it remains outside the fixed-formal descriptor
+; count so the runtime can build a list from surplus arguments.
+SCRADD:
+        CALL SCPDUP                ; A rest name cannot duplicate a fixed name.
+        JR NC,SCRNEW            ; An outer binding may still be shadowed.
+        LD HL,SCDUPTXT             ; Reuse the ordinary duplicate-formal diagnostic.
+        LD (SCERRPTR),HL
+        SCF                        ; Report the duplicate without changing SCID.
+        RET
+SCRNEW:
+        CALL SCNSLOT               ; Allocate a normal lexical slot for the list.
+        RET C                      ; The local-slot bound remains the compiler gate.
+        LD (SCSLOT),A              ; SCADDLOC reads the selected slot from state.
+        CALL SCADDLOC              ; Make the rest name visible in the body.
+        RET C                      ; A full active directory is a compile error.
+        LD A,(SCSLOT)              ; Keep the slot for descriptor publication.
+        LD (SCRESTS),A
+        LD A,1
+        LD (SCRESTF),A             ; The descriptor is marked after fixed formals close.
+        XOR A                      ; Carry clear reports a complete rest binding.
+        RET
+
+; Mark a rest descriptor and store its local slot in a reserved high byte.
+; Fixed descriptors keep the old all-zero high bytes and remain byte-stable.
+SCRMETA:
+        LD A,(SCRESTF)
+        OR A
+        RET Z                       ; A fixed procedure needs no metadata change.
+        CALL SCPREC                 ; Locate the current forty-four-byte record.
+        INC HL                      ; Skip the body address low byte.
+        INC HL                      ; Skip the body address high byte.
+        LD A,(HL)                   ; The low seven bits retain the fixed arity.
+        OR 80H                       ; The high bit selects minimum-arity dispatch.
+        LD (HL),A                   ; Publish the rest policy in the existing byte.
+        AND 7FH                      ; The low bits select the reserved slot field.
+        INC HL                      ; Skip the arity byte to the first formal low byte.
+        INC HL
+        CP 4                         ; Four fixed formals use field three's high byte.
+        JR Z,SCRLAST
+        ADD A,A                      ; Each earlier formal occupies two bytes.
+        LD E,A
+        LD D,0
+        ADD HL,DE
+        INC HL                      ; Select the reserved high byte.
+        JR SCRPUT
+SCRLAST:
+        LD DE,7                      ; Field three's high byte is seven bytes ahead.
+        ADD HL,DE
+SCRPUT:
+        LD A,(SCRESTS)               ; The runtime reads this as the rest local slot.
+        LD (HL),A
+        XOR A                        ; Carry clear reports valid descriptor metadata.
+        RET
+
 ; Return carry when SCID names one of the current procedure's formal slots.
 SCPFORM:
         LD A,(SCCURPR)             ; Package-level definitions have no formals.
@@ -316,12 +393,15 @@ SCPFORM:
         CALL SCPREC                ; Locate the active descriptor metadata.
         INC HL                     ; Skip the body address low byte.
         INC HL                     ; Skip the body address high byte.
-        LD B,(HL)                  ; B is the number of formal slots.
-        LD A,B
-        OR A                       ; Preserve a clear result for a nullary procedure.
-        RET Z
+        LD A,(HL)                  ; The high bit marks a procedure with a rest formal.
+        LD (SCPHIGH),A             ; Keep the policy while the fixed fields are scanned.
+        AND 7FH                    ; B counts only the fixed formal names.
+        LD B,A                      ; B is the number of fixed formal slots.
         INC HL                     ; Skip the formal-count byte.
         INC HL                     ; Skip the capture-mask byte.
+        LD A,B
+        OR A                       ; Preserve a clear result for a nullary procedure.
+        JR Z,SCFNOFIX              ; An all-rest procedure has no fixed fields.
 SCFLOOP:
         LD C,(HL)                  ; Read one formal's local slot number.
         INC HL
@@ -345,8 +425,31 @@ SCFLOOP:
 SCFNO:
         POP HL
         DJNZ SCFLOOP
-        XOR A
-        RET
+        LD A,(SCPHIGH)             ; Fixed names were absent; inspect the rest slot.
+        AND 80H
+        RET Z                      ; A fixed procedure has no further formal name.
+        LD A,(SCPHIGH)
+        AND 7FH
+        CP 4
+        JR Z,SCFREST4              ; Four fixed names leave field three's high byte.
+        INC HL                     ; Earlier arities leave the next field's high byte.
+        JR SCFREST
+SCFREST4:
+        DEC HL                     ; The fourth fixed field is the reserved rest slot.
+SCFREST:
+        XOR A                      ; Clear the marker so one rest scan terminates.
+        LD (SCPHIGH),A
+        LD B,1                      ; Reuse the ordinary slot comparison once.
+        JR SCFLOOP
+SCFNOFIX:
+        LD A,(SCPHIGH)
+        AND 80H
+        RET Z                      ; A nullary fixed procedure has no formal names.
+        INC HL                     ; The first field's high byte stores the rest slot.
+        XOR A                      ; Clear the marker so one rest scan terminates.
+        LD (SCPHIGH),A
+        LD B,1
+        JR SCFLOOP
 
 ; Keep recursive forward cells while discarding the lambda's private locals.
 ; A forward name may have been discovered after the lambda's formals, so its
@@ -681,6 +784,9 @@ SCPNEWLP:
         LD (HL),A                  ; Clear one metadata byte.
         INC HL                     ; Advance to the next field.
         DJNZ SCPNEWLP              ; Clear the complete fixed-size record.
+        XOR A                      ; A new descriptor starts with fixed-arity policy.
+        LD (SCRESTF),A
+        LD (SCRESTS),A
         LD A,(SCTMPPR)             ; Return the descriptor index to SCLAMBF.
         OR A                       ; Clear carry without changing the index byte.
         RET                        ; The caller opens the new local scope.

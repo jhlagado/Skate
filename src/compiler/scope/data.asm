@@ -54,6 +54,7 @@ SCQNEST:
         CALL SCQSTOR
         JP C,SCNFAIL
         LD HL,(SCPC)
+        CALL SCABS                 ; Branch records store staged addresses; patch with COM space.
         CALL SCBRPAT
         JP C,SCNFAIL
         POP AF                     ; Restore the enclosing cache index.
@@ -194,6 +195,7 @@ SCQEND:
         CALL SCQSTOR               ; Retain the pair graph for later evaluations.
         JP C,SCQFAIL
         LD HL,(SCPC)               ; Cache hits branch to the code after this store.
+        CALL SCABS                 ; Branch records store staged addresses; patch with COM space.
         CALL SCBRPAT
         JP C,SCQFAIL
         POP AF                     ; Restore the enclosing dotted marker.

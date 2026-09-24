@@ -40,7 +40,7 @@ async function collectorFixture(rootCount: number) {
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
   memory.fill(0, 0x8000, 0x9000);
-  const slabBase = 0x4000;
+  const slabBase = 0x5000; // Keep the fixture above the runtime's static image.
   const slabCount = 11;
   const recordsPerSlab = 51;
   memory[assembled.address("SRTPSLBN")] = slabCount;

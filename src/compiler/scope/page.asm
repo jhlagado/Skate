@@ -1,4 +1,4 @@
-; Page-domain management for the scope compiler runtime.
+; Page-domain management for the scope-control runtime.
 ;
 ; This module is deliberately independent of pair and closure allocation.
 ; It owns whole 256-byte pages in two explicit extents: the gap between the

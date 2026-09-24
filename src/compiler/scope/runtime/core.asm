@@ -17,6 +17,8 @@ SRTHEAP    EQU 03000H              ; Base used by the full-pool allocation maps.
 SRTLOEND EQU 09000H              ; Low pages end before the external mark maps.
 SRTMPEND  EQU 0B800H              ; The managed high band begins after the maps.
 SRTHEPEN  EQU 0C000H              ; Managed objects stop before transient storage.
+SRTETOH   EQU 0E0H                ; Pair tag-seven values above this byte are escapes.
+SRTETOK   EQU 0E000H              ; Escape generations occupy the non-heap range.
 SRTOPB EQU 0C000H              ; Operator values use the next transient band.
 SRTSTKGU  EQU 0D400H              ; Reserve frames, operands and helper scratch.
 SRTOPEND  EQU 0C800H              ; Leave a 3 KiB transient band below the guard.
@@ -103,6 +105,12 @@ SRTSTART:
 SRTCALL:
         CALL 0000H                ; The compiler patches the generated entry.
         JP 0                      ; Return to CP/M through the warm start.
+
+; Dynamic apply state is shared by the normal and tail dispatchers.
+SRTAPMOD:  DB 0                    ; Nonzero while apply uses the current frame.
+SRTAPDIS:  DB 0                    ; Nonzero while apply enters a target.
+SRTAPTAG:  DB 0                    ; Target tag saved while the final list is read.
+SRTAPVAL:  DW 0                    ; Target payload saved beside its tag.
 
 ; Load a four-byte slot addressed by HL.  The final byte is the initialized
 ; flag; the preceding byte preserves the value tag for booleans.
@@ -535,8 +543,17 @@ SRTDISP:
         LD (SRTVAL),HL             ; Keep the callee payload for both paths.
         OR A                       ; Tag zero may identify a predefined primitive.
         JR Z,SRTIPRIM              ; Validate its reserved payload and dispatch it.
+        XOR A                      ; A closure or invalid value clears apply dispatch.
+        LD (SRTAPDIS),A
+        LD A,(SRTATMP)              ; Restore the tag before the closure check.
         CP 2                       ; Tag two identifies a closure object.
-        JP NZ,SRTERROR             ; Other scalar values cannot be called.
+        JP Z,SRTICLOS              ; Closures use the ordinary activation path.
+        CP 8                       ; Tag eight identifies an active one-shot escape.
+        JP Z,SRTIESC
+        JP SRTERROR                ; Other scalar values cannot be called.
+SRTIESC:
+        JP SRTCEESC
+SRTICLOS:
         LD HL,(SRTVAL)             ; Restore the closure object payload.
         LD (SRTOBJ),HL            ; SRTPACK returns the closure object payload.
         LD E,(HL)                  ; Read the descriptor pointer from its header.
@@ -583,6 +600,13 @@ SRTDISP:
 ; Route a primitive callee through the checked packet dispatcher.
 SRTIPRIM:
         CALL SRTIVAL               ; Validate and classify the reserved payload.
+        LD A,(SRTAPDIS)            ; Apply keeps the outer continuation for primitives.
+        OR A
+        JR Z,SRTIPN
+        XOR A
+        LD (SRTAPDIS),A
+        LD IX,(SRTRET)             ; The inner primitive returns to the outer call.
+SRTIPN:
         JP SRTPRIM                 ; The generated continuation remains in IX.
 
 ; Validate a predefined primitive payload and retain its zero-based kind.
@@ -594,7 +618,7 @@ SRTIVAL:
         LD A,L
         CP 20H
         JP C,SRTERROR
-        CP 40H                  ; Division extends the range through runtime kind thirty-one.
+        CP 4EH                  ; Apply extends the reserved primitive range.
         JP NC,SRTERROR
         SUB 20H
         LD (SRTPID),A              ; Kind zero is addition; kind three is zero?.
@@ -617,10 +641,29 @@ SRTTAIL:
 SRTTARG:
         LD (SRTATMP),A             ; Keep the target tag while selecting its path.
         LD (SRTVAL),HL             ; Keep the target payload for both paths.
+        CP 8                       ; A tail escape discards the current procedure frame.
+        JP Z,SRTIESC
         OR A                       ; A predefined primitive has no closure object.
-        JP Z,SRTTPRIM              ; Reuse the current epilogue after evaluation.
-        CP 2                       ; Only closure objects reach the existing tail path.
+        JR NZ,SRTTCLOS             ; A closure target reuses the active frame below.
+        LD A,(SRTAPMOD)            ; Apply's primitive target keeps that frame intact.
+        OR A
+        JP NZ,SRTAPRT
+        JP SRTTPRIM               ; Reuse the current epilogue after evaluation.
+SRTAPRT:
+        CALL SRTIVAL               ; Revalidate the primitive target.
+        LD A,(SRTPID)
+        CP 45
+        JR Z,SRTAPNXT
+        POP IX                     ; Remove the active frame epilogue before return.
+        JP SRTPRIM
+SRTAPNXT:
+        JP SRTAPPLY                ; Preserve tail mode while applying the next target.
+SRTTCLOS:
+        LD A,(SRTATMP)             ; Restore the target tag after the mode check.
+        CP 2                       ; Only closure objects reach the tail path.
         JP NZ,SRTERROR
+        XOR A
+        LD (SRTAPMOD),A
         LD HL,(SRTVAL)             ; Restore the closure object payload.
         LD (SRTOBJ),HL            ; Resolve the target closure object.
         LD E,(HL)                  ; Read its descriptor pointer.
@@ -750,21 +793,6 @@ SRTPACKC:
         PUSH IX                  ; Restore the SRTPACK call return.
         RET                      ; The caller selects closure or primitive dispatch.
 
-; Validate the descriptor's fixed arity and retain its address in SRTDESC.
-SRTDCHK:
-        LD (SRTDESC),HL          ; The callee payload is the descriptor address.
-        LD A,(SRTARGC)           ; Recover the staged argument count.
-        LD DE,(SRTDESC)          ; Read the descriptor header.
-        INC DE                   ; Skip the body address low byte.
-        INC DE                   ; Skip the body address high byte.
-        LD A,(DE)                 ; Descriptor offset two stores its arity.
-        LD B,A                    ; Compare the staged count with that byte.
-        LD A,(SRTARGC)            ; Restore the caller's argument count.
-        CP B                      ; Every fixed formal must receive one value.
-        JP NZ,SRTERROR             ; Arity mismatch is a runtime failure.
-        XOR A                    ; Clear carry after an exact count match.
-        RET                     ; SRTSARGS installs the packet values.
-
 ; Convert a logical slot number in A into its shared cell pointer.
 SRTADR:
         LD L,A                    ; Widen the zero-based slot index.
@@ -838,48 +866,6 @@ SRTCLRC:
         AND 70H
         LD (HL),A
         RET
-
-; Copy packet values into the descriptor's formal slots.
-SRTSARGS:
-        LD A,(SRTARGC)           ; A zero-count procedure needs no stores.
-        OR A                     ; Set Z for the nullary path.
-        RET Z                    ; The descriptor body can start immediately.
-        LD B,A                   ; B counts formal slots to fill.
-        LD C,0                   ; C selects packet values in source order.
-        LD HL,(SRTDESC)          ; HL begins at the descriptor body address.
-        LD DE,4                  ; Formal slot indexes begin at descriptor offset four.
-        ADD HL,DE                ; HL points at the first two-byte slot index.
-        LD (SRTNEXT),HL          ; Preserve the descriptor cursor across packet work.
-SRTSETLP:
-        LD HL,(SRTNEXT)          ; Resume at the next formal slot record.
-        LD A,(HL)                ; Read the compiler slot index from the descriptor.
-        INC HL                   ; Advance to the high index byte.
-        INC HL                   ; The next formal slot follows by two bytes.
-        LD (SRTNEXT),HL          ; Keep the cursor while loading this argument.
-        CALL SRTADR              ; Convert the slot index to the target cell address.
-        JP C,SRTERROR              ; Every formal must have an owned cell.
-        LD (SRTSLOT),HL          ; Preserve the destination across packet addressing.
-        LD A,C                   ; Address packet index C.
-        LD L,A                   ; Widen the packet index.
-        LD H,0                   ; Each packet value occupies four bytes.
-        ADD HL,HL                ; Two-byte offset.
-        ADD HL,HL                ; Four-byte offset.
-        LD DE,SRTARGPK           ; Add the packet base.
-        ADD HL,DE                ; HL points at the packet value.
-        LD E,(HL)                ; Read payload low.
-        INC HL                   ; Advance to payload high.
-        LD D,(HL)                ; DE now contains the payload value.
-        INC HL                   ; Advance to the packet tag.
-        LD A,(HL)                ; A contains the logical value tag.
-        EX DE,HL                 ; HL receives the payload expected by SRTSTORE.
-        LD DE,(SRTSLOT)          ; Restore the formal slot address.
-        PUSH BC                   ; SRTBSTOR uses B while preserving the count.
-        CALL SRTBSTOR             ; Publish the three-byte heap binding value.
-        POP BC                    ; Continue with the remaining formal slots.
-        INC C                    ; Advance to the next source argument.
-        DJNZ SRTSETLP            ; Fill every formal slot.
-        XOR A                    ; Carry clear reports a complete activation.
-        RET                      ; The caller enters the generated body.
 
 ; Return from a generated procedure and restore the caller's frame words.
 SRTINEND:

@@ -10,26 +10,26 @@
 ;=============================================================================
 
 ; The generated image and compiler tables occupy disjoint high TPA regions.
-SCSTAGE EQU 05000H               ; Object staging uses the measured gap above the image.
+SCSTAGE EQU 04EC0H               ; Leave a 256-byte guard before staged output.
 SCIMG   EQU SCSTAGE+79           ; NOBJ image payload begins after its header.
 SCCODE  EQU SCIMG+SRTLEN         ; Generated program follows the runtime image.
-SCEND   EQU 09000H               ; The staged image ends exactly before compiler tables.
+SCEND   EQU 09980H               ; The staged image ends exactly before compiler tables.
 SCGENEND EQU SCEND-32             ; Leave room for the fixed NOBJ tail and CRC.
 SCRECFR  EQU 0CE00H               ; Nested binding-list replay frames.
 SCRECFSZ EQU 16                   ; One saved replay scope record.
-SCRECEND EQU 0D800H               ; Replay workspace ends above the stack guard.
+SCRECEND EQU 0D820H               ; Replay workspace ends above the stack guard.
 
-SCGKEYS  EQU 09000H              ; Two-byte interner IDs for package globals.
-SCGSLOTS EQU 09200H              ; One-byte slot number for each global ID.
-SCLOCIDS EQU 09300H              ; Two-byte IDs for active local bindings.
-SCLOCSLT EQU 09400H              ; Active local binding slot numbers.
-SCBINDID EQU 09480H              ; Two-byte IDs for pending let bindings.
-SCBINDSL EQU 09580H              ; Pending let binding slot numbers.
-SCFIXTAB EQU 09600H              ; Four-byte address/kind/slot fixup records.
-SCNAMEDS EQU 09C00H              ; Symbol descriptor table for the reader.
-SCNAMEPL EQU 0A000H              ; 5,120-byte symbol spelling pool.
-SCSTRDS  EQU 0B400H              ; String descriptor table required by RINIT.
-SCSTRPL  EQU 0B500H              ; String pool leaves room below procedure tables.
+SCGKEYS  EQU 09980H              ; Two-byte interner IDs for package globals.
+SCGSLOTS EQU 09B80H              ; One-byte slot number for each global ID.
+SCLOCIDS EQU 09C80H              ; Two-byte IDs for active local bindings.
+SCLOCSLT EQU 09D80H              ; Active local binding slot numbers.
+SCBINDID EQU 09E00H              ; Two-byte IDs for pending let bindings.
+SCBINDSL EQU 09F00H              ; Pending let binding slot numbers.
+SCFIXTAB EQU 09F80H              ; Four-byte address/kind/slot fixup records.
+SCNAMEDS EQU 0A480H              ; Symbol descriptor table for the reader.
+SCNAMEPL EQU 0A840H              ; 4,800-byte symbol spelling pool.
+SCSTRDS  EQU 0BB00H              ; String descriptor table required by RINIT.
+SCSTRPL  EQU 0BC00H              ; String pool leaves room below procedure tables.
 SCPMETA  EQU 0C000H              ; Procedure records stay outside reader tables.
 SCLOCOWN EQU 0C400H              ; Owner procedure for each reusable local slot.
 SCRECBND EQU 0C500H              ; Declaration flags for the active letrec range.
@@ -51,21 +51,21 @@ SCCNPT   EQU 0CC00H              ; End-jump patches for cond clauses.
 SCNBASE  EQU 0CD00H              ; Saved cond patch-table bases by nesting depth.
 SCNTOPS  EQU 0CD20H              ; Saved cond patch counts by nesting depth.
 ; Literal records and bytes use the compiler-only band below the private stack.
-SCLITREC EQU 0D000H               ; Four bytes per copied symbol or string.
-SCLITPL EQU 0D100H              ; One kilobyte of literal spelling storage.
-SCLITOUT EQU 0D500H               ; Staged output address for each literal record.
+SCLITREC EQU 0D140H               ; Four bytes per copied symbol or string.
+SCLITPL EQU 0D240H              ; One kilobyte of literal spelling storage.
+SCLITOUT EQU 0D640H               ; Staged output address for each literal record.
 SCLITPSZ EQU SCLITOUT-SCLITPL    ; Capacity check for copied literal spellings.
-SCLITEND EQU 0D600H               ; End of the fixed compiler workspace.
+SCLITEND EQU 0D740H               ; End of the fixed compiler workspace.
 SCWEND   EQU SCRECEND             ; Replay workspace ends at the guarded-stack floor.
 
 ; Compiler entry and terminal paths.
 SCMAIN:
         LD HL,(6)                ; CP/M reports the transient-memory ceiling.
-        LD DE,0E000H              ; Reserve the upper 512 bytes for the stack.
+        LD DE,0E020H              ; Keep the compiler stack below CP/M's upper guard.
         OR A                      ; Clear carry before the ceiling comparison.
         SBC HL,DE                 ; Check the qualified TPA has the required guard.
         JP C,SCMEM                ; Refuse an installation with too little memory.
-        LD SP,0E000H              ; Parser and emitter calls share this stack.
+        LD SP,0E020H              ; Parser and emitter calls share this stack.
         CALL SCSETUP              ; Clear tables and load the checked runtime provider.
         JP C,SCFAIL               ; Refuse to parse when the provider was not loaded.
         CALL SCPACK               ; Read the source package and emit native code.
@@ -166,7 +166,7 @@ SCSETPR:
         CALL IINIT                ; Validate and clear its descriptor counters.
         RET C                     ; A bad high-memory table is a setup failure.
         LD IX,SCSCTX              ; Select the string context required by RINIT.
-        CALL IINIT                ; The current language rejects string events.
+        CALL IINIT                ; Prepare the string-literal interner used by RINIT.
         RET C                     ; Preserve the reader's ordinary setup diagnostic.
         RET                       ; Return with all compiler state initialised.
 
@@ -345,17 +345,32 @@ SCFORM:
         LD DE,SCQUOTE              ; Compare with the explicit quote form.
         CALL SCMATCH               ; Quote consumes one datum without evaluation.
         JP Z,SCQUOTEF
+        LD DE,SCCALEC              ; Compare with the bounded escape form.
+        CALL SCMATCH               ; call/ec receives one procedure expression.
+        JP Z,SCCALEF
         JP SCAPNAME                ; Other names are ordinary procedure values.
 
 ; Compile a computed operator list and continue with its argument sequence.
 SCAPLIST:
-        CALL SCEXPE                ; The opening list event remains in A.
-        RET C                      ; Preserve the nested operator diagnostic.
+        LD A,(SCTCTX)              ; The computed operator still has arguments to read.
+        PUSH AF                    ; Save the surrounding tail context for the caller.
+        XOR A                      ; Operator evaluation is always non-tail position.
+        LD (SCTCTX),A
+        LD A,1                     ; SCFORM reached this path with an opening-list event.
+        CALL SCEXPE                ; Compile the computed operator in value position.
+        JR C,SCAPLSTE             ; Restore the tail context after a nested failure.
+        POP AF                     ; Recover the enclosing application's tail context.
+        LD (SCTCTX),A
         CALL SCPUSH                ; Keep the computed callee below its arguments.
         RET C
         XOR A                      ; A computed operator uses the ordinary call path.
         LD (SCAPMODE),A            ; Do not inherit a surrounding primitive marker.
         JP SCAPARGS               ; The outer form supplies the arguments.
+SCAPLSTE:
+        POP AF                     ; Remove the saved context before reporting failure.
+        LD (SCTCTX),A
+        SCF                        ; Preserve the nested operator diagnostic.
+        RET
 
 ; Load a named procedure value and compile its application arguments.
 SCAPNAME:

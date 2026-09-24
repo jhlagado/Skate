@@ -1,4 +1,4 @@
-; Exact root discovery for the scope compiler runtime.
+; Exact root discovery for the scope-control runtime.
 ;
 ; Static value records are bounded by compiler-patched addresses.  Transient
 ; stacks and packets are bounded by live cursors, and environment maps carry
@@ -20,6 +20,7 @@ SRTROOTS:
         CALL SRTOPRT
         CALL SRTQRT
         CALL SRTENRT
+        CALL SRTCEROT              ; Scan maps saved by active call/ec records.
         LD A,(SRTQACTV)
         OR A
         RET Z
@@ -64,12 +65,15 @@ SRTNPOPB:
         PUSH HL
         LD A,(SRTNCT)
         CP B
-        JP C,SRTERROR
+        JR C,SRTNPOPX
         SUB B
         LD (SRTNCT),A
         POP HL
         POP AF
+        OR A                       ; A remains intact while successful removal clears carry.
         RET
+SRTNPOPX:
+        JP SRTERROR
 
 ; Remove one generated operand record while preserving A:HL.
 SRTNPOP1:
@@ -340,6 +344,16 @@ SRTMVALU:
         JP Z,SRTMARK
         CP 2
         JP Z,SRTCLENQ
+        CP 6
+        JP Z,SRTSMARK
+        CP 7
+        JP NZ,SRTMVR
+        LD A,H                       ; Pair-stored escape tokens are scalar leaves.
+        CP SRTETOH
+        JR NC,SRTMVR
+        LD A,1
+        JP SRTVHOOK
+SRTMVR:
         RET
 
 ; Return carry clear only for an allocated closure start with a complete
@@ -492,11 +506,16 @@ SRTCLNEW:
 ; Clear all closure marks at the beginning of a collection.
 SRTCLCLR:
         LD HL,SRTCLMK
-        LD DE,SRTCLMK+1
-        LD BC,08FFH
-        XOR A
+        LD BC,0900H
+SRTCLCLP:
+        LD A,(HL)
+        AND 0AAH                   ; Preserve odd vector-type marker bits.
         LD (HL),A
-        LDIR
+        INC HL
+        DEC BC
+        LD A,B
+        OR C
+        JR NZ,SRTCLCLP
         XOR A
         LD (SRTCLER),A
         RET
@@ -629,9 +648,19 @@ SRTCSLP:
         PUSH BC
         CALL SRTCLSTA
         JR Z,SRTCPOP
+        CALL SRTSSTA
+        JR NZ,SRTCPOP
+        LD HL,(SRTCLOBJ)           ; Restore the scanned object after string classification.
+        CALL SRTVSST
+        JR NZ,SRTCSVEC              ; Vectors need a repeat pass after queue overflow.
         CALL SRTCLSEE
         JR Z,SRTCPOP
         CALL SRTMCLOS
+        JR SRTCPOP
+SRTCSVEC:
+        LD HL,(SRTCLOBJ)
+        XOR A
+        CALL SRTVHOOK
 SRTCPOP:
         POP BC
         LD HL,(SRTCLSCN)
@@ -713,7 +742,9 @@ SRTCLCLB:
         LD DE,SRTCLBM
         ADD HL,DE
         LD A,C
-        CPL
+        ADD A,A                    ; Include the string marker bit.
+        OR C
+        CPL                         ; Clear the start and string markers.
         LD B,A
         LD A,(HL)
         AND B

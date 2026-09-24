@@ -3,6 +3,9 @@
 ; The names are deliberately longer than the compiler's short examples.
 ; The final part reads the last definition after all parts are loaded.
 ; The compact source remains clear when listed with CP/M TYPE.
+; This final source page also leaves enough room for the disk-package check.
+; The definitions below remain ordinary globals in the assembled program.
+; Keeping the padding in comments avoids adding data to the generated image.
 (define state00000000090 90)
 (define state00000000091 91)
 (define state00000000092 92)

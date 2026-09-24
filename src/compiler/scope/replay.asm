@@ -2,7 +2,7 @@
 ; are installed.  The frame stack lets a nested letrec append a temporary
 ; range, then resume the enclosing replay at the event after its list.
 
-SCREBUF  EQU 0D600H              ; Four bytes per retained reader event.
+SCREBUF  EQU 0D740H              ; Four bytes per retained reader event.
 
 ; Dispatch compiler reads either to the source reader or to the retained list.
 SCNEXT:

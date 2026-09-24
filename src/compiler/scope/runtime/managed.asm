@@ -1,4 +1,4 @@
-; Managed closure and binding storage for the scope compiler runtime.
+; Managed closure and binding storage for the scope-control runtime.
 ;
 ; Compiler-owned static records remain four bytes.  Dynamic environment cells
 ; use three bytes: two payload bytes followed by packed tag, state and mark
@@ -18,7 +18,14 @@ SRTBLOAD:
         AND 8
         JP Z,SRTUNBD
         LD A,(SRTTAG)
+        AND 80H
+        JR NZ,SRTBESCV
+        LD A,(SRTTAG)
         AND 7
+        EX DE,HL
+        RET
+SRTBESCV:
+        LD A,8
         EX DE,HL
         RET
 
@@ -36,8 +43,15 @@ SRTBSTOR:
         AND 70H
         LD B,A
         LD A,(SRTTAG)
+        CP 8
+        JR Z,SRTBTESC
         AND 7
         OR 28H
+        JR SRTBTAG
+SRTBTESC:
+        LD A,80H
+        OR 28H
+SRTBTAG:
         OR B
         LD (DE),A
         LD A,(SRTTAG)

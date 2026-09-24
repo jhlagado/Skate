@@ -1,4 +1,4 @@
-; Scope compiler assembled for CP/M publication.
+; Scope and control compiler assembled for CP/M publication.
 %INCLUDE "../origin.asm"
 %INCLUDE "runtime/values.inc"
 %INCLUDE "command.asm"
@@ -7,6 +7,7 @@
 %INCLUDE "definitions.asm"
 %INCLUDE "data.asm"
 %INCLUDE "../procedure-forms.asm"
+%INCLUDE "../call-ec.asm"
 %INCLUDE "bindings.asm"
 %INCLUDE "binding-primitives.asm"
 %INCLUDE "branches.asm"

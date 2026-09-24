@@ -1,4 +1,4 @@
-; Predefined arithmetic procedure values for the scope compiler runtime.
+; Predefined arithmetic procedure values for the scope-control runtime.
 ;
 ; Primitive values use tag zero and payloads FE20H through FE23H.  The
 ; dispatcher validates packet arity, pushes values in the numeric ABI order,
@@ -98,6 +98,8 @@ SRTOPPOP:
 ; normal application continuation or the current procedure epilogue. Packet
 ; values are read directly so a primitive call adds no argument stack frame.
 SRTPRIM:
+        XOR A                       ; Normal primitive calls do not use apply-tail mode.
+        LD (SRTAPMOD),A
         LD (SRTRET),IX              ; Every packet result returns through the clearer.
         LD IX,SRTPKRET              ; The clearer removes the packet roots first.
         LD A,(SRTPID)              ; Kinds zero through three are numeric primitives.
@@ -116,6 +118,11 @@ SRTPRIM:
         JP C,SRTIO                   ; Character output and console input follow EOF.
         CP 32
         JP C,SRTPNUM                 ; Division is zero-based runtime kind thirty-one.
+        CP 39
+        JP C,SRTSTRCH                 ; String and character operations follow division.
+        CP 45
+        JP Z,SRTAPPLY                 ; Apply spreads a checked proper list into a call.
+        JP C,SRTVEC                   ; Vector operations use the preceding range.
         JP SRTERROR                ; The reserved range has no other services.
 
 ; Primitive paths use PUSH IX/RET, so one common continuation can retire the
@@ -150,8 +157,8 @@ SRTNCHK:
         JR C,SRTNFAIL
         CP 20H
         JR C,SRTNF16
-        CP 40H
-        JR C,SRTNFAIL
+        CP 4EH
+        JR C,SRTNFAIL             ; FE20..FE4D are reserved primitive values.
 SRTNF16:
         LD HL,(SRTNVAL)
         LD A,H
@@ -560,6 +567,8 @@ SRTTSYM:
         JP SRTBNO
 SRTTPRO:
         LD A,(SRTNTAG)
+        CP 8
+        JP Z,SRTBYES
         CP 2
         JP Z,SRTBYES
         OR A
@@ -571,14 +580,19 @@ SRTTPRO:
         LD A,L
         CP 20H
         JP C,SRTBNO
-        CP 40H
+        CP 4EH
         JP C,SRTBYES
         JP SRTBNO
 SRTTSTR:
         LD A,(SRTNTAG)
         CP 5
         JP Z,SRTBYES
-        JP SRTBNO
+        CP 6
+        JP NZ,SRTBNO
+        LD HL,(SRTNVAL)
+        CALL SRTSVLD
+        JP C,SRTBNO
+        JP SRTBYES
 SRTTCHAR:
         LD A,(SRTNTAG)
         OR A
@@ -811,7 +825,12 @@ SRTDSPP:
         LD (SRTWMODE),A            ; Compound values use the readable write format.
         CALL SRTONE
         CP 5
+        JR Z,SRTDISPL
+        CP 6
         JR NZ,SRTDISPV
+        CALL SRTSVLD
+        JP C,SRTERROR
+SRTDISPL:
         CALL SRTWRLIT
         JP SRTUNSP
 SRTDISPV:
@@ -858,5 +877,12 @@ SRTPVAL:
 ; after the checked operation has consumed the packet values.
 SRTTPRIM:
         CALL SRTIVAL               ; Validate and classify the reserved payload.
+        LD A,(SRTPID)              ; Apply keeps the current frame for dynamic transfer.
+        CP 45
+        JR Z,SRTAPTAL
         POP IX                     ; The current frame's epilogue is now the return.
         JP SRTPRIM                 ; Evaluate with the reused procedure frame.
+SRTAPTAL:
+        LD A,1
+        LD (SRTAPMOD),A            ; SRTAPPLY will finish through SRTTARG.
+        JP SRTAPPLY                ; Build the packet without popping the frame.

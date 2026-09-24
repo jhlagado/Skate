@@ -43,6 +43,7 @@ SCPC:       DW 0                   ; Staged generated-code cursor.
 SCWTMP:     DW 0                   ; Temporary word for opcode emission.
 SCVTMP:     DW 0                   ; Temporary literal payload.
 SCBTMP:     DB 0                   ; Temporary boolean payload.
+SCPHIGH:    DB 0                   ; Formal-slot high byte during descriptor output.
 SCFPTR:     DW 0                   ; Staged address retained by SCFIX.
 SCPTMP:     DW 0                   ; Absolute target retained by SCPATCH.
 SCFKIND:    DB 0                   ; Pending slot kind for SCFIX.
@@ -109,6 +110,8 @@ SCPNLEN:    DB 0                   ; Spelling length used by SCPMATCH.
 SCPCOUNT:   DB 0                   ; Number of fixed procedure descriptors.
 SCCURPR:    DB 0FFH                ; Active procedure, or FFH at package level.
 SCTMPPR:    DB 0                   ; Descriptor being compiled.
+SCRESTF:    DB 0                   ; Nonzero when the current procedure has a rest formal.
+SCRESTS:    DB 0                   ; Local slot receiving the constructed rest list.
 SCARGN:     DB 0                   ; Generic application argument count.
 SCTCTX:     DB 0                   ; Nonzero when the current expression is tail code.
 SCIFTAIL:   DB 0                   ; Tail context saved while compiling an if.
@@ -155,7 +158,7 @@ SCNAMBS:    DB 0                   ; First temporary name record for named let.
 SCNAMCUR:   DB 0                   ; Cursor while adding named-let formals.
 SCNAMOP:    DB 0                   ; Enclosing descriptor while a named body opens.
 SCNAMNP:    DB 0                   ; Descriptor allocated by the active named form.
-SCNCTX:     DW SCNAMEDS,320,SCNAMEPL,5120,0,0
+SCNCTX:     DW SCNAMEDS,320,SCNAMEPL,4800,0,0
             DB 0,0                  ; Symbol context kind and ready flag.
 SCSCTX:     DW SCSTRDS,64,SCSTRPL,1024,0,0
             DB 1,0                  ; String context kind and ready flag.
@@ -196,6 +199,7 @@ SCDEFT:     DB "DEF",13,10,"$"
 SCDEFNT:    DB "DEFNAME",13,10,"$"
 SCMEMTXT:   DB "INSUFFICIENT MEMORY",13,10,"$"
 SCQUOTE:    DB 5,"quote"
+SCCALEC:    DB 7,"call/ec"
 SCNPLUS:    DB 1,"+"
 SCNSUB:     DB 1,"-"
 SCNMUL:     DB 1,"*"
@@ -227,4 +231,18 @@ SCNSYM:     DB 7,"symbol?"
 SCNPRO:     DB 10,"procedure?"
 SCNSTR:     DB 7,"string?"
 SCNCHAR:    DB 5,"char?"
+SCNSTRLN:   DB 13,"string-length"
+SCNSTRRF:   DB 10,"string-ref"
+SCNCHINT:   DB 13,"char->integer"
+SCNINTCH:   DB 13,"integer->char"
+SCNSTRMK:   DB 6,"string"
+SCNSTRCP:   DB 11,"string-copy"
+SCNSTRAP:   DB 13,"string-append"
 SCNEOFQ:    DB 11,"eof-object?"
+SCNVECT:    DB 7,"vector?"
+SCNMKV:     DB 11,"make-vector"
+SCNVEC:     DB 6,"vector"
+SCNVLEN:    DB 13,"vector-length"
+SCNVREF:    DB 10,"vector-ref"
+SCNVSET:    DB 11,"vector-set!"
+SCNAPP:     DB 5,"apply"

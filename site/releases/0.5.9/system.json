@@ -1,0 +1,12 @@
+{
+  "schema": "triptych-external-system-v1",
+  "name": "Skate 0.5.9",
+  "instruction": "Type B: to use the Skate work disk. Compile with SKATE RELEASE.SKM.",
+  "profile": "triptych-cpu-v0.1-2m-n04",
+  "image": {
+    "asset": "skate.img",
+    "bytes": 2097152,
+    "sha256": "309071c1ee30b9ef1d0605af31b87ad2671318aca8805ef13fbd2aa93c42a15f"
+  },
+  "workDisk": "copy-image"
+}

@@ -115,9 +115,51 @@ SCPLOOK:
         LD DE,SCNCHAR
         CALL SCPMATCH
         JP Z,SCPCHAR
+        LD DE,SCNSTRLN
+        CALL SCPMATCH
+        JP Z,SCPSTRLN
+        LD DE,SCNSTRRF
+        CALL SCPMATCH
+        JP Z,SCPSTRRF
+        LD DE,SCNCHINT
+        CALL SCPMATCH
+        JP Z,SCPCHINT
+        LD DE,SCNINTCH
+        CALL SCPMATCH
+        JP Z,SCPINTCH
+        LD DE,SCNSTRMK
+        CALL SCPMATCH
+        JP Z,SCPSTRMK
+        LD DE,SCNSTRCP
+        CALL SCPMATCH
+        JP Z,SCPSTRCP
+        LD DE,SCNSTRAP
+        CALL SCPMATCH
+        JP Z,SCPSTRAP
         LD DE,SCNEOFQ
         CALL SCPMATCH
         JP Z,SCPEOFQ
+        LD DE,SCNVECT
+        CALL SCPMATCH
+        JP Z,SCPVECT
+        LD DE,SCNMKV
+        CALL SCPMATCH
+        JP Z,SCPMKV
+        LD DE,SCNVEC
+        CALL SCPMATCH
+        JP Z,SCPVEC
+        LD DE,SCNVLEN
+        CALL SCPMATCH
+        JP Z,SCPVLEN
+        LD DE,SCNVREF
+        CALL SCPMATCH
+        JP Z,SCPVREF
+        LD DE,SCNVSET
+        CALL SCPMATCH
+        JP Z,SCPVSET
+        LD DE,SCNAPP
+        CALL SCPMATCH
+        JP Z,SCPAPPLY
         JP SCPNONE
 SCPZERO:
         LD A,4                     ; Kind four identifies zero? at runtime.
@@ -212,8 +254,50 @@ SCPSTR:
 SCPCHAR:
         LD A,28                    ; Kind twenty-eight identifies char?.
         RET
+SCPSTRLN:
+        LD A,33                    ; Kind thirty-three identifies string-length.
+        RET
+SCPSTRRF:
+        LD A,34                    ; Kind thirty-four identifies string-ref.
+        RET
+SCPCHINT:
+        LD A,35                    ; Kind thirty-five identifies char->integer.
+        RET
+SCPINTCH:
+        LD A,36                    ; Kind thirty-six identifies integer->char.
+        RET
+SCPSTRMK:
+        LD A,37                    ; Kind thirty-seven identifies string.
+        RET
+SCPSTRCP:
+        LD A,38                    ; Kind thirty-eight identifies string-copy.
+        RET
+SCPSTRAP:
+        LD A,39                    ; Kind thirty-nine identifies string-append.
+        RET
 SCPEOFQ:
         LD A,29                    ; Kind twenty-nine identifies eof-object?.
+        RET
+SCPVECT:
+        LD A,40                    ; Kind forty identifies vector?.
+        RET
+SCPMKV:
+        LD A,41                    ; Kind forty-one identifies make-vector.
+        RET
+SCPVEC:
+        LD A,42                    ; Kind forty-two identifies vector.
+        RET
+SCPVLEN:
+        LD A,43                    ; Kind forty-three identifies vector-length.
+        RET
+SCPVREF:
+        LD A,44                    ; Kind forty-four identifies vector-ref.
+        RET
+SCPVSET:
+        LD A,45                    ; Kind forty-five identifies vector-set!.
+        RET
+SCPAPPLY:
+        LD A,46                    ; Kind forty-six identifies apply.
         RET
 SCPNONE:
         XOR A                      ; Ordinary names receive no primitive mark.

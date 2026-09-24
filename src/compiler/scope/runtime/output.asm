@@ -117,6 +117,11 @@ SRTBOOL:      DB 0                 ; Branch decision retained while restoring A.
 SRTOP:        DB 0                 ; Selected checked arithmetic operation.
 SRTPID:       DB 0                 ; Predefined primitive kind for the active call.
 SRTARGC:      DB 0                 ; Number of values in the current call packet.
+SRTRESTF:     DB 0
+SRTMINAR:     DB 0
+SRTRESTN:     DB 0
+SRTRESTI:     DB 0
+SRTRESTC:     DB 0
 SRTNCT:       DB 0                 ; Number of generated operands not yet consumed.
 ; The exact-root operand table and allocation maps use a fixed work band
 ; outside the provider image.  The page domain ends its low band before 9000H,

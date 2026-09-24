@@ -116,10 +116,18 @@ SRTPINIT:
         INC HL                      ; Advance to the high CDR byte.
         LD (HL),D                   ; Publish the high CDR byte.
         INC HL                      ; Advance to the packed tag and state byte.
-        LD A,(SRTQCTAG)             ; Keep the three-bit CAR tag in bits zero to two.
+        LD A,(SRTQCTAG)             ; Keep the CAR tag in the packed three-bit field.
+        CP 8                        ; Escape values use the tag-seven vector field.
+        JR NZ,SRTPTCAR              ; All other values already fit the packed field.
+        LD A,7                      ; E000H..FFFFH cannot be a managed vector address.
+SRTPTCAR:
         AND 7                       ; A malformed internal tag cannot escape its field.
         LD (SRTPTAG),A              ; Preserve it while shifting the CDR tag.
-        LD A,(SRTQDTAG)             ; Place the three-bit CDR tag in bits three to five.
+        LD A,(SRTQDTAG)             ; Place the CDR tag in bits three to five.
+        CP 8                        ; Escape values share the reserved high address range.
+        JR NZ,SRTPTCDR              ; Other logical tags fit directly in three bits.
+        LD A,7                      ; CAR/CDR decode restores logical tag eight later.
+SRTPTCDR:
         AND 7                       ; Keep the packed representation bounded.
         ADD A,A                     ; Shift the CDR tag one bit toward its field.
         ADD A,A                     ; Shift it two bits toward its field.
@@ -346,6 +354,15 @@ SRTCARV:
         INC HL                     ; Reach the packed tag and state byte.
         LD A,(HL)
         AND 7                       ; The CAR tag occupies bits zero to two.
+        CP 7                        ; Tag seven also carries pair-stored escape tokens.
+        JR NZ,SRTCAROK
+        LD A,D                      ; Vector pointers remain below the managed ceiling.
+        CP SRTETOH
+        LD A,7                      ; Ordinary vectors retain their packed tag.
+        JR C,SRTCAROK
+        LD A,8                      ; Restore the logical escape tag after pair storage.
+SRTCAROK:
+        OR A                       ; Pair access reports success with carry clear.
         EX DE,HL
         RET
 SRTCDR:
@@ -374,6 +391,15 @@ SRTCDRV:
         SRL A
         SRL A
         AND 7                       ; Keep only the packed CDR tag.
+        CP 7                        ; Tag seven also carries pair-stored escape tokens.
+        JR NZ,SRTCDROK
+        LD A,D                      ; Managed vector addresses cannot reach E000H.
+        CP SRTETOH
+        LD A,7                      ; Ordinary vectors retain their packed tag.
+        JR C,SRTCDROK
+        LD A,8                      ; Restore logical tag eight for the caller.
+SRTCDROK:
+        OR A                       ; Pair access reports success with carry clear.
         EX DE,HL
         RET
 

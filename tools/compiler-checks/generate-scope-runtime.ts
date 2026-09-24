@@ -80,6 +80,7 @@ const values = [
   `SRTNULLP EQU ${address("SRTNULLP")}`,
   `SRTOUTV EQU ${address("SRTOUTV")}`,
   `SRTINV EQU ${address("SRTINV")}`,
+  `SRTCECAL EQU ${address("SRTCECAL")}`,
 ];
 const lines = [
   "; Runtime image generated from runtime/image.asm.",

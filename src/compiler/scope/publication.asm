@@ -376,11 +376,15 @@ SCPDSLP:
         LD HL,(SCPTR)              ; Read one compiler-local slot index.
         LD A,(HL)                  ; The low byte is the dynamic slot number.
         INC HL
-        INC HL                     ; Skip the reserved high byte.
+        LD (SCBTMP),A              ; Keep the low byte while reading its high byte.
+        LD A,(HL)                  ; Fixed records keep this byte zero.
+        LD (SCPHIGH),A             ; A rest record uses it for the list slot.
+        LD A,(SCBTMP)              ; Restore the slot low byte for publication.
+        INC HL                     ; Advance beyond the two-byte metadata field.
         LD (SCPTR),HL
         CALL SCBYTE                ; Write the formal slot index low byte.
         RET C
-        XOR A                      ; The high byte keeps the descriptor format fixed.
+        LD A,(SCPHIGH)             ; Publish the rest slot in its reserved high byte.
         CALL SCBYTE
         RET C
         LD A,(SCPDSLT)            ; Four fields are emitted for every record.

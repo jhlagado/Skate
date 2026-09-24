@@ -432,6 +432,8 @@ SCIDPAR:
         JP C,SCIDUNW
         CP 2
         JR Z,SCIDPEND
+        CP 4
+        JR Z,SCIDPDOT               ; A dot introduces the single rest formal.
         CP 5
         JP NZ,SCIDUNW
         LD (SCID),HL
@@ -450,7 +452,22 @@ SCIDPNEW:
         CALL SCPARAM
         JP C,SCIDUNW
         JR SCIDPAR
+SCIDPDOT:
+        CALL SCNEXT                 ; Read the dotted rest name.
+        JP C,SCIDUNW
+        CP 5
+        JP NZ,SCIDUNW
+        LD (SCID),HL
+        CALL SCRADD                 ; Add the rest binding after fixed formals.
+        JP C,SCIDUNW
+        CALL SCNEXT                 ; The rest name must be followed by the close.
+        JP C,SCIDUNW
+        CP 2
+        JP NZ,SCIDUNW
+        JR SCIDPEND
 SCIDPEND:
+        CALL SCRMETA                ; Publish the rest policy and its local slot.
+        JP C,SCIDUNW
         CALL SCMAKE                 ; Build the closure without a body jump yet.
         JP C,SCIDUNW
         LD A,(SCDEFSL)              ; Store the closure in the definition's cell.

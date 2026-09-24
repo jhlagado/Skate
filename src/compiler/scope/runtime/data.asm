@@ -268,11 +268,23 @@ SRTDRAIN:
         ; The shared pool no longer assigns closures a fixed address band.
         ; Consult the exact closure-start map instead of guessing from H.
         LD (SRTCLOBJ),HL
+        LD HL,(SRTCLOBJ)
         PUSH HL
         CALL SRTCLSTA
         POP HL
         JR Z,SRTDPAIR
+        ; Managed strings are leaves; vectors share the managed start map but
+        ; have an odd type marker, so send them through their element tracer.
+        CALL SRTSSTA
+        JR NZ,SRTDRAIN
+        CALL SRTVSST
+        JR NZ,SRTDVEC
         CALL SRTMCLOS
+        JR SRTDRAIN
+SRTDVEC:
+        LD HL,(SRTCLOBJ)
+        XOR A
+        CALL SRTVHOOK
         JR SRTDRAIN
 SRTDPAIR:
         LD A,1

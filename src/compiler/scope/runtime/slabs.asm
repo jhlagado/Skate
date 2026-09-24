@@ -301,6 +301,15 @@ SRTCLPLL:
         CALL SRTCLUIN
         JR SRTCLPNX
 SRTCLPDE:
+        CALL SRTSCL
+        CALL SRTCLCLM              ; Clear the mark and leave its map byte in HL.
+        LD A,C                     ; Recover the allocation's even start mask.
+        ADD A,A                    ; Select the adjacent odd vector marker.
+        CPL                         ; Form the marker clearing mask.
+        LD B,A                     ; Preserve the mask across the map read.
+        LD A,(HL)                  ; Read the persistent type and mark bits.
+        AND B                      ; Clear only this object's vector marker.
+        LD (HL),A                  ; Retain neighboring allocation metadata.
         CALL SRTCLCLB
 SRTCLPNX:
         LD HL,(SRTCLPGL)
@@ -427,6 +436,14 @@ SRTCLR2:
         RET
 SRTCLRLS:
         LD HL,(SRTCLOBJ)
+        CALL SRTCLCLM              ; Clear the mark and leave its map byte in HL.
+        LD A,C                     ; Recover the two-page object's even mask.
+        ADD A,A                    ; Select the adjacent odd vector marker.
+        CPL                         ; Form the marker clearing mask.
+        LD B,A                     ; Preserve the mask across the map read.
+        LD A,(HL)                  ; Read the persistent type and mark bits.
+        AND B                      ; Clear only this object's vector marker.
+        LD (HL),A                  ; Retain neighboring allocation metadata.
         CALL SRTCLCLB
         LD HL,(SRTCLPGA)
         LD DE,2
