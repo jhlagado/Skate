@@ -3,7 +3,7 @@
 (define receipt
   (lambda (items total)
     (if (null? items)
-        (begin (display "Total (cents): ") total)
+        (begin (display "Total (cents): ") (display total) (newline))
         (let* ((item (car items))
                (quantity (car (cdr item)))
                (price (car (cdr (cdr item)))))

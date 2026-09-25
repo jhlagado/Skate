@@ -6,7 +6,7 @@ Skate compiles `.sk8` source into NOBJ 1.0 files and runnable `.COM`
 programs. It is an ongoing implementation aimed at useful Scheme programs on
 a 64K machine, with a native compiler, a compact runtime and CP/M disk tools.
 
-The current release, Skate 0.5.9, supports exact signed integers, binary16
+The current release, Skate 0.5.10, supports exact signed integers, binary16
 numbers, booleans, byte characters, symbols, strings, quoted data, pairs,
 lists and vectors. It provides `cons`, `car`, `cdr`, mutation, lexical `let`,
 `let*`, `letrec` and named `let`, `if`, `begin`, `cond`, `and`, `or`, numeric
@@ -64,5 +64,5 @@ continuations, `eval`, Scheme ports and general file procedures outside this
 small core. The provider protocol is the planned boundary for richer device
 and file services.
 
-See the [0.5.9 release notes](release/v0.5.9/README.md) for the checked image,
+See the [0.5.10 release notes](release/v0.5.10/README.md) for the checked image,
 measurements and current limitations.

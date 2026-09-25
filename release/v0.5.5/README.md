@@ -19,7 +19,7 @@ console. `write` prints characters as `#\\xHH` with two lower-case hexadecimal
 digits; a top-level `display` sends the character byte directly, while nested
 values use the readable `write` form.
 
-The [adventure example](../../examples/applications/adventur.sk8) reads a
+The [adventure example](../../examples/applications/advent.sk8) reads a
 choice and selects one of two paths:
 
 ```scheme

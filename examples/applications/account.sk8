@@ -20,4 +20,5 @@
 (show-balance "Household closing" household)
 (show-balance "Savings closing" savings)
 (display "Combined balance: ")
-(+ (household 0) (savings 0))
+(display (+ (household 0) (savings 0)))
+(newline)

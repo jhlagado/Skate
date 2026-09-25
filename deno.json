@@ -13,7 +13,7 @@
     "test:cpm:console": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych tools/compiler-checks/scope-console-cpm-proof.mjs",
     "test:cpm:generated-effects": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych tools/compiler-checks/generated-effects-triptych-proof.mjs",
     "test:cpm:float": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/scope-float-cpm-proof.mjs",
-    "test:cpm:release": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/release-cpm-proof.mjs",
+    "test:cpm:release": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/release-cpm-proof.mjs && deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych tools/compiler-checks/examples-cpm-proof.mjs",
     "measure": "deno run --config deno.runtime.json --allow-read=.,../atom,../debug80-runtime,../z80-tool-services tools/compiler-checks/scope-budget.ts",
     "fmt": "deno fmt",
     "lint": "deno lint",

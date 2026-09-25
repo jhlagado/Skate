@@ -26,4 +26,4 @@
                                      (cons room visited))))
               (if path (cons room path) #f))))))
 (display "Route: 1=gate, 2=hall, 3=kitchen, 4=cellar, 5=tower, 6=vault:") (newline)
-(find-path 1 6 (quote ()))
+(write (find-path 1 6 (quote ()))) (newline)

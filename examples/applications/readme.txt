@@ -24,7 +24,7 @@ ROUTE.SK8    Search an adventure map for a path from gate to vault.
              Change the world list to alter rooms and exits.
 ACCOUNT.SK8  Two independent account balances held in closures.
              Change the transactions and observe the two balances.
-ADVENTUR.SK8 Read one character and choose a path at a fork.
+ADVENT.SK8   Read one character and choose a path at a fork.
 
 These are editable programs, not full applications. Use `display`, `write`
 or `write-char` when a program should produce output.

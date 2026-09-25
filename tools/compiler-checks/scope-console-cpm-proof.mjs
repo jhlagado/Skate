@@ -102,8 +102,8 @@ const cases = [
     "\x1a",
   ],
   [
-    "ADVENTUR.SK8",
-    await Deno.readTextFile("examples/applications/adventur.sk8"),
+    "ADVENT.SK8",
+    await Deno.readTextFile("examples/applications/advent.sk8"),
     "You are at a fork. Choose left or right: l\r\nYou take the left path.",
     "l",
   ],

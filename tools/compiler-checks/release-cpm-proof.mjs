@@ -28,7 +28,7 @@ const { CpmDisk, TriptychCpu } = require(
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("ascii");
-const sourceRoot = join(skateRoot, "examples", "release-package");
+const sourceRoot = join(skateRoot, "tests", "fixtures", "release-source");
 const partNames = Array.from(
   { length: 16 },
   (_, index) => `PART${String(index + 1).padStart(2, "0")}.SK8`,
@@ -268,23 +268,15 @@ async function buildHostedReleaseImage(
     },
   ];
   for (
-    const name of ["account.sk8", "adventur.sk8", "receipt.sk8", "route.sk8"]
+    const name of ["account.sk8", "advent.sk8", "receipt.sk8", "route.sk8"]
   ) {
     files.push({
       name: name.toUpperCase(),
       bytes: await cpmText(join(skateRoot, "examples", "applications", name)),
     });
   }
-  files.push({
-    name: releaseManifest,
-    bytes: await Deno.readFile(join(sourceRoot, "release.skm")),
-  });
-  for (const name of partNames) {
-    files.push({
-      name,
-      bytes: await Deno.readFile(join(sourceRoot, name.toLowerCase())),
-    });
-  }
+  // The multi-file source package belongs to the qualification run above.
+  // The published disk carries the useful examples instead of test fixtures.
 
   const disk = CpmDisk.create_two_mib();
   try {
@@ -495,14 +487,14 @@ if (imagePath) {
     const hostedSession = session(hostedMachine);
     hostedSession.boot();
     const compile = hostedSession.command(
-      `SKATE ${releaseManifest}`,
+      "SKATE RECEIPT.SK8",
       "COMPILED\r\n",
-      "compile the hosted release source",
+      "compile the hosted example",
     );
     const run = hostedSession.command(
-      "RELEASE",
-      "95\r\n",
-      "run the hosted release program",
+      "RECEIPT",
+      "Total (cents): 620\r\n",
+      "run the hosted example",
     );
     hostedRecords = {
       profile: hosted.qualified.descriptor.residentProfile,
