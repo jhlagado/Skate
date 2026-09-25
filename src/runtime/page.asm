@@ -1,4 +1,4 @@
-; Page-domain management for the scope-control runtime.
+; Page-domain management for the Skate runtime.
 ;
 ; This module is deliberately independent of pair and closure allocation.
 ; It owns whole 256-byte pages in two explicit extents: the gap between the

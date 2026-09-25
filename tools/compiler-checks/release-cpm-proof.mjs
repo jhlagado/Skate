@@ -318,7 +318,7 @@ const sourceDisk = await Deno.readFile(
 );
 const compiler = await loadAssembly("src/compiler/scope/compiler.asm");
 const provider = await loadAssembly(
-  "src/compiler/scope/runtime/image.asm",
+  "src/runtime/image.asm",
 );
 const compilerBytes = compiler.image.bytes.slice(0x0100);
 const runtimeImage = provider.image.bytes.slice(0x0100);

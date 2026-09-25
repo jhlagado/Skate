@@ -1,4 +1,4 @@
-; Predefined arithmetic procedure values for the scope-control runtime.
+; Predefined arithmetic procedure values for the Skate runtime.
 ;
 ; Primitive values use tag zero and payloads FE20H through FE23H.  The
 ; dispatcher validates packet arity, pushes values in the numeric ABI order,

@@ -1,4 +1,4 @@
-; Exact root discovery for the scope-control runtime.
+; Exact root discovery for the Skate runtime.
 ;
 ; Static value records are bounded by compiler-patched addresses.  Transient
 ; stacks and packets are bounded by live cursors, and environment maps carry

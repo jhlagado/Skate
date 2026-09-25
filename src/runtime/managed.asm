@@ -1,4 +1,4 @@
-; Managed closure and binding storage for the scope-control runtime.
+; Managed closure and binding storage for the Skate runtime.
 ;
 ; Compiler-owned static records remain four bytes.  Dynamic environment cells
 ; use three bytes: two payload bytes followed by packed tag, state and mark

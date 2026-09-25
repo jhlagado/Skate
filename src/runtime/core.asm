@@ -1,5 +1,5 @@
 ;=============================================================================
-;  Runtime support for the scope and control compiler
+;  Runtime support for compiled Skate programs
 ;=============================================================================
 ;
 ;  The compiler writes a short native program after this image.  The program

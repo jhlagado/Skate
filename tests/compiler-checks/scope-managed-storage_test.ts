@@ -8,7 +8,7 @@ function writeWord(memory: Uint8Array, address: number, value: number) {
 
 async function managedRuntime(withPairs = false) {
   const assembled = await loadAssembly(
-    "src/compiler/scope/runtime/image.asm",
+    "src/runtime/image.asm",
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;

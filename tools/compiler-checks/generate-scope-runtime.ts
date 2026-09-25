@@ -5,7 +5,7 @@ import { assembleAtomProject, materializeAtomGeneration } from "atom-z80";
 const root = new URL("../../", import.meta.url);
 const assembled = await assembleAtomProject({
   root: root.pathname,
-  entry: "src/compiler/scope/runtime/image.asm",
+  entry: "src/runtime/image.asm",
   assembler: undefined,
   target: undefined,
   maxInstructions: 1_000_000_000,
@@ -13,7 +13,7 @@ const assembled = await assembleAtomProject({
   sink: undefined,
 });
 const image = materializeAtomGeneration(assembled.generation);
-if (!image) throw new Error("scope compiler runtime produced no image");
+if (!image) throw new Error("Skate runtime produced no image");
 const payload = image.bytes.slice(0x0100);
 const symbols = new Map<string, number>(
   assembled.generation.symbols.map((symbol: {
@@ -25,7 +25,7 @@ const symbols = new Map<string, number>(
 function address(name: string): number {
   const value = symbols.get(name.toLowerCase());
   if (value === undefined) {
-    throw new Error(`scope compiler runtime has no ${name}`);
+    throw new Error(`Skate runtime has no ${name}`);
   }
   return value;
 }
@@ -35,7 +35,7 @@ function offset(name: string): number {
 }
 
 const values = [
-  "; Runtime addresses used by the scope compiler.",
+  "; Runtime addresses used by the compiler.",
   `SRTLEN EQU ${payload.length}`,
   `SRTCLP EQU ${offset("SRTCALL") + 1}`,
   `SRTLDA EQU ${address("SRTLOAD")}`,
@@ -83,7 +83,7 @@ const values = [
   `SRTCECAL EQU ${address("SRTCECAL")}`,
 ];
 const lines = [
-  "; Runtime image generated from runtime/image.asm.",
+  "; Runtime image generated from src/runtime/image.asm.",
   "SRTIMAGE:",
 ];
 for (let index = 0; index < payload.length; index += 32) {
@@ -95,14 +95,14 @@ for (let index = 0; index < payload.length; index += 32) {
 lines.push("SRTIEND:");
 await Deno.writeTextFile(
   new URL(
-    "../../src/compiler/scope/runtime/values.inc",
+    "../../src/runtime/values.inc",
     import.meta.url,
   ),
   values.join("\n") + "\n",
 );
 await Deno.writeTextFile(
   new URL(
-    "../../src/compiler/scope/runtime/template.inc",
+    "../../src/runtime/template.inc",
     import.meta.url,
   ),
   lines.join("\n") + "\n",

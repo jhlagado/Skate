@@ -1,4 +1,4 @@
-; Runtime image generated from runtime/image.asm.
+; Runtime image generated from src/runtime/image.asm.
 SRTIMAGE:
         DB $31,$00,$e0,$21,$00,$e0,$22,$89,$18,$2a,$a5,$18,$cd,$0e,$09,$da,$3f,$18,$cd,$ef,$14,$da,$3f,$18,$21,$00,$c0,$22,$cf,$18,$21,$00
         DB $c8,$22,$07,$25,$21,$00,$d0,$22,$2e,$28,$af,$32,$7e,$18,$32,$59,$18,$21,$00,$90,$11,$01,$90,$01,$ff,$08,$77,$ed,$b0,$21,$00,$99

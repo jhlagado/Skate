@@ -111,7 +111,7 @@ function callRoutine(
 
 Deno.test("direct cons preserves both scalar inputs through collection", async () => {
   const assembled = await loadAssembly(
-    "src/compiler/scope/runtime/image.asm",
+    "src/runtime/image.asm",
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu as CpuState;
@@ -140,7 +140,7 @@ Deno.test("direct cons preserves both scalar inputs through collection", async (
 
 Deno.test("packet cons preserves both scalar inputs through collection", async () => {
   const assembled = await loadAssembly(
-    "src/compiler/scope/runtime/image.asm",
+    "src/runtime/image.asm",
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu as CpuState;
@@ -172,7 +172,7 @@ Deno.test("packet cons preserves both scalar inputs through collection", async (
 
 Deno.test("quoted list construction survives collection at both allocations", async () => {
   const assembled = await loadAssembly(
-    "src/compiler/scope/runtime/image.asm",
+    "src/runtime/image.asm",
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu as CpuState;
@@ -209,7 +209,7 @@ Deno.test("quoted list construction survives collection at both allocations", as
 
 Deno.test("tracing preserves a linked list of more than one thousand pairs", async () => {
   const assembled = await loadAssembly(
-    "src/compiler/scope/runtime/image.asm",
+    "src/runtime/image.asm",
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu as CpuState;

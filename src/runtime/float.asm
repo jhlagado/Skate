@@ -1,4 +1,4 @@
-; Binary16 value printer for the scope compiler runtime.
+; Binary16 value printer for the Skate runtime.
 ;
 ; Finite binary16 values are exact dyadic fractions.  The printer converts
 ; the small significand to decimal digits, multiplies those digits by five

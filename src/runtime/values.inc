@@ -1,4 +1,4 @@
-; Runtime addresses used by the scope compiler.
+; Runtime addresses used by the compiler.
 SRTLEN EQU 17003
 SRTCLP EQU 181
 SRTLDA EQU 447

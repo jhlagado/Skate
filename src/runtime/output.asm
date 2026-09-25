@@ -1,4 +1,4 @@
-; Scope-control runtime output and scalar predicates
+; Skate runtime output and scalar predicates
 ;
 ; The compiler and runtime share the value printer below.  Integer conversion
 ; remains separate from pair and literal output so each path has one clear

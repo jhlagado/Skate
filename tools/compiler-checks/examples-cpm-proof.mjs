@@ -190,7 +190,7 @@ const sourceDisk = await Deno.readFile(
 );
 const compiler = await loadAssembly("src/compiler/scope/compiler.asm");
 const provider = await loadAssembly(
-  "src/compiler/scope/runtime/image.asm",
+  "src/runtime/image.asm",
 );
 let disk = makeSystemDisk(firmware);
 for (

@@ -12,7 +12,7 @@ function readWord(memory: Uint8Array, address: number) {
 
 async function pageRuntime() {
   const assembled = await loadAssembly(
-    "src/compiler/scope/runtime/image.asm",
+    "src/runtime/image.asm",
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;

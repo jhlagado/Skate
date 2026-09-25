@@ -35,7 +35,7 @@ function callLabel(
 
 async function collectorFixture(rootCount: number) {
   const assembled = await loadAssembly(
-    "src/compiler/scope/runtime/image.asm",
+    "src/runtime/image.asm",
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
@@ -112,7 +112,7 @@ Deno.test("collector preserves an edge missed by a full worklist", async () => {
 
 Deno.test("collector does not read past a root scan interval", async () => {
   const assembled = await loadAssembly(
-    "src/compiler/scope/runtime/image.asm",
+    "src/runtime/image.asm",
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
@@ -137,7 +137,7 @@ Deno.test("collector does not read past a root scan interval", async () => {
 
 Deno.test("pair allocator follows free chains across a second slab", async () => {
   const assembled = await loadAssembly(
-    "src/compiler/scope/runtime/image.asm",
+    "src/runtime/image.asm",
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
@@ -185,7 +185,7 @@ Deno.test("pair allocator follows free chains across a second slab", async () =>
 
 Deno.test("constructor roots survive collection and retain both inputs", async () => {
   const assembled = await loadAssembly(
-    "src/compiler/scope/runtime/image.asm",
+    "src/runtime/image.asm",
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
@@ -237,7 +237,7 @@ Deno.test("constructor roots survive collection and retain both inputs", async (
 
 Deno.test("overflow fallback restores its slab cursor after child tracing", async () => {
   const assembled = await loadAssembly(
-    "src/compiler/scope/runtime/image.asm",
+    "src/runtime/image.asm",
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
@@ -266,7 +266,7 @@ Deno.test("overflow fallback restores its slab cursor after child tracing", asyn
 
 Deno.test("pair slabs return pages and reuse released descriptors", async () => {
   const assembled = await loadAssembly(
-    "src/compiler/scope/runtime/image.asm",
+    "src/runtime/image.asm",
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
@@ -289,7 +289,7 @@ Deno.test("pair slabs return pages and reuse released descriptors", async () => 
 
 Deno.test("pair slabs reuse a middle descriptor without losing live slabs", async () => {
   const assembled = await loadAssembly(
-    "src/compiler/scope/runtime/image.asm",
+    "src/runtime/image.asm",
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
@@ -340,7 +340,7 @@ Deno.test("pair slabs reuse a middle descriptor without losing live slabs", asyn
 
 Deno.test("pair descriptor table reaches beyond thirty-two slabs", async () => {
   const assembled = await loadAssembly(
-    "src/compiler/scope/runtime/image.asm",
+    "src/runtime/image.asm",
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;

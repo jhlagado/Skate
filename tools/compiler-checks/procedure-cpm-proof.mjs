@@ -35,7 +35,7 @@ backing.set(systemDisk);
 backing.fill(0xe5, 52 * 128, 52 * 128 + 64 * 32);
 const compiler = await loadAssembly("src/compiler/scope/compiler.asm");
 const provider = await loadAssembly(
-  "src/compiler/scope/runtime/image.asm",
+  "src/runtime/image.asm",
 );
 assert.equal(compiler.image.base, 0);
 assert.equal(compiler.address("SCMAIN"), 0x0100);

@@ -1,6 +1,6 @@
 ; Scope and control compiler assembled for CP/M publication.
 %INCLUDE "../origin.asm"
-%INCLUDE "runtime/values.inc"
+%INCLUDE "../../runtime/values.inc"
 %INCLUDE "command.asm"
 %INCLUDE "command-support.asm"
 %INCLUDE "replay.asm"
@@ -15,7 +15,7 @@
 %INCLUDE "publication.asm"
 %INCLUDE "../cpm-source.asm"
 %INCLUDE "../cpm-transport.asm"
-%INCLUDE "runtime/loader.asm"
+%INCLUDE "../../runtime/loader.asm"
 %INCLUDE "../lexer.asm"
 %INCLUDE "../decimal.asm"
 %INCLUDE "../interner.asm"
