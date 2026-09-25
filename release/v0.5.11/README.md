@@ -47,9 +47,7 @@ The compiler and runtime sizes are unchanged:
 
 The compiler, runtime, examples and image were built with ATOM and checked
 through the Triptych CP/M host. The new game was compiled and played through
-the complete winning route. The first draft exceeded Skate's current output
-capacity, so the final version keeps the same game while using a smaller state
-machine.
+the complete winning route.
 
 The language limits are unchanged: there is no general macro system or
 quasiquote, reusable `call/cc`, `eval`, Scheme ports or general file
