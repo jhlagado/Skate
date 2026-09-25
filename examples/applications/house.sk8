@@ -1,0 +1,54 @@
+; The House in the Clearing: a short one-key text adventure.
+; Open the window, climb inside, reach the cellar and lift the trapdoor.
+
+(define place 0)
+(define opened #f)
+
+(define look
+  (lambda ()
+    (cond
+      ((= place 0)
+       (if opened
+           (display "Clearing, window open: c=climb.")
+           (display "Clearing, window shut: o=open.")))
+      ((= place 1) (display "Hall: u=upstairs, d=cellar."))
+      ((= place 2) (display "Upstairs: d=hall."))
+      ((= place 3) (display "Cellar: u=hall, t=trapdoor."))
+      (else (display "You are lost.")))
+    (newline)))
+
+(define game-loop
+  (lambda ()
+    (if (= place 4)
+        (begin (display "The trapdoor opens. You win.") (newline))
+        (if (= place 5)
+            (begin (display "You leave the house.") (newline))
+            (begin
+              (look)
+              (display "Command (o c u d t q): ")
+              (let ((key (read-char)))
+                (newline)
+                (cond
+                  ((eq? key #\q) (set! place 5))
+                  ((and (= place 0) (eq? key #\o))
+                   (set! opened #t))
+                  ((and (= place 0) (eq? key #\c))
+                   (if opened (set! place 1) 0))
+                  ((and (= place 1) (eq? key #\u))
+                   (set! place 2))
+                  ((and (= place 1) (eq? key #\d))
+                   (set! place 3))
+                  ((and (= place 2) (eq? key #\d))
+                   (set! place 1))
+                  ((and (= place 3) (eq? key #\u))
+                   (set! place 1))
+                  ((and (= place 3) (eq? key #\x74))
+                   (set! place 4))
+                  (else 0))
+                (game-loop)))))))
+
+(display "THE HOUSE IN THE CLEARING")
+(newline)
+(display "Use one key at a time; q quits.")
+(newline)
+(game-loop)

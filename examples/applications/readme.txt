@@ -1,7 +1,7 @@
 SKATE FOR CP/M
 
 Skate is a small Scheme compiler for CP/M. This disk contains the
-compiler, its runtime, a text editor and four example programs.
+compiler, its runtime, a text editor and five example programs.
 It is a work in progress, not a complete Scheme implementation.
 
 GETTING STARTED
@@ -25,6 +25,7 @@ ROUTE.SK8    Search an adventure map for a path from gate to vault.
 ACCOUNT.SK8  Two independent account balances held in closures.
              Change the transactions and observe the two balances.
 ADVENT.SK8   Read one character and choose a path at a fork.
+HOUSE.SK8    Explore a house: open the window and find the trapdoor.
 
 These are editable programs, not full applications. Use `display`, `write`
 or `write-char` when a program should produce output.

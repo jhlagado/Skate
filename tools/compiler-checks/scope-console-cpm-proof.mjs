@@ -107,6 +107,28 @@ const cases = [
     "You are at a fork. Choose left or right: l\r\nYou take the left path.",
     "l",
   ],
+  [
+    "HOUSE.SK8",
+    await Deno.readTextFile("examples/applications/house.sk8"),
+    [
+      "THE HOUSE IN THE CLEARING\r\n",
+      "Use one key at a time; q quits.\r\n",
+      "Clearing, window shut: o=open.\r\n",
+      "Command (o c u d t q): o\r\n",
+      "Clearing, window open: c=climb.\r\n",
+      "Command (o c u d t q): c\r\n",
+      "Hall: u=upstairs, d=cellar.\r\n",
+      "Command (o c u d t q): u\r\n",
+      "Upstairs: d=hall.\r\n",
+      "Command (o c u d t q): d\r\n",
+      "Hall: u=upstairs, d=cellar.\r\n",
+      "Command (o c u d t q): d\r\n",
+      "Cellar: u=hall, t=trapdoor.\r\n",
+      "Command (o c u d t q): t\r\n",
+      "The trapdoor opens. You win.\r\n",
+    ].join(""),
+    "ocuddt",
+  ],
 ];
 const errorCases = [
   ["BADWCHAR.SK8", "(write-char 1)"],
@@ -183,6 +205,58 @@ function runProgram(name, input, expected) {
   );
   return output;
 }
+function runInteractiveProgram(name, keys, expected) {
+  const start = transcript.length;
+  const commandBytes = new TextEncoder().encode(
+    name.replace(".SK8", "") + "\r",
+  );
+  assert.ok(machine.enqueue_serial_input(commandBytes));
+  const commandEcho = `${name.replace(".SK8", "")}\r\r\n`;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const status = machine.run_slice(50_000, 500_000);
+    transcript += decoder.decode(machine.take_serial_output());
+    assert.notEqual(status, 0, `CP/M halted while starting ${name}`);
+    if (transcript.slice(start).includes(commandEcho)) break;
+  }
+  assert.ok(transcript.slice(start).includes(commandEcho));
+  const gamePrompt = "Command (o c u d t q): ";
+  let readyAt = start;
+  for (const key of keys) {
+    for (let attempt = 0; attempt < 1800; attempt += 1) {
+      if (transcript.lastIndexOf(gamePrompt) >= readyAt) break;
+      const status = machine.run_slice(50_000, 500_000);
+      transcript += decoder.decode(machine.take_serial_output());
+      assert.notEqual(status, 0, `CP/M halted before ${key} for ${name}`);
+    }
+    assert.ok(
+      transcript.lastIndexOf(gamePrompt) >= readyAt,
+      JSON.stringify(transcript.slice(start)),
+    );
+    const before = transcript.length;
+    assert.ok(machine.enqueue_serial_input(new TextEncoder().encode(key)));
+    readyAt = before;
+    for (let attempt = 0; attempt < 1800; attempt += 1) {
+      const status = machine.run_slice(50_000, 500_000);
+      transcript += decoder.decode(machine.take_serial_output());
+      assert.notEqual(status, 0, `CP/M halted after ${key} for ${name}`);
+      if (
+        transcript.lastIndexOf(gamePrompt) >= before ||
+        transcript.endsWith("\r\nA>")
+      ) break;
+    }
+  }
+  runUntilPrompt(start, `run ${name}`);
+  const output = transcript.slice(start);
+  const commandEnd = output.indexOf("\r\r\n");
+  const prompt = output.lastIndexOf("\r\nA>");
+  assert.ok(commandEnd >= 0 && prompt > commandEnd, JSON.stringify(output));
+  assert.equal(
+    output.slice(commandEnd + 3, prompt),
+    expected,
+    `${name}: unexpected program output`,
+  );
+  return output;
+}
 
 try {
   machine.install_drive(0, disk, true);
@@ -196,7 +270,11 @@ try {
       comBytes: readCpm22File(image, name.replace(".SK8", ".COM")).length,
       nobjBytes: readCpm22File(image, name.replace(".SK8", ".NOB")).length,
     });
-    runProgram(name, input, expected);
+    if (name === "HOUSE.SK8") {
+      runInteractiveProgram(name, input, expected);
+    } else {
+      runProgram(name, input, expected);
+    }
     command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
     command(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
   }

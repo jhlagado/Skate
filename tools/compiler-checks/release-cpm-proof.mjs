@@ -268,7 +268,13 @@ async function buildHostedReleaseImage(
     },
   ];
   for (
-    const name of ["account.sk8", "advent.sk8", "receipt.sk8", "route.sk8"]
+    const name of [
+      "account.sk8",
+      "advent.sk8",
+      "house.sk8",
+      "receipt.sk8",
+      "route.sk8",
+    ]
   ) {
     files.push({
       name: name.toUpperCase(),
