@@ -19,7 +19,7 @@ SCLETB:
         CP 5                       ; Names are interned symbols.
         JP NZ,SCLETERR             ; Reject literal or list binding names.
         LD (SCID),HL               ; The pending entry receives this full identity.
-        CALL SCNSLOT             ; Allocate a reusable local data slot.
+        CALL SCNSLOT               ; Allocate a reusable local data slot.
         JP C,SCLETERR              ; Reject the first slot beyond the local bound.
         LD (SCSLOT),A              ; Save the selected slot for the pending entry.
         CALL SCPEND                ; Record the name and slot before recursive code.
@@ -37,11 +37,11 @@ SCLETB:
         JP C,SCLETERR              ; Reject a missing or extra binding expression.
         JR SCLETB                  ; Read the next binding or the outer close.
 SCLETBD:
-        CALL SCBIND                 ; Publish pending IDs in the active local scope.
+        CALL SCBIND                ; Publish pending IDs in the active local scope.
         JP C,SCLETERR              ; Reject a scope-stack overflow before body code.
         CALL SCLEBODY              ; Compile the body, then consume its close.
         JP C,SCLETERR              ; Preserve body failure before restoring cursors.
-        JP SCLETEND                 ; Restore old local cursors and return its value.
+        JP SCLETEND                ; Restore old local cursors and return its value.
 
 ; let* is the same syntax, but each binding becomes visible before the next one.
 SCLETSF:
@@ -63,7 +63,7 @@ SCLETSB:
         LD (SCID),HL               ; The active local receives this full identity.
         LD A,(SCLOCTOP)            ; The body shares only the final let* scope.
         LD (SCLEBASE),A            ; Keep later definitions at this boundary.
-        CALL SCNSLOT             ; Allocate a local slot before its initializer.
+        CALL SCNSLOT               ; Allocate a local slot before its initializer.
         JP C,SCLETERR              ; Reject the first slot beyond the local bound.
         LD (SCSLOT),A              ; Save the selected slot for the store.
         CALL SCPEND                ; Record the name and slot before recursive code.
