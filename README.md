@@ -66,3 +66,6 @@ and file services.
 
 See the [0.5.11 release notes](release/v0.5.11/README.md) for the checked image,
 measurements and current limitations.
+
+For a guided tour of the source tree, compilation stages and recommended
+reading order, see the [codebase guide](docs/codebase.md).
