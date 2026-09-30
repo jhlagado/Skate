@@ -40,7 +40,7 @@ release use CR/LF line endings for CP/M `TYPE` and `EDIT`.
 | `SKATE.COM` | 17,602 | 17,664 |
 | `SKATE.RT` | 7,413 | 7,424 |
 | Checked release `.COM` | 12,672 | 12,672 |
-| Checked release `.NOBJ` | 12,800 | 12,800 |
+| Checked release publication stream | 12,800 | 12,800 |
 
 The compiler image is 1,218 bytes above the 16 KiB code reference. Its complete
 allocation, including fixed tables, staging space and a guarded 2,048-byte
@@ -74,5 +74,5 @@ deno task measure
 The CP/M checks cover bindings, closures, mutation, proper tail calls, quoted
 data, collection, console input and output, exact arithmetic, binary16
 arithmetic, division, comparison, predicates, special values, 256 globals,
-capacity errors, remounting and failed publication. The generated NOBJ image is
-checked against its `.COM` program.
+capacity errors, remounting and failed publication. The generated publication
+image is checked against its `.COM` program.

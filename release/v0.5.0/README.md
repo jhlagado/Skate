@@ -2,7 +2,7 @@
 
 Skate 0.5.0 is a work in progress for Z80 computers running CP/M. The
 compiler reads `.sk8` source and ordered `.skm` source packages, publishing a
-checked NOBJ 1.0 file together with a runnable `.COM` program.
+checked intermediate stream together with a runnable `.COM` program.
 
 The language includes exact signed integers, booleans, symbols, strings,
 quoted data, pairs, lists, `cons`, `car`, `cdr`, `pair?`, `null?`, `eq?`,

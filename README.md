@@ -2,8 +2,8 @@
 
 Scheme for Z80 computers running CP/M.
 
-Skate compiles `.sk8` source into NOBJ 1.0 files and runnable `.COM`
-programs. It is an ongoing implementation aimed at useful Scheme programs on
+Skate compiles `.sk8` source into runnable `.COM` programs and a checked
+publication stream. It is an ongoing implementation aimed at useful Scheme programs on
 a 64K machine, with a native compiler, a compact runtime and CP/M disk tools.
 
 The current release, Skate 0.5.11, supports exact signed integers, binary16
@@ -18,8 +18,8 @@ binary16 values, and mixed arithmetic retains fractional results.
 
 The compiler and runtime are written in Z80 assembly using the ATOM assembler.
 The repository contains the Deno build commands, source-preparation tools and
-CP/M checks needed to assemble the compiler, publish an object file and run a
-generated program.
+CP/M checks needed to assemble the compiler, publish a checked program and run
+it on the target.
 
 The optional provider tools carry terminal, input, video, sound and bounded
 file requests over a byte protocol. Ordinary console text remains ordinary
@@ -57,7 +57,8 @@ deno task test:cpm
 deno task measure
 ```
 
-The compiler writes checked NOBJ and `.COM` output for use from a CP/M prompt.
+The compiler writes a checked `.COM` program for use from a CP/M prompt. Any
+intermediate publication data is an implementation detail of the build.
 
 Skate deliberately leaves general macros and quasiquote, reusable
 continuations, `eval`, Scheme ports and general file procedures outside this

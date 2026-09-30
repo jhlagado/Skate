@@ -50,7 +50,7 @@ The compiler image is 1,128 bytes above the 16 KiB code reference. Its measured
 total allocation, including workspace, is 50,152 bytes against a 57,088-byte
 budget. The configured tables provide 256 global slots, 128 simultaneous local
 slots, 320 symbol entries and 320 slot fixups. The checked release program
-uses a 12,032-byte `.COM` file and a 12,160-byte `.NOBJ` file.
+uses a 12,032-byte `.COM` file and a 12,160-byte checked publication stream.
 
 ## Current limitations
 
@@ -66,5 +66,5 @@ The checked CP/M suites cover console input and output, EOF handling, binding
 forms, mutual recursion, named `let`, internal definitions, closures that
 retain captured locations, integer arithmetic and comparisons, predicates,
 mutation, tail calls, quoted data, 256 globals and capacity diagnostics. The
-generated `.NOB` image is checked against the corresponding `.COM` output.
+generated publication image is checked against the corresponding `.COM` output.
 The package can be assembled with ATOM and measured with `deno task measure`.

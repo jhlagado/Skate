@@ -63,6 +63,6 @@ standard library beyond the procedures listed above.
 The checked CP/M suites cover binding forms, mutual recursion, named `let`,
 internal definitions, closures that retain captured locations, integer
 arithmetic and comparisons, predicates, mutation, tail calls, quoted data,
-256 globals and capacity diagnostics. The generated `.NOB` image is checked
-against the corresponding `.COM` output. The package can be assembled with
+256 globals and capacity diagnostics. The generated publication image is
+checked against the corresponding `.COM` output. The package can be assembled with
 ATOM and measured with `deno task measure`.

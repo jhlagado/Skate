@@ -30,7 +30,7 @@ Triptych CP/M host. The logical sizes are:
 | `SKATE.COM` compiler | 18,383 |
 | `SKATE.RT` runtime payload | 17,003 |
 | Checked release `RELEASE.COM` | 18,560 |
-| Checked release `RELEASE.NOB` | 18,688 |
+| Checked release publication stream | 18,688 |
 | Included source package | 8,361 |
 
 The release program uses 49,152 bytes as its managed-heap ceiling and reached

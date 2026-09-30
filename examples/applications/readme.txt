@@ -12,8 +12,9 @@ GETTING STARTED
   SKATE RECEIPT.SK8     Compile it.
   RECEIPT               Run the compiled program.
 
-Compiling writes a .COM executable and a .NOB object file. Keep SKATE.RT
-on the disk alongside SKATE.COM. The source files use CP/M line endings
+Compiling writes a .COM executable. Keep SKATE.RT on the disk alongside
+SKATE.COM. Intermediate publication data is for the compiler and is not part
+of the program. The source files use CP/M line endings
 so both TYPE and EDIT can display them.
 
 EXAMPLES

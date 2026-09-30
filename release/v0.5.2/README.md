@@ -14,8 +14,8 @@ procedures, closures, shared variable mutation and proper tail calls.
 Predefined procedures are `+`, `-`, `*`, `zero?`, `cons`, `car`, `cdr`, `list`,
 `pair?`, `null?`, `eq?`, `write`, `display` and `newline`. Arithmetic currently
 requires two operands. Source packages can span ordered `.SK8` files named in a
-`.SKM` manifest. Compilation produces a `.COM` executable and a `.NOB` object
-file. Programs print only what their source sends to `write`, `display` or
+`.SKM` manifest. Compilation produces a `.COM` executable and checked
+intermediate publication data. Programs print only what their source sends to `write`, `display` or
 `newline`.
 
 ## Try the examples
@@ -53,6 +53,6 @@ argument counts.
 
 The CP/M procedure and data suites cover closures, mutation, tail calls, quoted
 data identity, nested quotation, collection during retained literals, 256
-globals and capacity diagnostics. The generated `.NOB` image is checked against
-the corresponding `.COM` output. The package can be assembled with ATOM and
+globals and capacity diagnostics. The generated publication image is checked
+against the corresponding `.COM` output. The package can be assembled with ATOM and
 measured with `deno task measure`.

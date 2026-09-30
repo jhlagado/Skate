@@ -51,6 +51,6 @@ standard library beyond the procedures listed above.
 
 The checked CP/M suites cover integer arithmetic and comparisons, predicates,
 closures, mutation, tail calls, quoted data, collection during retained
-literals, 256 globals and capacity diagnostics. The generated `.NOB` image is
-checked against the corresponding `.COM` output. The package can be assembled
+literals, 256 globals and capacity diagnostics. The generated publication image
+is checked against the corresponding `.COM` output. The package can be assembled
 with ATOM and measured with `deno task measure`.

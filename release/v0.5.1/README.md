@@ -15,8 +15,9 @@ procedures, closures, shared variable mutation and proper tail calls.
 Predefined procedures are `+`, `-`, `*`, `zero?`, `cons`, `car`, `cdr`, `list`,
 `pair?`, `null?`, `eq?`, `write`, `display` and `newline`. Arithmetic currently
 requires two operands. Source packages can span ordered `.SK8` files named
-in a `.SKM` manifest. Compilation produces a `.COM` executable and a `.NOB`
-object file. Each program's final value is printed automatically.
+in a `.SKM` manifest. Compilation produces a `.COM` executable and checked
+intermediate publication data. Each program's final value is printed
+automatically.
 
 ## Try the examples
 

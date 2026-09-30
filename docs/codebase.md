@@ -115,7 +115,7 @@ Scope compiler
     └─ logical image bytes and forward-reference fixups
     │
     ▼
-NOBJ publication
+Publication stream
     │
     ├─ object records for the staged image
     ├─ resolved addresses and descriptors
@@ -129,10 +129,11 @@ CP/M .COM program
     └─ frames, managed storage, stack and heap
 ```
 
-The public compiler currently publishes a checked NOBJ object beside the COM
-file. ASO is a later private development path in `skate-legacy`, not the output
-format of public Skate 0.5.11. That distinction is intentional and should be
-made explicit in release notes until the ASO work is promoted.
+The public compiler stages checked publication data beside the COM file. The
+intermediate format is an implementation detail, not a supported user
+artifact. The public contract is the runnable COM program. New publication
+work in `skate-legacy` must be promoted and verified before it becomes part of
+this tree.
 
 ## The native compiler
 
@@ -154,7 +155,7 @@ order affects addresses and workspace, so a composition change needs a proof.
 | `src/compiler/procedure-forms.asm` | Compile calls, lambdas, captures and descriptors |
 | `src/compiler/call-ec.asm` | Compile one-shot escape procedures |
 | `src/compiler/scope/emitter.asm` | Emit runtime calls, values and patch sites |
-| `src/compiler/scope/publication.asm` | Build NOBJ records, matching COM bytes and CP/M output |
+| `src/compiler/scope/publication.asm` | Build checked publication records, matching COM bytes and CP/M output |
 
 A compiler feature normally crosses the form compiler, the emitter and the
 runtime primitive. Read those three boundaries together rather than changing a
@@ -227,7 +228,7 @@ commands; it does not call a TMS9918 routine directly.
 ### Publication
 
 Start at `scope/publication.asm`, then read `runtime/loader.asm` and the matching
-CP/M proof. The publisher stages NOBJ and COM files, replaces the previous
+CP/M proof. The publisher stages publication data and COM files, replaces the previous
 pair transactionally and checks the generated program after installation.
 
 ## Tests and verification
@@ -272,8 +273,8 @@ Skate depend on a private working directory or on a private manifest.
 | reader | The datum reader that turns the byte stream into structural events |
 | scope compiler | The native compiler that resolves definitions, bindings, control flow and emitted calls |
 | runtime image | The assembled provider image loaded by the compiler and used by generated programs |
-| NOBJ | The current public object stream containing the staged image and records |
-| COM | The runnable CP/M program produced beside the NOBJ file |
+| publication stream | Intermediate records used while building and checking the COM image |
+| COM | The runnable CP/M program produced for CP/M |
 | root | A descriptor or live slot that tells the collector where a managed value is found |
 | activation | The current call frame, argument packet, bindings and return state |
 | heap | Managed storage for pairs, strings, vectors, closures and other values that outlive a stack slot |
