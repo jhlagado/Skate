@@ -15,6 +15,12 @@ reconciled with the public tree and verified as a release increment.
 
 ## The reading route
 
+For a worked reading of the assembly, begin with
+[Following a local binding](tutorial/bindings.md). It traces a small `let`
+expression through scope tables, instruction emission and runtime storage,
+using excerpts from this checkout. The file map below is a reference to use
+alongside that tutorial.
+
 Read the files in this order. Each step introduces the vocabulary needed by the
 next one.
 
