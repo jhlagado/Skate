@@ -5,9 +5,8 @@ an address or a slot number. Between those two forms lies a useful first route
 through Skate: the compiler establishes where a name is visible, emits code to
 store its value and emits code to retrieve it when the body uses the name.
 
-This chapter follows the public compiler and runtime in this checkout. You
-need familiarity with Z80 loads, calls and conditional branches. The Scheme
-example is small enough to keep beside the assembly throughout the reading.
+This account follows the public compiler and runtime in this checkout. The
+assembly excerpts use ordinary Z80 loads, calls and conditional branches.
 
 ```scheme
 (begin
@@ -25,7 +24,7 @@ that `let` body.
 
 ## Two moments in the life of a binding
 
-We will encounter Z80 assembly doing two different jobs. The compiler runs
+The Z80 assembly performs two different jobs. The compiler runs
 first, reading Scheme and writing instruction bytes. The generated program
 runs later, executing those bytes and calling the runtime. Both programs use
 registers called `A` and `HL`, but their contents belong to different executions.
@@ -38,8 +37,7 @@ binding code.
 
 The relevant files are [bindings.asm](../../src/compiler/scope/bindings.asm),
 [emitter.asm](../../src/compiler/scope/emitter.asm) and
-[core.asm](../../src/runtime/core.asm). We can follow this example without
-reading all three files from beginning to end.
+[core.asm](../../src/runtime/core.asm). The excerpts below cover the relevant paths through these files.
 
 ## Reserving a place for `base`
 
@@ -60,7 +58,7 @@ After reading a name, it reaches this sequence:
 ```
 
 These instructions are copied from the routine with their inline comments
-omitted so we can explain the sequence as a whole. Token kind five denotes a
+omitted. Token kind five denotes a
 symbol. At that point `HL` contains the identity of `base`. The compiler saves
 it in `SCID`, then calls `SCNSLOT` to allocate a compiler slot number. On success
 the number is returned in `A` and saved in `SCSLOT`.
@@ -70,7 +68,7 @@ between pending and active bindings implements a Scheme rule: the initialisers
 of an ordinary `let` are evaluated in the enclosing scope. The new bindings
 become visible together in the body.
 
-For our example, the state develops like this. The letters stand for whichever
+For this expression, compilation produces the following states. The letters stand for whichever
 slot numbers the compiler assigns, rather than fixed addresses.
 
 | Compilation point | Pending names | Newly active names |
@@ -112,7 +110,7 @@ value. The instructions already emitted for `40` will produce that value when
 the generated program runs.
 
 `SCSTORE` has two paths. A local belonging to a procedure uses the active
-procedure environment. Our `let` is outside a procedure and uses the static
+procedure environment. This `let` is outside a procedure and uses the static
 path at `SCSTFIX`. The beginning of that path is:
 
 ```asm
@@ -191,17 +189,17 @@ SCLETBD:
 `SCBIND` copies the pending names and slot numbers into the active local scope.
 `SCLEBODY` can then compile `(+ base delta)` with both names available. In the
 emitter, `SCLOAD` performs the corresponding selection between static slots and
-procedure environments. For our static slots it emits an address load with a
+procedure environments. For these static slots it emits an address load with a
 fixup, followed by a runtime load call. When those calls run, they retrieve the
 values stored by the initialisers.
 
-The addition and printing use their own runtime services. For this reading,
-the binding mechanism has supplied the two values they need. `SCLETEND`
+The addition and printing use their own runtime services. The binding
+mechanism supplies the two values they need. `SCLETEND`
 restores the compiler's enclosing scope cursors after the body has been
 compiled. That restoration changes subsequent name lookup during compilation.
 It is not a runtime instruction that clears the two Scheme values.
 
-## A small change with a visible consequence
+## Sequential bindings with `let*`
 
 The same proof contains `LETSTAR.SK8`:
 
@@ -220,9 +218,8 @@ binding. The next initialiser can therefore resolve that name. Ordinary `let`
 waits until `SCBIND` at the end of the list. The source-level difference between
 `let` and `let*` is visible in the placement of that table update.
 
-A useful reading experiment is to locate `SCADDLOC` in the sequential loop and
-compare it with `SCLETBD` above. The changed visibility follows from when the
-compiler updates its active scope, while both paths use the store emitter.
+Both paths use the store emitter. Their different visibility rules follow
+from when the compiler updates its active scope.
 
 The existing proof can be run from the repository root with the sibling
 projects described in the main guide available:
@@ -235,7 +232,7 @@ deno run --config deno.runtime.json \
 
 It runs a corpus, including these two cases and nested-binding examples. The
 proof compiles the programs under CP/M and checks their execution results.
-The adjacent `SHADOW.SK8` case is a next reading exercise: an inner `value`
-binding produces `2` while the outer binding remains a distinct slot. Following
-that example through the pending and active tables gives the scope restoration
-at `SCLETEND` a concrete purpose.
+The adjacent `SHADOW.SK8` case covers nested scopes: an inner `value` binding
+produces `2` while the outer binding remains a distinct slot. Restoring the
+active scope at `SCLETEND` makes the outer binding available again after the
+inner body has been compiled.

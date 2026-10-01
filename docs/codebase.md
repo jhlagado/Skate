@@ -15,14 +15,12 @@ reconciled with the public tree and verified as a release increment.
 
 ## The reading route
 
-For a worked reading of the assembly, begin with
 [Following a local binding](tutorial/bindings.md). It traces a small `let`
 expression through scope tables, instruction emission and runtime storage,
 using excerpts from this checkout. The file map below is a reference to use
-alongside that tutorial.
+alongside that account.
 
-Read the files in this order. Each step introduces the vocabulary needed by the
-next one.
+The following order follows the dependencies between the main subsystems.
 
 1. [`README.md`](../README.md) states the current language surface, build
    commands and public limitations.
@@ -33,27 +31,26 @@ next one.
 4. [`src/compiler/scope/compiler.asm`](../src/compiler/scope/compiler.asm) is the
    native compiler composition root. Its include order is the first map of the
    target compiler.
-5. Read the native input files in this order: `cpm-source.asm`,
+5. The native input sequence consists of `cpm-source.asm`,
    `cpm-transport.asm`, `lexer.asm`, `decimal.asm`, `interner.asm` and
    `reader.asm`.
-6. Read the scope compiler in this order: `command.asm`, `definitions.asm`,
+6. The scope compiler sequence consists of `command.asm`, `definitions.asm`,
    `bindings.asm`, `branches.asm`, `data.asm`, `procedure-forms.asm`,
    `emitter.asm` and `publication.asm`.
-7. Read [`src/runtime/image.asm`](../src/runtime/image.asm) as the runtime
-   composition root, then follow `core.asm`, storage, primitives, pairs, data,
+7. [`src/runtime/image.asm`](../src/runtime/image.asm) is the runtime
+   composition root, including `core.asm`, storage, primitives, pairs, data,
    roots, numeric code, strings and vectors.
-8. Finish with the matching proof in `tools/compiler-checks/`. The procedure
-   proof is the best first example because it covers ordinary calls, closures,
+8. The corresponding proofs are in `tools/compiler-checks/`. The procedure
+   proof covers ordinary calls, closures,
    rest parameters, `apply` and one-shot `call/ec`.
 
 The order is deliberate. The compiler emits calls into the runtime, so reading
 runtime labels before the emitter gives little context. The proof brings the
 compiler image, runtime image, CP/M disk and generated program together.
 
-## Your first hour
+## An expression through the compiler
 
-Use one small program as a thread through the route. This ties names to a
-behaviour instead of turning the tour into a directory listing.
+A small arithmetic expression crosses the input, emission and runtime layers:
 
 ```scheme
 (begin
@@ -61,34 +58,27 @@ behaviour instead of turning the tour into a directory listing.
   (newline))
 ```
 
-Find a matching expression in the procedure or console proof. Read the lexer
-only far enough to see how the two numbers and the `+` symbol become tokens.
-Read the command and emitter files to see the primitive identity and argument
-packet being written. Then read the numeric primitive in `src/runtime/` to see
-the packet being checked and folded. Run the smallest proof and compare its
-output with the expected console text. Replace the expression with a `let`, a
-pair or a small lambda and follow the same boundaries again.
+The lexer produces tokens for the numbers and the `+` symbol. The command and
+emitter routines generate the primitive call and its argument packet. At
+runtime, the numeric primitive checks the packet and folds the operands into
+a result. Console output then prints that result. Bindings, pairs and lambdas
+add scope or storage requirements to this same compilation path.
 
-## Reading one assembly module
+## Assembly module contracts
 
-Do not begin by reading every instruction in a large file. Establish the
-module contract first.
+A module's public interface describes its input registers, returned value,
+carry or error convention, preserved registers, stack use and caller-owned
+workspace. These contracts connect routines across file boundaries.
 
-1. Read the purpose and public-interface comments. Record input registers,
-   returned value, carry or error convention, preserved registers, stack use
-   and caller-owned workspace.
-2. Find the public label in the composition file. Follow its first call rather
-   than searching for every label with the same prefix.
-3. At each internal label, write down the register meanings at entry and what
-   each branch establishes before it joins another path.
-4. Mark reads and writes of workspace, state, root descriptors and stack slots.
-   These names identify ownership and lifetime while you trace a collector or a
-   call frame.
-5. When a routine calls another group, stop and read that group's contract
-   before continuing. A packet pointer, tagged value or carry flag may change
-   meaning at that boundary.
-6. Finish with the smallest proof that invokes the entry point. The proof is
-   the executable explanation of the contract.
+Within a routine, register meanings depend on the current operation. Branches
+establish conditions that subsequent instructions rely on. Workspace, root
+descriptors and stack slots record state whose lifetime may extend beyond a
+single call. A packet pointer or tagged value can therefore require both the
+local instruction sequence and the called routine's contract to interpret it.
+
+The focused proofs exercise these interfaces with concrete inputs and expected
+results. They provide a second description of each contract alongside the
+assembly comments.
 
 The assembly comments explain register and flag usage beside the instructions.
 The label prefixes also identify ownership. `SC` is the scope compiler, `RT` is
@@ -164,8 +154,7 @@ order affects addresses and workspace, so a composition change needs a proof.
 | `src/compiler/scope/publication.asm` | Build checked publication records, matching COM bytes and CP/M output |
 
 A compiler feature normally crosses the form compiler, the emitter and the
-runtime primitive. Read those three boundaries together rather than changing a
-single file by itself.
+runtime primitive. Changes to a form can therefore affect all three interfaces.
 
 ## The runtime
 
@@ -195,14 +184,14 @@ to read for such a change.
 
 ### Arithmetic
 
-Start at `lexer.asm` and `decimal.asm`, then follow literal and call emission
-through `scope/emitter.asm`. The runtime primitive dispatches to `numeric.asm`
-and `binary16.asm`. Read `float.asm` as well when the expression mixes exact
-integers with fractional values.
+Literal parsing is in `lexer.asm` and `decimal.asm`. Literal and call emission
+is in `scope/emitter.asm`. The runtime primitive dispatches to `numeric.asm`
+and `binary16.asm`. `float.asm` handles the associated floating-point support.
 
 ### Lambdas, closures and tail calls
 
-Start at `procedure-forms.asm`, then read `scope/bindings.asm`. The generated
+Procedure compilation is in `procedure-forms.asm`, with binding resolution in
+`scope/bindings.asm`. The generated
 call enters `core.asm`, creates a frame and captures the required bindings.
 Tail calls reuse the current activation after the new packet is checked. The
 managed-storage and exact-root tests show why captured values and uncaptured
@@ -210,31 +199,31 @@ slots have different lifetimes.
 
 ### Vectors, rest parameters and apply
 
-Start at `procedure-forms.asm` for dotted parameter lists and argument packet
-construction. Follow `rest.asm` and `apply.asm` for list-backed argument
-collection and application. Read `vectors.asm` with `pairs.asm` because vector
-contents and list arguments share root and storage rules. The `--vectors` and
+`procedure-forms.asm` handles dotted parameter lists and argument packet
+construction. `rest.asm` and `apply.asm` implement list-backed argument
+collection and application. Vector contents and list arguments also depend on
+the root and storage rules in `vectors.asm` and `pairs.asm`. The `--vectors` and
 `--apply` procedure proof cases exercise these features directly.
 
 ### Pairs and quoted data
 
-Start at `scope/data.asm`, then follow `pairs.asm`, `pair-management.asm` and
-`data.asm`. The allocator and roots determine whether a pair remains live. A
+Quoted-data compilation is in `scope/data.asm`. Runtime support is in
+`pairs.asm`, `pair-management.asm` and `data.asm`. The allocator and roots determine whether a pair remains live. A
 pair bug is rarely confined to `cons`, `car` or `cdr`, because printing,
 equality, argument lists and collection all depend on the same representation.
 
 ### Console and external effects
 
-Start at `output.asm` and `external-effects.asm`, then read
-`docs/public/external-effects.md` and the host provider tools. Ordinary console
+`output.asm` and `external-effects.asm` implement the output boundary described
+in `docs/public/external-effects.md` and exercised by the host provider tools. Ordinary console
 text goes through the CP/M character boundary. Optional terminal, video, sound
 and file requests use provider messages. The Scheme program emits bytes and
 commands; it does not call a TMS9918 routine directly.
 
 ### Publication
 
-Start at `scope/publication.asm`, then read `runtime/loader.asm` and the matching
-CP/M proof. The publisher stages publication data and COM files, replaces the previous
+Publication is implemented in `scope/publication.asm` and `runtime/loader.asm`,
+with execution checks in the corresponding CP/M proof. The publisher stages publication data and COM files, replaces the previous
 pair transactionally and checks the generated program after installation.
 
 ## Tests and verification
@@ -285,6 +274,5 @@ Skate depend on a private working directory or on a private manifest.
 | activation | The current call frame, argument packet, bindings and return state |
 | heap | Managed storage for pairs, strings, vectors, closures and other values that outlive a stack slot |
 
-When a comment gives a narrower local meaning, follow that contract. The
-The glossary gives the common repository meaning so a first reading does not have
-to reconstruct it from several modules.
+Individual module contracts may define these terms more narrowly. The glossary
+gives their common repository meanings.
