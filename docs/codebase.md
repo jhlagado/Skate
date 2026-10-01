@@ -185,6 +185,12 @@ the call, the primitive that implements it and the storage or root code that
 keeps values live. The procedure and managed-storage proofs are the first tests
 to read for such a change.
 
+The proposed storage experiment is described in
+[`four-byte-cells.md`](four-byte-cells.md). It is a design note, not a
+description of the current representation: it records the measured baseline,
+the four-byte cell contract and the order in which heap bindings, pairs and
+value elements may be changed.
+
 The vector implementation separates three parts of one value.
 [`vectors/ops.asm`](../src/runtime/vectors/ops.asm) contains the Scheme
 operations, [`vectors/storage.asm`](../src/runtime/vectors/storage.asm) allocates
