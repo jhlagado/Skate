@@ -141,7 +141,7 @@ order affects addresses and workspace, so a composition change needs a proof.
 | `src/compiler/decimal.asm` | Parse exact integers and binary16 literals |
 | `src/compiler/interner.asm` | Keep permanent symbol and string identities |
 | `src/compiler/reader.asm` | Turn tokens into structural datum events |
-| `src/compiler/scope/command.asm` | Dispatch top-level forms and maintain body state |
+| `src/compiler/scope/command.asm` and `scope/command/` | Dispatch top-level forms, compiler state, diagnostics and accepted primitive names |
 | `src/compiler/scope/definitions.asm` | Compile leading, internal and named definitions |
 | `src/compiler/scope/bindings.asm` | Resolve lexical names and local slots |
 | `src/compiler/scope/branches.asm` | Emit conditionals and branch fixups |
