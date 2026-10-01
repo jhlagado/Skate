@@ -173,7 +173,7 @@ native compiler. These are the current public runtime modules.
 | `storage/stack-slots.asm` | Inline local bindings and promotion of captured bindings |
 | `ports.asm`, `cpm-ports.asm` and `file-ports.asm` | Scheme port values and CP/M byte/file services |
 | `datum-*.asm` | Read Scheme data from an input port |
-| `output.asm` | Value printing and port output |
+| `output.asm` and `output/state.asm` | Value printing, port output and shared runtime state |
 | `rest.asm`, `apply.asm` and `escape.asm` | Rest arguments, proper-list application and `call/ec` |
 | `external-effects.asm` | Optional provider-facing byte boundary |
 | `loader.asm` | Loads the runtime image into the generated program |

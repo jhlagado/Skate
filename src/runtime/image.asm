@@ -16,6 +16,7 @@
 %INCLUDE "storage/pair-management.asm"
 %INCLUDE "storage/pairs.asm"
 %INCLUDE "output.asm"
+%INCLUDE "output/state.asm"
 %INCLUDE "roots.asm"
 %INCLUDE "data.asm"
 %INCLUDE "float.asm"

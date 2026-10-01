@@ -1,9 +1,9 @@
 ; Standard Scheme ports for the direct CP/M console.
 ;
-; The first port stage keeps the three default ports as immediate tag-eight
-; values.  F008H, F009H and F00AH identify input, output and error.  The
-; provider table and nonstandard handles arrive in later stages; these checks
-; make the public port operations use the same value contract from the start.
+; The runtime represents the three default ports as immediate tag-eight
+; values. F008H, F009H and F00AH identify input, output and error. F00BH and
+; F00CH identify the native CP/M file handles, which use the same checked port
+; value contract as the standard streams.
 
 SRTINPT EQU 0F008H                ; Current input port token.
 SRTPOUT EQU 0F009H                ; Current output port token.
