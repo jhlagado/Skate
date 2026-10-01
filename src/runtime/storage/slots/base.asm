@@ -1,25 +1,9 @@
 ; Runtime activation-slot addressing and inline load/store paths.
-; Entry points: SRTSADDR, SRTMAPC, SRTSLOAD, SRTSSTOR, SRTSASET and SRTSCLR.
-; Four-byte activation slots for ordinary procedure locals.
-;
-; An active slot contains either an inline value (payload, tag, flags) or a
-; pointer to a three-byte managed binding.  The promoted bit is authoritative
-; for the representation; the heap cell remains authoritative for promoted
-; initialization and tag state.
-;
-; Entry contracts:
-;   SRTSADDR     A = slot index; returns HL = four-byte slot address.
-;   SRTSLOAD     A = slot index; returns A:HL or the established unbound error.
-;   SRTSSTOR     B = slot index, A:HL = value; stores and returns A:HL.
-;   SRTSASET     B = slot index, A:HL = value; requires an initialized slot.
-;   SRTSCLR      B = slot index; clears the value but retains its representation.
-;   SRTPROM      A = slot index; may allocate and collect before publishing.
-;   SRTCLSC      copies promoted captures into the new closure map; no alloc.
-;
-; SRTSADDR and the load/store helpers use SRTENV as their active-map base.
-; The promotion path keeps the inline slot initialized until the managed cell
-; has been filled completely, so the collector never sees a half-published
-; representation. The collector's root scanner calls SRTSROOT for each slot.
+; SRTSADDR: A = slot index, returns HL = slot address. SRTSLOAD reads a slot;
+; SRTSSTOR and SRTSASET write A:HL; SRTSCLR clears one slot. SRTPROM may
+; allocate and collect before publishing a captured value. SRTCLSC copies captures.
+; Slots hold payload, tag and flags inline until promotion, then point to a
+; managed binding. SRTENV is the active-map base and SRTSROOT scans each slot.
 
 SRTSPROM EQU 2                     ; Active-slot bit meaning payload is a pointer.
 

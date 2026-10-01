@@ -1,22 +1,11 @@
 ; Runtime page-domain initialisation and managed extents.
-; Entry point: SRTGPINI.
-; Page-domain management for the scope-control runtime.
-;
-; This module is deliberately independent of pair and closure allocation.
-; It owns whole 256-byte pages in two explicit extents: the gap between the
-; published image end and 9000H, followed by the managed B800H..C000H high
-; extent.  The exact-root table and allocation maps occupy the fixed 9000H
-; through B800H work band, so neither their bytes nor their pages enter the pool.
-;
-; Entry contracts:
-;   SRTGPINI  HL = final loaded image end, returns A=0 or carry and A=2.
-;   SRTGPALL  HL = page count, returns HL = page address or carry/A error.
-;   SRTGPREL  HL = page address, DE = page count, returns carry/A error.
-; A=1 means capacity, A=2 means an invalid request, and A=3 means that the
-; page domain has not been initialised.  Successful calls clear carry and A.
+; SRTGPINI: HL = loaded image end; returns A=0/carry clear or A=2/carry set.
+; SRTGPALL: HL = page count; returns HL = page address or A=1 capacity,
+; A=2 invalid request or A=3 uninitialised, with carry set.
+; SRTGPREL: HL = page address, DE = count; returns A=0 or A=2 invalid request
+; or A=3 uninitialised, with carry set. The pool owns the gap below 9000H and
+; the B800H..C000H high extent; maps and exact roots occupy 9000H..B800H.
 
-; Initialise the page domain after the compiler has published the complete
-; image extent.  The image end is rounded upward before page arithmetic.
 SRTGPINI:
         XOR A                      ; Invalidate any previous domain before checks.
         LD (SRTPGOK),A             ; A failed reinitialisation must not leave it live.

@@ -1,81 +1,15 @@
-;=============================================================================
-;  Permanent symbol and string interner
-;=============================================================================
-
-;  PURPOSE
-;  -------
-;  Store symbol and string bytes in caller-owned tables.
-;  Return stable, zero-based IDs.
-;
-;  The reader checks identifier spelling. This module enforces storage limits.
-
-;  PUBLIC INTERFACE
-;  ----------------
-;
-
-;+---------------------------------------------------------------------------+
-;|  IINIT - Validate the configuration and initialize an empty context.      |
-;|                                                                           |
-;|  CALL                                                                     |
-;|    IX -> caller-owned 14-byte context.                                    |
-;|                                                                           |
-;|  SUCCESS                                                                  |
-;|    A = 0; carry clear; the empty context is ready.                        |
-;|                                                                           |
-;|  FAILURE                                                                  |
-;|    A = 2; carry set; context and stored bytes are unchanged.              |
-;+---------------------------------------------------------------------------+
-
-;+---------------------------------------------------------------------------+
-;|  INTERN - Reuse or append bytes and return their stable ID.               |
-;|                                                                           |
-;|  CALL                                                                     |
-;|    IX -> ready context.                                                   |
-;|    HL -> source bytes; BC = byte length.                                  |
-;|                                                                           |
-;|  SUCCESS                                                                  |
-;|    HL = stable zero-based ID; A = 0; carry clear.                         |
-;|                                                                           |
-;|  FAILURE                                                                  |
-;|    A = 1 capacity; A = 2 bounds/data; A = 3 not ready; carry set.         |
-;+---------------------------------------------------------------------------+
-
-;  CONTEXT LAYOUT (IX)
-;  ------------------
-;
-;  OFFSET  SIZE  MEANING
-;  ------  ----  ----------------------------
-;  +0      2     Descriptor-table base address.
-;  +2      2     Entry capacity.
-;  +4      2     Byte-pool base address.
-;  +6      2     Byte-pool capacity.
-;  +8      2     Current entry count.
-;  +10     2     Used byte-pool length.
-;  +12     1     Kind: 0 symbol, 1 string.
-;  +13     1     Ready flag.
-;
-;  Configure before IINIT. Keep the configuration unchanged until reinit.
-
-;  STORAGE LIMITS
-;  --------------
-;
-;  ENTRIES    0..8192 per context.
-;  BYTE POOL  0..65535 bytes.
-;  SYMBOLS    Three-byte descriptor; 1..31 ASCII bytes.
-;  STRINGS    Four-byte descriptor; 0..255 arbitrary bytes.
-
-;  SHARED CALLING CONTRACT
-;  -----------------------
-;
-;  PRESERVES  IX, IY.
-;  CLOBBERS   AF, BC, DE, HL.
-;  STACK      4 bytes below entry SP; 6 including caller return.
-;  FAILURE    Context, descriptors and pool remain unchanged.
-;  SCRATCH    Static; the module is non-reentrant.
-;  MEMORY     Keep context, table, pool, source, code/workspace and stack
-;             disjoint. Extents may end at 65536.
-;  SOURCE     Must remain unchanged during INTERN.
-;=============================================================================
+; Permanent symbol and string interner.
+; IINIT: IX -> 14-byte context; success A=0/carry clear, failure A=2/carry set.
+; INTERN: IX -> ready context, HL -> source bytes, BC = length; success HL is a
+; stable ID, failure A=1 capacity, 2 bounds/data or 3 not-ready with carry set.
+; IX+0/+2 descriptor base/capacity, +4/+6 byte-pool base/capacity,
+; +8 entry count, +10 used pool bytes, +12 kind (0 symbol, 1 string), +13 ready.
+; Configure these
+; extents before IINIT and keep them stable and disjoint from source and each
+; other. Symbols use 3-byte descriptors and 1..31 ASCII bytes; strings use
+; 4-byte descriptors and 0..255 arbitrary bytes. IX/IY are preserved; context,
+; source, descriptors and pool remain unchanged on failure. Static scratch is
+; non-reentrant.
 
 IINIT:                  ; Validate configuration, then publish an empty ready context.
         CALL ICTXCHK       ; Check all 14 context bytes before indexed reads.

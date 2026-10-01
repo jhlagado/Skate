@@ -66,7 +66,9 @@ add scope or storage requirements to this same compilation path.
 
 A module's public interface describes its input registers, returned value,
 carry or error convention, preserved registers, stack use and caller-owned
-workspace. These contracts connect routines across file boundaries.
+workspace. These contracts connect routines across file boundaries. In the
+refactored modules, a short purpose and entry contract comes first; detailed
+register and branch comments stay beside the routine they explain.
 
 Within a routine, register meanings depend on the current operation. Branches
 establish conditions that subsequent instructions rely on. Workspace, root

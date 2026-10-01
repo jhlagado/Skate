@@ -1,24 +1,12 @@
-; CP/M source opening and mode selection.
-; Entry point: CSOPEN.
-; ============================================================================
-; CP/M 2.2 source stream
-; ============================================================================
-;
-; One open text file, or one ordered .SKM manifest with one active part;
-; private FCBs and DMA records. Not reentrant.
-; Each source part ends at physical EOF or its first Ctrl-Z byte (CP/M text
-; padding). A manifest inserts one LF only when another part follows.
-; The caller must close the file and check CSERROR before publishing output.
-; A reader callback has only an EOF flag, so CSERROR distinguishes failed I/O.
-;
-; ----------------------------------------------------------------------------
-; CSOPEN -- open a fresh source
-;
-; In:       HL = 12-byte drive/name/type prefix of a CP/M FCB.
-; Out:      carry clear on success; carry set on failure.
-; Requires: no file already open. Wildcards must be rejected by the caller.
-; Preserves IX, IY. Other registers and flags are scratch.
-; ----------------------------------------------------------------------------
+; CP/M source stream opening and mode selection.
+; CSOPEN: HL -> a 12-byte drive/name/type prefix; carry clear means success.
+; The stream accepts one text file or one ordered .SKM manifest with one active
+; part. CP/M text ends at physical EOF or the first Ctrl-Z byte. The caller
+; rejects wildcards, has no file already open, closes the file and checks
+; CSERROR before publishing output.
+; Private FCB and DMA state makes the adapter static and non-reentrant; IX and
+; IY are preserved by the public entry points.
+
 CSOPEN: LD DE,CSFCB       ; Retain the name before clearing sequential state.
         LD BC,12
         LDIR

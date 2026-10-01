@@ -154,7 +154,7 @@ const firstDisk = machine.export_drive(0);
 const first = readOutputs(firstDisk);
 assert.throws(
   () => readCpm22File(firstDisk, "REPEAT.NOB"),
-  "the target publication created a new NOBJ file",
+  "the target publication created a new legacy-object file",
 );
 
 // Reboot from the first generation with a changed source and inject one
@@ -188,7 +188,7 @@ assert.deepEqual(
 );
 assert.throws(
   () => readCpm22File(failed, "REPEAT.NOB"),
-  "the target publication created a new NOBJ file",
+  "the target publication created a new legacy-object file",
 );
 
 // A fresh compiler process must recover the retained files and stages before

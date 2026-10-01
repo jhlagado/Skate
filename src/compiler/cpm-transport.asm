@@ -1,42 +1,14 @@
-;=============================================================================
-;  CP/M binary transport
-;=============================================================================
-;
-;  PURPOSE
-;  -------
-;  Stream binary files through private CP/M FCBs and one private 128-byte DMA
-;  record.  The reader exposes raw bytes for NOBJ/COM consumers; the writer
-;  pads only its final physical record with Ctrl-Z.  Logical NOBJ end is the
-;  COMMIT record, so padding remains transport data and never becomes object
-;  data.
-;
-;  PUBLIC INTERFACE
-;  ----------------
-;  CTOPENR   HL -> 12-byte drive/name/type prefix; open a binary input.
-;  CTREAD    Return A = next byte, carry set at physical EOF or error.
-;  CTCLOSER  Close input; A = sticky error (zero means success).
-;  CTOPENW   HL -> 12-byte drive/name/type prefix; make a binary output.
-;  CTWRITE   A = one byte; carry clear means it was accepted.
-;  CTFLUSH   Write a pending short record, padding with Ctrl-Z.
-;  CTCLOSEW  Flush and close output; A = sticky error (zero means success).
-;  CTDELETE  HL -> 12-byte drive/name/type prefix; remove a file if present.
-;  CTRENAME  HL -> source prefix, DE -> destination prefix; rename a file.
-;
-;  STATUS AND OWNERSHIP
-;  --------------------
-;  Error codes are 1=open/make, 2=read/write, 3=close, 4=not open.  Errors and
-;  terminal reads are sticky until the corresponding open call.  The adapter
-;  preserves IX, IY and SP across every public call.  BC, DE, HL and flags are
-;  scratch unless a successful CTREAD returns its byte in A.
-;
-;  BDOS is entered only through the CP/M call vector at 0005H.  The adapter
-;  owns both FCBs and both buffers; callers must not change DMA while a stream
-;  is active.  This module is static and non-reentrant.
-;=============================================================================
-
-;-----------------------------------------------------------------------------
-;  Binary input stream
-;-----------------------------------------------------------------------------
+; CP/M binary transport for compiler stages.
+; CTOPENR/CTREAD/CTCLOSER read raw bytes. CTOPENW/CTWRITE/CTFLUSH/CTCLOSEW
+; write padded records. CTDELETE and CTRENAME manage staged files.
+; CTOPENR/CTOPENW take HL -> a 12-byte drive/name/type prefix. CTREAD returns
+; A=byte/carry clear, carries with A=0 at physical EOF, A=2 on read failure or
+; A=4 when unopened. CTWRITE takes A=byte; CTFLUSH and the close calls return
+; A=0/carry clear or the sticky 1=open, 2=I/O, 3=close or 4=unopened error.
+; CTDELETE takes HL -> a prefix; CTRENAME takes HL -> old and DE -> new; both
+; return carry clear on success. ASO callers stop at COMMIT; other consumers
+; may read the raw padded file. Errors are sticky until open, and public calls
+; preserve IX, IY and SP. The adapter owns its FCBs and DMA buffers.
 
 CTOPENR:
         LD DE,CTINFCB          ; Copy the caller's concrete FCB prefix.
@@ -67,7 +39,7 @@ CTROFAIL:
         LD A,1                 ; Error 1: input open failed.
         JP CTREFAIL
 
-; Return the next raw byte.  Physical EOF is clean; NOBJ callers stop at
+; Return the next raw byte. Physical EOF is clean; ASO callers stop at
 ; COMMIT before asking for transport padding.
 CTREAD:
         LD A,(CTRDONE)
@@ -244,7 +216,7 @@ CTWFACT:
         OR A
         JR Z,CTWPFOK            ; A full cache needs no padding bytes.
         LD B,A
-        LD A,26                ; CP/M text padding is not part of NOBJ data.
+        LD A,26                ; CP/M padding is not part of the logical stream.
 CTWPAD:
         LD (HL),A
         INC HL

@@ -5,8 +5,8 @@
 ;  SCOUT has already built complete COM and ASO stage files when these routines
 ;  run.  The previous generation is moved to sibling recovery names before a
 ;  new final name is installed.  A failed installation therefore restores the
-;  old generation instead of deleting it.  NOBJ recovery names remain for
-;  interrupted upgrades from older releases, but no new NOBJ is installed.
+;  old generation instead of deleting it. Legacy-object recovery names remain
+;  for interrupted upgrades from older releases, but no new legacy object is installed.
 ;=============================================================================
 
 ; Replace the COM and ASO final outputs as one recoverable publication.
@@ -14,11 +14,11 @@ SCPUB:
         XOR A                      ; No old file has moved and no new file is installed.
         LD (SCOLD),A               ; Clear the old-generation bit mask.
         LD (SCINST),A              ; Clear the new-generation bit mask.
-        LD A,'N'                   ; Select the legacy NOBJ output class.
+        LD A,'N'                   ; Select the legacy-object output class.
         LD (SCTYPE),A              ; Name helpers read the selected class here.
-        LD A,1                     ; Bit zero records an old NOBJ recovery file.
+        LD A,1                     ; Bit zero records an old legacy-object recovery file.
         LD (SCMASK),A              ; SCSAVE uses this bit after a successful rename.
-        CALL SCSAVE                ; Move a previous NOBJ aside when it exists.
+        CALL SCSAVE                ; Move a previous legacy object aside when it exists.
         JP C,SCPFAIL               ; Restore anything moved before reporting failure.
         LD A,'C'                   ; Select the COM output class.
         LD (SCTYPE),A              ; Keep the class across CP/M calls.
@@ -132,8 +132,8 @@ SCRESBAD:
 
 ; Restore stale recovery names before a new set of stages is opened.
 SCPRECOV:
-        LD A,'N'                   ; Recover the previous NOBJ first.
-        LD (SCTYPE),A              ; Select the NOBJ recovery and final names.
+        LD A,'N'                   ; Recover the previous legacy object first.
+        LD (SCTYPE),A              ; Select its recovery and final names.
         CALL SCRESTOR            ; Restore it or remove a committed stale copy.
         RET C                      ; Stop before touching a second output on failure.
         LD A,'C'                   ; Recover the previous COM next.
@@ -166,10 +166,10 @@ SCMARKIN:
 ; Delete recovery names after a successful publication.  A failed cleanup is
 ; harmless: SCPRECOV sees the final names and removes the stale copy next time.
 SCPDREC:
-        LD A,'N'                   ; Select the NOBJ recovery name.
+        LD A,'N'                   ; Select the legacy-object recovery name.
         LD (SCTYPE),A              ; Name helpers read the class here.
         CALL SCRECT                ; Build NPR in SCFCB.
-        LD HL,SCFCB                ; Point CTDELETE at the recovery NOBJ.
+        LD HL,SCFCB                ; Point CTDELETE at the legacy-object recovery.
         CALL CTDELETE              ; Ignore cleanup carry; the final is committed.
         LD A,'C'                   ; Select the COM recovery name.
         LD (SCTYPE),A              ; Keep the class explicit for the next helper.
@@ -191,9 +191,9 @@ SCPROLL:
         CALL SCPDSTA               ; Remove incomplete stage names before restoration.
 SCPRNS:
         LD A,(SCOLD)               ; Read the old-generation recovery mask.
-        AND 1                      ; Test the NOBJ recovery bit.
-        JR Z,SCPRNOC               ; Skip restoration when no NOBJ was moved.
-        LD A,'N'                   ; Select the NOBJ recovery name.
+        AND 1                      ; Test the legacy-object recovery bit.
+        JR Z,SCPRNOC               ; Skip restoration when no legacy object moved.
+        LD A,'N'                   ; Select the legacy-object recovery name.
         LD (SCTYPE),A              ; Restore the selected old output.
         CALL SCRESTOR              ; The final name was removed above.
 SCPRNOC:
@@ -220,12 +220,12 @@ SCPRCLR:
 ; Delete only final names whose corresponding new stages were installed.
 SCPDINS:
         LD A,(SCINST)              ; Read the new-generation installation mask.
-        AND 1                      ; Test the NOBJ installation bit.
-        JR Z,SCPDINOC              ; Skip an NOBJ delete when it was not installed.
-        LD A,'N'                   ; Select the NOBJ final name.
+        AND 1                      ; Test the legacy-object installation bit.
+        JR Z,SCPDINOC              ; Skip its delete when it was not installed.
+        LD A,'N'                   ; Select the legacy-object final name.
         LD (SCTYPE),A              ; Name helpers read the class here.
         CALL SCFINALT              ; Build NOB in SCFCB.
-        LD HL,SCFCB                ; Point CTDELETE at the new NOBJ.
+        LD HL,SCFCB                ; Point CTDELETE at the new legacy object.
         CALL CTDELETE              ; Best-effort cleanup precedes restoration.
         RET C                      ; Leave the remaining stages as transaction proof.
 SCPDINOC:
@@ -250,10 +250,10 @@ SCPDINOA:
 
 ; Remove all three temporary stage names.
 SCPDSTA:
-        LD A,'N'                   ; Select the NOBJ stage.
+        LD A,'N'                   ; Select the legacy-object stage.
         LD (SCTYPE),A              ; Build NBS in SCFCB.
         CALL SCSTAGET              ; Build the selected stage FCB.
-        LD HL,SCFCB                ; Point CTDELETE at the NOBJ stage.
+        LD HL,SCFCB                ; Point CTDELETE at the legacy-object stage.
         CALL CTDELETE              ; Continue after a best-effort delete.
         RET C                      ; Preserve the failed stage as transaction proof.
         LD A,'C'                   ; Select the COM stage.
@@ -285,7 +285,7 @@ SCFINALT:
         RET                        ; Return with SCFCB pointing at the final COM.
 SCFNB:
         LD (HL),'B'                ; Complete the NOB extension.
-        RET                        ; Return with SCFCB pointing at the final NOBJ.
+        RET                        ; Return with SCFCB pointing at the legacy object.
 SCFAS:
         LD (HL),'S'                ; ASO uses S as its middle extension letter.
         INC HL                     ; Advance to the ASO suffix.
@@ -301,7 +301,7 @@ SCSTAGET:
         INC HL                     ; Advance to the second stage extension letter.
         CP 'A'                     ; The ASO stage is SPL rather than ABS.
         JR Z,SCSAS             ; Complete the ASO stage extension.
-        LD (HL),'B'                ; NOBJ and COM stages use B as the middle letter.
+        LD (HL),'B'                ; Legacy-object and COM stages use B in the middle.
         INC HL                     ; Advance to the final stage extension letter.
         LD (HL),'S'                ; Complete NBS or CBS.
         RET                        ; Return with SCFCB pointing at the selected stage.
@@ -346,7 +346,7 @@ SCFDEST:
         RET                        ; Return with SCF2 pointing at the final COM.
 SCFDNB:
         LD (HL),'B'                ; Complete the NOB destination extension.
-        RET                        ; Return with SCF2 pointing at the final NOBJ.
+        RET                        ; Return with SCF2 pointing at the legacy object.
 SCFDAS:
         LD (HL),'S'                ; ASO uses S as its middle extension letter.
         INC HL                     ; Advance to the ASO suffix.
@@ -374,7 +374,7 @@ SCANY:
         XOR A                      ; Clear the stage-presence marker.
         LD (SCSTGF),A         ; No stage has been observed yet.
         LD A,'N'                   ; Probe NBS.
-        LD (SCTYPE),A              ; Select the NOBJ stage.
+        LD (SCTYPE),A              ; Select the legacy-object stage.
         CALL SCTEST            ; Set the marker when NBS exists.
         LD A,'C'                   ; Probe CBS.
         LD (SCTYPE),A              ; Select the COM stage.
@@ -401,6 +401,6 @@ SCTEST:
 SCOLD:       DB 0                  ; Old final outputs moved to recovery names.
 SCINST:      DB 0                  ; New final outputs installed from stage names.
 SCMASK:      DB 0                  ; Bit assigned to the selected output class.
-SCTYPE:      DB 0                  ; N, C or A for NOBJ, COM or ASO.
+SCTYPE:      DB 0                  ; N, C or A for legacy object, COM or ASO.
 SCSTGF: DB 0                  ; A stage remains during an interrupted commit.
 SCROLLF: DB 0                 ; Nonzero while SCPROLL must restore old outputs.

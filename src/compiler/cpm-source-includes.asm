@@ -1,33 +1,9 @@
-; ============================================================================
-; CP/M source includes
-; ============================================================================
-;
-; The native `.SK8` path performs a bounded source-assembly pass before the
-; compiler reads the program.  Leading forms of the following shape are
-; accepted:
-;
-;     (include "LIB.SK8" "APP.SK8")
-;
-; The root file is scanned once.  Each named file is opened in directive order
-; and streamed before the root body.  The include form itself is omitted from
-; the stream; a record separator is inserted between source parts.  Names are
-; CP/M 8.3 names on the command drive, and the 32-entry source table includes
-; the root, leaving 31 direct include entries.  Nested include graphs are a
-; later increment; an included file is therefore ordinary source in this
-; increment.
-;
-; This adapter deliberately closes the root after the scan and reopens it when
-; the final part is streamed.  It needs no source-file stack or second DMA
-; record, so its resident workspace remains bounded and easy to measure.
-; ============================================================================
+; CP/M source include stream.
+; CIINIT scans the root and up to 31 direct include names, then CIBYTE
+; streams the parts in order. Names are CP/M 8.3 names on the command drive.
+; The root is reopened after scanning; no source stack or second DMA record is used.
+; Entry: CIINIT uses the command FCB and leaves the source ready for CIBYTE.
 
-; -----------------------------------------------------------------------------
-; CIINIT -- initialise and scan a native `.SK8` source
-;
-; The caller has copied the command FCB into CSFCB.  The first table entry is
-; the root prefix; each parsed include appends one normalised 12-byte prefix.
-; On success the source is closed and CIBYTE will reopen entries as required.
-; -----------------------------------------------------------------------------
 CIINIT: XOR A                         ; Clear sticky state before the scan.
         LD (CSERROR),A                ; No source error has occurred yet.
         LD (CSPARTNO),A               ; The table assigns part zero to the root.

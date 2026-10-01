@@ -1,79 +1,16 @@
-;=============================================================================
-;  Skate native datum reader
-;=============================================================================
+; Native datum reader.
+; RINIT: HL -> byte callback, DE -> symbol context, BC -> string context.
+; RNEXT: A = event kind; RTAG:HL carries value events; carry reports an error.
+; EOF and errors remain terminal until RINIT. Events are EOF, list open/close,
+; quote, dot, symbol, scalar and string (0, 1, 2, 3, 4, 5, 7 and 8).
+; Error codes 128..133 identify syntax, capacity, integer range, encoding,
+; source-position and protocol failures. IX/IY are preserved and SP is balanced.
+; The symbol and string contexts must already be initialised, disjoint, and
+; remain stable for the read. The byte callback must remain valid for RINIT's
+; lifetime.
+; The reader uses lexer, decimal and interner modules, retains no complete datum
+; and keeps static, non-reentrant state.
 
-;  PURPOSE
-;  -------
-;  Turn lexer tokens into structural events or interned literal values.
-;  Consume the source incrementally; retain no complete datum.
-
-;  PUBLIC INTERFACE
-;  ----------------
-;
-
-;+---------------------------------------------------------------------------+
-;|  RINIT - Attach a source and reset reader state.                          |
-;|                                                                           |
-;|  CALL                                                                     |
-;|    HL -> byte-source callback.                                            |
-;|    DE -> initialized symbol context.                                      |
-;|    BC -> initialized string context.                                      |
-;|    The two contexts must be disjoint.                                     |
-;|                                                                           |
-;|  SUCCESS                                                                  |
-;|    A = 0; carry clear.                                                    |
-;+---------------------------------------------------------------------------+
-
-;+---------------------------------------------------------------------------+
-;|  RNEXT - Return one structural event or interned value.                   |
-;|                                                                           |
-;|  SUCCESS                                                                  |
-;|    A = event kind; carry clear.                                           |
-;|    For value kinds 5, 7 and 8: RTAG:HL = logical value.                   |
-;|                                                                           |
-;|  FAILURE                                                                  |
-;|    A = reader error code; carry set.                                      |
-;+---------------------------------------------------------------------------+
-
-;  EVENT KINDS
-;  -----------
-;
-;  0  EOF
-;  1  open parenthesis
-;  2  close parenthesis
-;  3  quote
-;  4  dot
-;  5  symbol
-;  7  scalar
-;  8  string
-
-;  ERROR CODES
-;  -----------
-;
-;  128  syntax
-;  129  capacity
-;  130  integer range
-;  131  encoding
-;  132  source position
-;  133  protocol
-
-;  STATE AND DEPENDENCIES
-;  ----------------------
-;
-;  EOF and errors stay terminal until RINIT.
-;  LTOKOFF/LTOKLIN/LTOKCOL locate the current token.
-;  Unfinished structure at EOF is reported at EOF.
-;
-;  AF/BC/DE/HL are clobbered. IX/IY are preserved; SP is balanced.
-;  Static state makes the reader non-reentrant.
-;
-;  Requires lexer.asm, decimal.asm and interner.asm.
-;  No Scheme heap. This stage checks root structure.
-;  Form semantics belong to a later stage.
-;  Source uses ATOM and documented Z80 instructions only.
-;=============================================================================
-
-; Bind the preinitialized permanent tables and reset structural state.
 RINIT:
     LD (RSYMCTX),DE          ; Save the symbol-table context address.
     LD (RSTRCTX),BC          ; Save the string-table context address.
