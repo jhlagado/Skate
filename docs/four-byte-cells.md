@@ -32,7 +32,7 @@ figures differ by the image base and are not mixed in comparisons.
 The baseline procedure and data proofs all passed. Their largest observed
 programs and useful stress counts were:
 
-| Case | Largest COM | Largest ASO | Largest image | Pairs | Heap bindings | Closures | Collections |
+| Case | Largest COM | Largest ASO | Largest image | Max pair allocations | Max binding allocations | Max closure allocations | Collections |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | ordinary procedures | 24,320 | 25,216 | 24,319 | 5,001 | 3 | 4 | 1 |
 | vectors | 23,424 | 24,448 | 23,400 | 3,001 | 0 | 3 | 11 |

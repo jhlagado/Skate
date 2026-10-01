@@ -1,4 +1,5 @@
 ; Scope-control runtime image assembled at the CP/M load origin.
+%INCLUDE "storage/cell-contract.asm"
 %INCLUDE "core.asm"
 %INCLUDE "storage/stack-slots.asm"
 %INCLUDE "storage/managed.asm"

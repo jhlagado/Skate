@@ -14,6 +14,7 @@ import {
   readCpm22File,
 } from "../../../triptych/tools/lib/cpm22-disk.mjs";
 import { validateAso } from "./aso-proof.mjs";
+import { summarizeCellMeasurements } from "./cell-metrics.mjs";
 
 const triptychRoot = fileURLToPath(
   new URL("../../../triptych/", import.meta.url),
@@ -968,6 +969,9 @@ try {
       largestAsoBytes: Math.max(
         ...measurements.map(({ asoBytes }) => asoBytes),
       ),
+      cellMetrics: measurements.length === 0
+        ? null
+        : summarizeCellMeasurements(measurements),
       measurements,
     },
     null,
