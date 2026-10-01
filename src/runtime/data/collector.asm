@@ -31,7 +31,7 @@ SRTGFIX:
         OR A
         JR NZ,SRTGFIX               ; Continue until a fixed point is reached.
 SRTSWEEP:
-        CALL SRTBSW                 ; Reclaim dead three-byte bindings.
+        CALL SRTBSW                 ; Reclaim dead four-byte bindings.
         CALL SRTCLSW                ; Reclaim dead rounded closure blocks.
         CALL SRTPSW                ; Rebuild free records and clear surviving marks.
         RET

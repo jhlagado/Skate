@@ -1,17 +1,18 @@
 ; Managed closure and binding storage for the scope-control runtime.
 ;
-; Compiler-owned static records remain four bytes.  Dynamic environment cells
-; use three bytes: two payload bytes followed by packed tag, state and mark
-; bits.  Closures use rounded four-byte size classes in typed 256-byte pages;
+; Compiler-owned static records and dynamic heap cells use four bytes.  Heap
+; cells carry two payload bytes, a reserved extension byte and packed metadata.
+; Closures use rounded four-byte size classes in typed 256-byte pages;
 ; bindings grow down from the pool ceiling and stop at the closure high-water
 ; mark.
 
-; Load a three-byte heap binding addressed by HL.  Static compiler slots use
+; Load a four-byte heap binding addressed by HL.  Static compiler slots use
 ; SRTLOAD; this helper is selected only through an active environment map.
 SRTBLOAD:
         LD E,(HL)
         INC HL
         LD D,(HL)
+        INC HL
         INC HL
         LD A,(HL)
         LD (SRTTAG),A
@@ -29,7 +30,7 @@ SRTBESCV:
         EX DE,HL
         RET
 
-; Store a value in a three-byte heap binding and retain its capture and mark bits.
+; Store a value in a four-byte heap binding and retain its capture and mark bits.
 SRTBSTOR:
         LD (SRTTAG),A
         LD (SRTVAL),HL
@@ -38,6 +39,7 @@ SRTBSTOR:
         INC DE
         LD A,H
         LD (DE),A
+        INC DE
         INC DE
         LD A,(DE)
         AND 70H
@@ -58,11 +60,12 @@ SRTBTAG:
         LD HL,(SRTVAL)
         RET
 
-; Store through a three-byte heap binding only after its initialized bit is set.
+; Store through a four-byte heap binding only after its initialized bit is set.
 SRTBSET:
         LD (SRTATMP),A
         LD (SRTVAL),HL
         LD (SRTCELLP),DE
+        INC DE
         INC DE
         INC DE
         LD A,(DE)
@@ -228,7 +231,7 @@ SRTCLBUP:
         RET C
         JP SRTCLALC
 
-; Allocate and clear one three-byte heap binding.
+; Allocate and clear one four-byte heap binding.
 SRTCELL:
         CALL SRTBALC
         JR NC,SRTCELOK
@@ -246,12 +249,14 @@ SRTCELOK:
         INC HL
         LD (HL),A                   ; Clear the payload high byte.
         INC HL
+        LD (HL),A                   ; Keep the future payload extension zero.
+        INC HL
         LD A,20H                    ; Allocation is distinct from initialization.
         LD (HL),A
         LD HL,(SRTCELLP)            ; Return the new cell address in HL.
         RET
 
-; Pop a reclaimed binding or allocate the next three-byte slot in a page.
+; Pop a reclaimed binding or allocate the next four-byte slot in a page.
 SRTBALC:
         LD HL,(SRTBHEAD)
         LD A,H
@@ -271,7 +276,7 @@ SRTBPCUR:
         OR L
         JR Z,SRTBNEWP
         LD (SRTCELLP),HL
-        LD DE,3
+        LD DE,SRTCELW
         ADD HL,DE
         LD DE,(SRTBPGED)
         OR A
@@ -281,7 +286,7 @@ SRTBPCUR:
         JR SRTBNEWP
 SRTBPVOK:
         LD HL,(SRTCELLP)
-        LD DE,3
+        LD DE,SRTCELW
         ADD HL,DE
         LD (SRTBPGP),HL
         LD HL,(SRTCELLP)
@@ -308,7 +313,7 @@ SRTBNEWP:
         INC A
         LD (SRTBPGN),A
         LD HL,(SRTBPGBA)
-        LD DE,3
+        LD DE,SRTCELW
         ADD HL,DE
         LD (SRTBPGP),HL
         LD HL,(SRTBPGBA)

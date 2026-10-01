@@ -8,11 +8,11 @@ the measurements and proofs described here.
 ## Why consider it
 
 Skate already uses four bytes for an inline value slot and for each vector
-element. Heap bindings are three bytes and pairs are five bytes, however, so
-the runtime has several layouts for values that otherwise have the same
-payload-and-tag meaning. A uniform cell could simplify copying, slot access,
-pair layout and some collector paths. It also leaves room for a later wider
-payload without changing the size of an ordinary value slot.
+element. The reference representation used three bytes for heap bindings and
+five bytes for pairs, so the runtime had several layouts for values that
+otherwise have the same payload-and-tag meaning. A uniform cell could simplify
+copying, slot access, pair layout and some collector paths. It also leaves room
+for a later wider payload without changing the size of an ordinary value slot.
 
 The immediate experiment does not add wider arithmetic or wider pointers. It
 uses the existing sixteen-bit payload and measures the cost of making heap
@@ -230,3 +230,28 @@ The experiment is successful only when all of the following are true:
 If those predicates cannot be met without a disproportionate cost, the public
 implementation remains on the current representation and this note records
 the measured reason for rejection.
+
+## Implementation checkpoint
+
+The heap-binding increment is now implemented for the public runtime. A
+binding page carries 64 four-byte cells instead of 85 three-byte records. The
+payload low and high bytes stay at offsets 0 and 1; offset 2 is cleared and
+reserved for a future payload extension; offset 3 carries the existing
+allocation, initialization, escape and mark state. The existing allocation
+start map remains authoritative, with an alignment check for four-byte cell
+starts, and active stack slots, argument packets and the `A:HL` calling
+convention remain unchanged. Byte +3 still uses the current packed allocation,
+initialization, escape, mark and tag encoding; the future tag/flag constants
+are reservations only. Pair storage is still the five-byte reference layout
+until its own increment is complete.
+
+The ordinary CP/M procedure proof passes all 44 successful cases and eight
+expected compile-error cases with this increment. The ATOM runtime image is
+22,699 bytes (22,443 bytes after the 0100H origin); the CP/M harness reports
+22,443 runtime bytes. The largest procedure image is 24,337 bytes, producing
+a 24,448-byte COM and a 25,216-byte ASO file. Across the independent cases
+the maximum observed counts are 5,001 pair allocations, 3 heap-binding
+allocations, 4 closure allocations, one collection and 255 activations. The
+binding allocation traffic is therefore 13 records, or 39 bytes in the
+reference model versus 52 bytes in the four-byte model; these are allocation
+traffic projections, not peak live heap occupancy.

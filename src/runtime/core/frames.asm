@@ -95,6 +95,7 @@ SRTCLRS:
 SRTCLRC:
         INC HL
         INC HL
+        INC HL
         LD A,(HL)
         AND 70H
         LD (HL),A

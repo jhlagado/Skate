@@ -65,9 +65,9 @@ SRTCLPGE:   DW 0                 ; Exclusive end of a selected page or run.
 SRTCLPGF:   DW 0                 ; Current object while building a slab chain.
 SRTCLPGL:   DW 0                 ; Next object while building a slab chain.
 SRTCLSTR:   DW 0                 ; Stride of the class currently being swept.
-SRTBHEAD: DW 0                  ; Head of the reclaimed three-byte binding list.
+SRTBHEAD: DW 0                  ; Head of the reclaimed four-byte binding list.
 SRTBEND:  DW 0                  ; End of the current binding page for reports.
-SRTBPGP:  DW 0                  ; Next three-byte binding slot in the current page.
+SRTBPGP:  DW 0                  ; Next four-byte binding slot in the current page.
 SRTBPGED: DW 0                  ; Exclusive end of the current binding page.
 SRTBPGBA: DW 0                  ; Physical base of the current binding page.
 SRTBPGC:  DW 0                  ; Physical base saved across a binding sweep.

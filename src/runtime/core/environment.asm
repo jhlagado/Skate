@@ -92,13 +92,15 @@ SRTOWNBT:
         JR Z,SRTOWNIN              ; A malformed null promotion is reset safely.
         EX DE,HL
         LD (SRTCELLP),HL
-        LD DE,2
+        LD DE,3
         ADD HL,DE
         LD A,(HL)
         AND 10H
 	JR NZ,SRTOWNNW             ; Escaped storage cannot be reused by this frame.
 	LD HL,(SRTCELLP)
 	XOR A                       ; Reuse clears the old payload before argument stores.
+	LD (HL),A
+	INC HL
 	LD (HL),A
 	INC HL
 	LD (HL),A
@@ -144,7 +146,7 @@ SRTOWNNX:
         INC A
         LD (SRTSLOTI),A            ; Advance through the fixed slot range.
         DEC C
-        JR NZ,SRTOWNBT             ; Consume all eight bits in this mask byte.
+        JP NZ,SRTOWNBT             ; Consume all eight bits in this mask byte.
         DEC B
         JP NZ,SRTOWNB              ; Continue through the sixteen mask bytes.
         RET
@@ -210,7 +212,7 @@ SRTESCAP:
         OR E
         RET Z                      ; An unbound capture has no cell to mark.
         EX DE,HL                   ; HL now names the shared cell.
-        LD DE,2                    ; The packed binding flags follow the payload.
+        LD DE,3                    ; The packed binding flags follow the payload.
         ADD HL,DE
         LD A,(HL)
         OR 10H                     ; Keep the initialized bit and add escape state.

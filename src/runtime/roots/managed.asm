@@ -14,7 +14,7 @@ SRTBMARK:
         SBC HL,DE
         JR C,SRTBFAIL
         LD HL,(SRTBADDR)
-        LD DE,3
+        LD DE,SRTCELW
         ADD HL,DE
         JR C,SRTBFAIL              ; A wrapped binding extent is invalid.
         LD DE,(SRTHEAPP)
@@ -27,7 +27,7 @@ SRTBOK:
         CALL SRTBSTA
         JR Z,SRTBFAIL
         LD HL,(SRTBADDR)
-        LD DE,2
+        LD DE,3
         ADD HL,DE
         LD A,(HL)
         LD (SRTBFLG),A
@@ -46,6 +46,7 @@ SRTBOK:
         LD E,(HL)
         INC HL
         LD D,(HL)
+        INC HL
         INC HL
         LD A,(HL)
         AND 7

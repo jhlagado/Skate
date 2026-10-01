@@ -2,7 +2,7 @@
 ; Entry points: SRTBPOS, SRTBNEW and SRTBSW.
 ; Included in runtime order by ../roots.asm.
 
-; Convert a binding byte address to its bitmap byte and bit mask.
+; Convert an aligned binding byte address to its bitmap byte and bit mask.
 SRTBPOS:
         LD HL,(SRTBADDR)
         LD DE,SRTHEAP
@@ -12,6 +12,9 @@ SRTBPOS:
         LD A,H
         CP 90H
         JR NC,SRTBPF
+        LD A,L
+        AND 3
+        JR NZ,SRTBPF
         LD A,L
         AND 7
         LD C,A
@@ -95,7 +98,7 @@ SRTCLCLM:
         LD (HL),A
         RET
 
-; Sweep the three-byte binding pages.  A live page remains owned by the page
+; Sweep the four-byte binding pages.  A live page remains owned by the page
 ; manager; dead cells form a page-local free list before it is joined to the
 ; global list.  An empty page is returned immediately, so no stale free-list
 ; address can survive the page release.
@@ -128,7 +131,7 @@ SRTBPGLO:
         LD (SRTBPLST),HL
         XOR A
         LD (SRTBPLIV),A
-        LD A,85
+        LD A,SRTBCAP
         LD (SRTCLPGQ),A
 SRTBPGSL:
         LD A,(SRTCLPGQ)
@@ -145,6 +148,7 @@ SRTBPGSL:
         AND C
         JR Z,SRTBPGFR               ; A clear bitmap bit is never a live cell.
         LD HL,(SRTBADDR)
+        INC HL
         INC HL
         INC HL
         LD A,(HL)
@@ -174,6 +178,7 @@ SRTBPGHD:
         LD (SRTBPFRE),HL
         INC HL
         INC HL
+        INC HL
         XOR A
         LD (HL),A                  ; A reclaimed cell is no longer allocated.
         JR SRTBPGCL
@@ -183,6 +188,7 @@ SRTBPGLV:
         OR C
         LD (HL),A                  ; Restore the allocation bit for a live cell.
         LD HL,(SRTBADDR)
+        INC HL
         INC HL
         INC HL
         LD A,(HL)
@@ -202,7 +208,7 @@ SRTBPGCL:
         LD (HL),A
 SRTBPGNX:
         LD HL,(SRTBSCAN)
-        LD DE,3
+        LD DE,SRTCELW
         ADD HL,DE
         LD (SRTBSCAN),HL
         LD A,(SRTCLPGQ)

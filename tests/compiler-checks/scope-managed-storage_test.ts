@@ -5,7 +5,7 @@ import {
   writeWord,
 } from "./scope-runtime-fixture.ts";
 
-Deno.test("three-byte bindings descend, load and store without changing their shape", async () => {
+Deno.test("four-byte bindings descend, load and store with a reserved byte", async () => {
   const { assembled, memory, cpu, call } = await managedRuntime();
   const first = call("SRTCELL");
   assert.equal(first.carry, 0);
@@ -23,7 +23,8 @@ Deno.test("three-byte bindings descend, load and store without changing their sh
   const stored = call("SRTBSTOR", 0x1234);
   assert.equal(stored.tag, 3);
   assert.equal(stored.payload, 0x1234);
-  assert.equal(memory[first.payload + 2], 0x2b);
+  assert.equal(memory[first.payload + 2], 0);
+  assert.equal(memory[first.payload + 3], 0x2b);
 
   const loaded = call("SRTBLOAD", first.payload);
   assert.equal(loaded.tag, 3);
@@ -36,7 +37,8 @@ Deno.test("three-byte bindings descend, load and store without changing their sh
   cpu.l = 0xcd;
   const changed = call("SRTBSET", 0xabcd);
   assert.equal(changed.payload, 0xabcd);
-  assert.equal(memory[first.payload + 2], 0x2b);
+  assert.equal(memory[first.payload + 2], 0);
+  assert.equal(memory[first.payload + 3], 0x2b);
 });
 
 Deno.test("unreachable bindings return to a same-sized free block", async () => {
@@ -54,7 +56,7 @@ Deno.test("unreachable bindings return to a same-sized free block", async () => 
   memory[assembled.address("SRTSLOTS")] = 1;
 
   call("SRTGC");
-  assert.equal(memory[binding + 2] & 0x70, 0x20);
+  assert.equal(memory[binding + 3] & 0x70, 0x20);
 
   writeWord(memory, assembled.address("SRTENV"), 0);
   memory[assembled.address("SRTSLOTS")] = 0;
@@ -64,13 +66,13 @@ Deno.test("unreachable bindings return to a same-sized free block", async () => 
 
   const reused = call("SRTCELL");
   assert.equal(reused.payload, binding);
-  assert.equal(memory[binding + 2], 0x20);
+  assert.equal(memory[binding + 3], 0x20);
 });
 
 Deno.test("retained binding pages rebuild free cells after repeated collection", async () => {
   const { assembled, memory, call } = await managedRuntime();
   const allocated: number[] = [];
-  for (let index = 0; index < 85; index++) {
+  for (let index = 0; index < 64; index++) {
     allocated.push(call("SRTCELL").payload);
   }
   const survivor = allocated[0];
@@ -100,7 +102,7 @@ Deno.test("retained binding pages rebuild free cells after repeated collection",
     allocated.includes(reused),
     `binding allocation escaped the retained page: ${reused.toString(16)}`,
   );
-  assert.equal(memory[reused + 2], 0x20);
+  assert.equal(memory[reused + 3], 0x20);
 });
 
 Deno.test("an active uninitialized binding remains allocated through collection", async () => {
@@ -114,7 +116,7 @@ Deno.test("an active uninitialized binding remains allocated through collection"
   memory[assembled.address("SRTSLOTS")] = 1;
 
   call("SRTGC");
-  assert.equal(memory[binding + 2], 0x20);
+  assert.equal(memory[binding + 3], 0x20);
   assert.notEqual(call("SRTCELL").payload, binding);
 });
 
@@ -123,16 +125,16 @@ Deno.test("virgin binding flags cannot keep a page alive", async () => {
   const freeBefore = readWord(memory, assembled.address("SRTPGFRE"));
   const binding = call("SRTCELL").payload;
   const page = readWord(memory, assembled.address("SRTBPGBA"));
-  const virgin = page + 3;
+  const virgin = page + 4;
 
   // A stale mark-looking byte in an unallocated slot must not pin the page.
-  memory[virgin + 2] = 0x40;
+  memory[virgin + 3] = 0x40;
   assert.equal(readWord(memory, assembled.address("SRTPGFRE")), freeBefore - 1);
   call("SRTGC");
 
   assert.equal(readWord(memory, assembled.address("SRTBPGN")), 0);
   assert.equal(readWord(memory, assembled.address("SRTPGFRE")), freeBefore);
-  assert.equal(memory[virgin + 2], 0);
+  assert.equal(memory[virgin + 3], 0);
   assert.equal(call("SRTCELL").payload, binding);
 });
 
@@ -150,10 +152,35 @@ Deno.test("tail-owned cells clear their old value and initialization state", asy
   memory[descriptor + 12] = 1;
   memory[binding] = 0x34;
   memory[binding + 1] = 0x12;
-  memory[binding + 2] = 0x2b;
+  memory[binding + 3] = 0x2b;
 
   call("SRTOWN");
-  assert.deepEqual([...memory.slice(binding, binding + 3)], [0, 0, 0x20]);
+  assert.deepEqual([...memory.slice(binding, binding + 4)], [0, 0, 0, 0x20]);
+});
+
+Deno.test("promoted recursive clear resets heap binding metadata", async () => {
+  const { assembled, memory, cpu, call } = await managedRuntime();
+  const binding = call("SRTCELL").payload;
+  const map = 0xd700;
+  memory[binding] = 0x34;
+  memory[binding + 1] = 0x12;
+  memory[binding + 2] = 0;
+  memory[binding + 3] = 0x2b;
+  writeWord(memory, map, binding);
+  memory[map + 2] = 0;
+  memory[map + 3] = 2;
+  writeWord(memory, assembled.address("SRTENV"), map);
+  memory[assembled.address("SRTSLOTS")] = 1;
+  cpu.b = 0;
+
+  call("SRTCLRI");
+
+  assert.deepEqual([...memory.slice(binding, binding + 4)], [
+    0x34,
+    0x12,
+    0,
+    0x20,
+  ]);
 });
 
 Deno.test("promotion keeps an inline pair live when allocation collects", async () => {

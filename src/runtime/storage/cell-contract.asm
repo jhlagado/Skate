@@ -6,6 +6,7 @@
 
 SRTCELW        EQU 4                ; One value cell occupies four bytes.
 SRTPAIRW       EQU 8                ; A pair is two adjacent cells.
+SRTBCAP        EQU 64               ; A 256-byte binding page holds 64 cells.
 SRTCP0         EQU 0                ; Payload low byte.
 SRTCP1         EQU 1                ; Payload high byte.
 SRTCEX         EQU 2                ; Reserved payload extension byte.
