@@ -202,14 +202,15 @@ the first widening path to evaluate. Binary16 values can remain sixteen-bit
 values in the low payload; wider exact integers or another numeric format
 would be separate representation work and are outside this experiment.
 
-A twenty-seven-bit payload would require four tag bits and only one additional
-metadata bit (27 + 4 + 1 = 32). It is therefore a possible later layout if
+A twenty-six-bit payload would require four tag bits and two cell-resident flag
+bits (26 + 4 + 2 = 32). A twenty-seven-bit payload would require four tag bits
+and only one flag bit (27 + 4 + 1 = 32). Both are therefore possible later if
 the collector and allocator can keep their remaining state in maps or other
-out-of-cell metadata. It is not part of this experiment: the four low
+out-of-cell metadata. They are not part of this experiment: the four low
 metadata bits remain reserved until their ownership is measured and specified.
-Moving from the four-bit-reserved layout to a one-bit-reserved layout would be
-a separately specified ABI and collector change, not an assumption in this
-storage-only migration.
+Moving from the four-bit-reserved layout to a two-bit or one-bit flag layout
+would be a separately specified ABI and collector change, not an assumption
+in this storage-only migration.
 
 ## Qualification predicates
 
