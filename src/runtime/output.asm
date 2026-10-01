@@ -1,4 +1,4 @@
-; Skate runtime output and scalar predicates
+; Scope-control runtime output and scalar predicates
 ;
 ; The compiler and runtime share the value printer below.  Integer conversion
 ; remains separate from pair and literal output so each path has one clear
@@ -64,9 +64,7 @@ SRTIPOS:
         INC HL                     ; Advance to function 9's terminator byte.
         LD (HL),'$'                ; Function 9 stops at the dollar byte.
         LD DE,SRTBUF           ; DE points to the completed message.
-        LD C,9                     ; Select CP/M's string-output function.
-        CALL 5                     ; Print the result and return to the caller.
-        RET                       ; Return to SRTSTART for the warm start.
+        JP SRTTEXT                 ; Send the completed text through byte output.
 
 ; Subtract one decimal place until the next subtraction would borrow.
 SRTPLACE:
@@ -100,13 +98,24 @@ SRTPLOUT:
 
 SRTUNBD:
         LD DE,SRTUNBT        ; Explain the unbound reference.
-        JR SRTOUT             ; Share the CP/M error-output path.
+        JP SRTOUT             ; Share the CP/M error-output path.
 SRTERROR:
+        CALL SRTDCLN              ; Clear active datum-reader roots before failure.
         LD DE,SRTERRTX          ; Explain an arithmetic or runtime failure.
 SRTOUT:
         LD C,9                     ; Select CP/M's dollar-terminated output.
         CALL 5                     ; Print the terminal diagnostic.
         JP 0                       ; Do not return with a damaged value stack.
+
+; Send a dollar-terminated runtime message through the selected byte service.
+; Normal value output uses this path so a provider sees the same bytes as CP/M.
+SRTTEXT:
+        LD A,(DE)                  ; Read the next message byte.
+        INC DE                     ; Advance before the service call can clobber DE.
+        CP '$'                     ; Dollar terminates the internal text strings.
+        RET Z                      ; Do not expose the terminator to the provider.
+        CALL SRTCH                 ; Route one byte through the provider boundary.
+        JR SRTTEXT                 ; Continue until the complete message is sent.
 
 ; Patched entry and generated-program data fields.
 SRTRES:    DW 0                 ; Result payload retained by SRTPRINT.
@@ -117,11 +126,11 @@ SRTBOOL:      DB 0                 ; Branch decision retained while restoring A.
 SRTOP:        DB 0                 ; Selected checked arithmetic operation.
 SRTPID:       DB 0                 ; Predefined primitive kind for the active call.
 SRTARGC:      DB 0                 ; Number of values in the current call packet.
-SRTRESTF:     DB 0
-SRTMINAR:     DB 0
-SRTRESTN:     DB 0
-SRTRESTI:     DB 0
-SRTRESTC:     DB 0
+SRTRESTF:     DB 0                 ; High-bit policy for the active procedure.
+SRTMINAR:     DB 0                 ; Fixed minimum arity of the active procedure.
+SRTRESTN:     DB 0                 ; Surplus values still waiting for the rest list.
+SRTRESTI:     DB 0                 ; Packet index while reading surplus values.
+SRTRESTC:     DB 0                 ; Original surplus count passed to SRTQBLD.
 SRTNCT:       DB 0                 ; Number of generated operands not yet consumed.
 ; The exact-root operand table and allocation maps use a fixed work band
 ; outside the provider image.  The page domain ends its low band before 9000H,
@@ -133,7 +142,7 @@ SRTNRTAG:     DB 0                 ; Shadow-root tag staging.
 ; through B800H work band reserved by the page manager.  Their larger extents
 ; cover the full 3000H..C000H address span, including images below 4000H.
 SRTCLBM      EQU 09000H           ; 2304 bytes mark every allocated closure start.
-SRTCLMK      EQU 09900H           ; 2304 bytes mark closures queued in this GC.
+SRTCLMK      EQU 09900H           ; 2304 bytes: even marks, odd vector type bits.
 SRTBMB       EQU 0A600H           ; 4608 bytes mark every allocated binding start.
 SRTNLEFT:     DB 0                 ; Remaining values in an arithmetic or compare fold.
 SRTNACCT:     DB 0                 ; Accumulator tag for a variadic numeric fold.
@@ -158,15 +167,26 @@ SRTCENVN:     DB 0                 ; Active caller-map slot count for exact root
 SRTNEWD:      DW 0                 ; Descriptor being copied into a closure.
 SRTNENV:    DW 0                 ; Destination map during closure creation.
 SRTHEAPP:     DW SRTHEPEN          ; Exclusive end of the closure/binding pool.
-SRTBYTES:     DW 0                 ; Pointer-map byte count for the active shape.
+SRTBYTES:     DW 0                 ; Two-byte closure-map extent for the active shape.
+SRTMAPB:      DW 0                 ; Four-byte active-map extent for the active shape.
 SRTOLDSP:     DW 0                 ; Stack boundary before an activation map.
-SRTLOWSP:     DW 0E000H            ; Lowest native stack boundary observed.
+SRTLOWSP:     DW 0E400H            ; Lowest native stack boundary observed.
+SRTBCNT:      DW 0                 ; Successful managed binding allocations.
+SRTCCNT:      DW 0                 ; Successful closure allocations.
+SRTPCNT:      DW 0                 ; Successful pair allocations.
+SRTGCNT:      DW 0                 ; Entries into the stop-the-world collector.
+SRTACNT:      DW 0                 ; Activation maps reserved by procedure calls.
 SRTRET:       DW 0                 ; Helper return saved while moving the stack.
 SRTCELLP:     DW 0                 ; Cell base retained during heap allocation.
 SRTADDR:      DW 0                 ; Environment entry being filled.
 SRTMASKP:     DW 0                 ; Descriptor mask cursor during activation setup.
 SRTCURD:      DW 0                 ; Descriptor active before a tail transfer.
 SRTSLOT:      DW 0                 ; Formal cell address during argument transfer.
+SRTSADR:      DW 0                 ; Active four-byte slot address.
+SRTSVAL:      DW 0                 ; Value payload held by a slot helper.
+SRTSVTAG:     DB 0                 ; Value tag held by a slot helper.
+SRTSFLG:      DB 0                 ; Active-slot flags held by a slot helper.
+SRTSNUM:      DB 0                 ; Slot number held across promotion.
 SRTNEXT:      DW 0                 ; Descriptor cursor during argument transfer.
 SRTSRC:       DW 0                 ; Target closure map during a tail transfer.
 SRTMASKV:     DB 0                 ; Current owned-mask byte.
@@ -179,10 +199,12 @@ SRTCLSZ:      DW 0                 ; Rounded closure extent for allocation and s
 SRTCLIDX:     DB 0                 ; Four-byte size-class index for the active closure.
 SRTCURS:      DB 0                 ; Pointer-slot extent of the current frame.
 SRTIMGE:      DW 0                 ; Absolute end of the published runtime image.
-SRTGBASE:     DW 0                 ; Absolute start of published global records.
-SRTGEND:      DW 0                 ; Exclusive end of published global records.
+SRTGBASE:     DW 0                 ; Start of published globals and static locals.
+SRTGEND:      DW 0                 ; Exclusive end of globals and static locals.
 SRTQROOT:     DW 0                 ; Absolute start of quoted-list cache records.
 SRTQENDR:     DW 0                 ; Exclusive end of quoted-list cache records.
+SRTSYMB:      DW 0                 ; Absolute start of the published symbol directory.
+SRTSYME:      DW 0                 ; Exclusive end of the published symbol directory.
 SRTARGPK:     DS 32                ; Eight four-byte argument records.
 SRTOPS:       DW SRTOPB        ; Operator side-stack cursor between heap and guard.
 SRTBUF:   DS 32                ; Decimal output buffer terminated for BDOS function 9.

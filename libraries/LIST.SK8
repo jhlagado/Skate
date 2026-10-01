@@ -1,0 +1,53 @@
+; Fixed-arity list procedures for programs that choose to include this file.
+; Every procedure requires a proper list.  An improper tail reaches car or cdr
+; and therefore reports the runtime's ordinary pair error.
+
+; Count the links in a proper list.
+(define (list-length items)
+  (if (null? items)
+      0
+      (if (pair? items)
+          (+ 1 (list-length (cdr items)))
+          (car items))))
+
+; Reverse a proper list with a tail-recursive accumulator.  The helper is
+; package-level so the library remains usable with the compiler's current
+; internal-definition rules.
+(define (list-reverse-loop remaining result)
+  (if (null? remaining)
+      result
+      (if (pair? remaining)
+          (list-reverse-loop (cdr remaining) (cons (car remaining) result))
+          (car remaining))))
+
+(define (list-reverse items)
+  (list-reverse-loop items '()))
+
+; Append two proper lists, preserving the order of both inputs.
+(define (list-append left right)
+  (if (null? left)
+      (begin
+        ; Validate the tail before returning it unchanged.
+        (list-length right)
+        right)
+      (if (pair? left)
+          (cons (car left) (list-append (cdr left) right))
+          (car left))))
+
+; Apply a unary procedure to each item and return a new proper list.
+(define (list-map procedure items)
+  (if (null? items)
+      '()
+      (if (pair? items)
+          (cons (procedure (car items)) (list-map procedure (cdr items)))
+          (car items))))
+
+; Visit each item from left to right.  The empty list is the result value.
+(define (list-for-each procedure items)
+  (if (null? items)
+      '()
+      (if (pair? items)
+          (begin
+            (procedure (car items))
+            (list-for-each procedure (cdr items)))
+          (car items))))

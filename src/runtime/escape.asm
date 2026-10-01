@@ -59,10 +59,10 @@ SRTCEOPN:
         CALL SRTCEADR              ; HL now names the selected record.
         LD (SRTCEPTR),HL           ; Keep the record base for its fields.
         LD HL,(SRTCEGEN)           ; Generation zero is reserved for no token.
-        LD DE,0FFFFH               ; The token range must never wrap to an old value.
+        LD DE,0EFFFH               ; Stop before the F000H port namespace.
         OR A
         SBC HL,DE
-        JP Z,SRTERROR              ; Exhaustion is safer than reusing a live token.
+        JP Z,SRTERROR              ; Exhaustion is safer than entering port values.
         LD HL,(SRTCEGEN)
         INC HL
         LD (SRTCEGEN),HL           ; Every new record receives a distinct token.
@@ -294,8 +294,6 @@ SRTCEHIT:
 ; Preserve maps saved by active escape records while the collector is running.
 SRTCEROT:
         LD A,(SRTCEDEP)
-        CP 8                       ; Ignore scratch bytes that cannot be a live depth.
-        RET NC
         OR A
         RET Z
         LD (SRTCEIX),A
@@ -305,17 +303,6 @@ SRTCERL:
         LD (SRTCEIX),A
         CALL SRTCEADR
         LD (SRTCEPTR),HL
-        LD DE,4                    ; Validate the saved native-stack boundary.
-        ADD HL,DE
-        LD E,(HL)
-        INC HL
-        LD D,(HL)
-        LD A,D
-        CP 0D4H
-        JR C,SRTCERET              ; A record below the stack guard is not live.
-        CP 0E0H
-        JR NC,SRTCERET             ; A record above the stack ceiling is not live.
-        LD HL,(SRTCEPTR)
         LD DE,6
         ADD HL,DE
         LD E,(HL)
@@ -346,7 +333,6 @@ SRTCERL:
         LD A,(SRTCEIX)
         OR A
         JR NZ,SRTCERL
-SRTCERET:
         RET
 
 ; Dynamic escape state and the bounded record table.

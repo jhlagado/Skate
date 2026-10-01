@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 import { loadAssembly } from "../../tests/z80.ts";
+import { readAsoOperations } from "../../tools/aso.ts";
+import { validateAso } from "./aso-proof.mjs";
 import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 import {
   installCpm22File,
@@ -254,7 +256,12 @@ const cases = [
   ["UNBOUND.SK8", "unbound-name", "UNBOUND"],
 ];
 const errorCases = [
-  ["BADFORM.SK8", "(let ((value 1 2)) value)", "EXPECT\r\n"],
+  [
+    "BADFORM.SK8",
+    "(let ((value 1 2)) value)",
+    "EXPECT\r\n",
+    "BADFORM.SK8:1:16: EXPECT\r\n",
+  ],
   ["DUPREC.SK8", "(letrec ((value 1) (value 2)) value)", "DUP\r\n"],
   [
     "LDDUP.SK8",
@@ -282,31 +289,86 @@ const errorCases = [
     "((lambda () (let outer () (let inner ((value 1 2)) value))))",
     "EXPECT\r\n",
   ],
-  ["TOOLONG.SK8", "1 ".repeat(2600), "CAP\r\n"],
+  ["TOOLONG.SK8", "1 ".repeat(11000), "CAP\r\n"],
+  [
+    "INCBAD.SK8",
+    '(include "BROKEN.SK8")\r\n',
+    "EXPECT\r\n",
+    "BROKEN.SK8:2:16: EXPECT\r\n",
+  ],
+];
+const includeErrorFiles = [
+  ["BROKEN.SK8", "(begin\r\n(let ((value 1 2)) value))\r\n"],
 ];
 const noOutputCases = [["NOAUTO.SK8", "42"]];
-for (const [name, source] of cases) {
+// The CP/M 2.2 disk has 64 directory entries.  The valid and error corpora
+// are installed in separate boots so the three output files can be staged
+// alongside the compiler and all source files without changing the disk model.
+const noOutputMode = Deno.args.includes("--no-output");
+const errorMode = Deno.args.includes("--errors");
+const onlyArgument = Deno.args.find((argument) =>
+  argument.startsWith("--only=")
+);
+const onlyName = onlyArgument?.slice("--only=".length).toUpperCase();
+const knownNames = new Set([
+  ...cases.map(([name]) => name),
+  ...errorCases.map(([name]) => name),
+  ...noOutputCases.map(([name]) => name),
+]);
+if (onlyName !== undefined && !knownNames.has(onlyName)) {
+  throw new Error(`unknown --only case: ${onlyName}`);
+}
+if (noOutputMode && errorMode) {
+  throw new Error("--no-output and --errors cannot be combined");
+}
+const modeCases = noOutputMode ? noOutputCases : errorMode ? errorCases : cases;
+if (
+  onlyName !== undefined &&
+  !modeCases.some(([name]) => name === onlyName)
+) {
+  throw new Error(`--only case is not available in this mode: ${onlyName}`);
+}
+const selectedCases = noOutputMode || errorMode
+  ? []
+  : onlyName === undefined
+  ? cases
+  : cases.filter(([name]) => name === onlyName);
+const selectedErrorCases = noOutputMode || !errorMode
+  ? []
+  : onlyName === undefined
+  ? errorCases
+  : errorCases.filter(([name]) => name === onlyName);
+const selectedNoOutputCases = noOutputMode ? noOutputCases : [];
+for (const [name, source] of selectedCases) {
   disk = installCpm22File(disk, {
     name,
     bytes: new TextEncoder().encode(source + "\x1a"),
     padByte: 0x1a,
   });
 }
-for (const [name, source] of errorCases) {
+for (const [name, source] of selectedErrorCases) {
   disk = installCpm22File(disk, {
     name,
     bytes: new TextEncoder().encode(source + "\x1a"),
     padByte: 0x1a,
   });
 }
-for (const [name, source] of noOutputCases) {
+if (errorMode) {
+  for (const [name, source] of includeErrorFiles) {
+    disk = installCpm22File(disk, {
+      name,
+      bytes: new TextEncoder().encode(source + "\x1a"),
+      padByte: 0x1a,
+    });
+  }
+}
+for (const [name, source] of selectedNoOutputCases) {
   disk = installCpm22File(disk, {
     name,
     bytes: new TextEncoder().encode(source + "\x1a"),
     padByte: 0x1a,
   });
 }
-
 const machine = new TriptychCpu(firmware.bootRom);
 const decoder = new TextDecoder("ascii");
 let transcript = "";
@@ -333,46 +395,59 @@ function runCommand(command, expected, description) {
   assert.ok(output.includes(expected), JSON.stringify(output));
   return output;
 }
-function programOutput(output) {
-  const commandEnd = output.indexOf("\r\r\n");
-  const prompt = output.lastIndexOf("\r\nA>");
-  assert.ok(commandEnd >= 0 && prompt > commandEnd, JSON.stringify(output));
-  return output.slice(commandEnd + 3, prompt);
-}
 try {
   machine.install_drive(0, disk, true);
   runUntilPrompt(0, "the boot prompt");
   const measurements = [];
-  for (const [name, , expected] of cases) {
+  for (const [name, , expected] of selectedCases) {
     runCommand(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
     const image = machine.export_drive(0);
     const outputName = name.replace(".SK8", ".COM");
     const generated = readCpm22File(image, outputName);
-    const object = readCpm22File(image, name.replace(".SK8", ".NOB"));
+    const aso = readCpm22File(image, name.replace(".SK8", ".ASO"));
+    const operations = readAsoOperations([aso]);
+    const patchCount = operations.filter(({ kind }) => kind === "patch").length;
+    if (name === "GLOBAL.SK8") {
+      assert.ok(patchCount > 0, `${outputName}: ASO has no PATCH records`);
+    }
+    const { asoBytes } = validateAso(aso, generated, outputName);
     measurements.push({
       name,
       comBytes: generated.length,
-      nobjBytes: object.length,
+      asoBytes,
+      patchCount,
     });
     assert.equal(generated[0], 0x31, `${outputName} sets its private stack`);
     const runName = outputName.replace(".COM", "");
     runCommand(runName, `${expected}\r\n`, `run ${outputName}`);
     runCommand(`ERA ${outputName}`, "A>", `remove ${outputName}`);
-    runCommand(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
+    runCommand(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
   }
-  for (const [name, , expected] of errorCases) {
-    runCommand(`SKATE ${name}`, expected, `reject ${name}`);
+  for (const [name, , expected, location] of selectedErrorCases) {
+    const output = runCommand(`SKATE ${name}`, expected, `reject ${name}`);
+    if (location !== undefined) {
+      assert.ok(output.includes(location), JSON.stringify(output));
+    }
+    runCommand(`ERA ${name}`, "A>", `remove ${name}`);
   }
-  for (const [name] of noOutputCases) {
+  for (const [name] of selectedNoOutputCases) {
     runCommand(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
     const output = runCommand(
       name.replace(".SK8", ""),
       "A>",
       `run ${name.replace(".SK8", ".COM")}`,
     );
-    assert.equal(programOutput(output), "", `${name}: implicit output remains`);
+    const commandEnd = output.indexOf("\r\r\n");
+    const prompt = output.lastIndexOf("\r\nA>");
+    assert.ok(commandEnd >= 0 && prompt > commandEnd, JSON.stringify(output));
+    assert.equal(
+      output.slice(commandEnd + 3, prompt),
+      "",
+      `${name}: implicit output remains`,
+    );
     runCommand(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
-    runCommand(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
+    runCommand(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
+    runCommand(`ERA ${name}`, "A>", `remove ${name}`);
   }
   console.log(JSON.stringify(
     {
@@ -381,12 +456,12 @@ try {
       imageEnd: compiler.image.end,
       runtimeBytes: runtimeLength,
       managedCeiling,
-      cases: cases.map(([name]) => name),
+      cases: selectedCases.map(([name]) => name),
       largestComBytes: Math.max(
         ...measurements.map(({ comBytes }) => comBytes),
       ),
-      largestNobjBytes: Math.max(
-        ...measurements.map(({ nobjBytes }) => nobjBytes),
+      largestAsoBytes: Math.max(
+        ...measurements.map(({ asoBytes }) => asoBytes),
       ),
       measurements,
       transcript,

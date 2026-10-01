@@ -6,14 +6,15 @@ Skate compiles `.sk8` source into runnable `.COM` programs and a checked
 publication stream. It is an ongoing implementation aimed at useful Scheme programs on
 a 64K machine, with a native compiler, a compact runtime and CP/M disk tools.
 
-The current release, Skate 0.5.11, supports exact signed integers, binary16
+The current source supports exact signed integers, binary16
 numbers, booleans, byte characters, symbols, strings, quoted data, pairs,
 lists and vectors. It provides `cons`, `car`, `cdr`, mutation, lexical `let`,
 `let*`, `letrec` and named `let`, `if`, `begin`, `cond`, `and`, `or`, numeric
 arithmetic and comparisons, type predicates, fixed-arity procedures, dotted
 rest parameters, bounded `apply`, closures, internal definitions, proper tail
-calls and one-shot `call/ec`. Console input and output use the CP/M character
-interface; Control-Z is reported as EOF. Decimal points and exponents select
+calls and one-shot `call/ec`. Standard input, output and error ports support character and datum I/O.
+Sequential text and binary file ports use CP/M files, with one input and one
+output file open at a time. Text input treats Control-Z as EOF. Decimal points and exponents select
 binary16 values, and mixed arithmetic retains fractional results.
 
 The compiler and runtime are written in Z80 assembly using the ATOM assembler.
@@ -25,8 +26,9 @@ The optional provider tools carry terminal, input, video, sound and bounded
 file requests over a byte protocol. Ordinary console text remains ordinary
 console text; a host supplies the hardware-specific provider.
 
-For source trees using leading `(include "LIB.SK8")` forms, the host can
-prepare the same ordered `.SKM` package accepted by the CP/M compiler:
+The native compiler accepts leading `(include "LIB.SK8")` forms with up to
+31 direct includes on the current drive. For nested source trees, the host
+resolver prepares an ordered `.SKM` package accepted by the CP/M compiler:
 
 ```sh
 deno task prepare:source path/to/sources MAIN.SK8 path/to/staged-sources
@@ -61,12 +63,17 @@ The compiler writes a checked `.COM` program for use from a CP/M prompt. Any
 intermediate publication data is an implementation detail of the build.
 
 Skate deliberately leaves general macros and quasiquote, reusable
-continuations, `eval`, Scheme ports and general file procedures outside this
-small core. The provider protocol is the planned boundary for richer device
-and file services.
+continuations and `eval` outside this small core. File names currently use
+current-drive CP/M 8.3 spelling; append, seeking and multiple handles per
+direction are not implemented. `libraries/io.sk8` provides line input, line
+output, prompting and stream copying with explicit ports.
 
 See the [0.5.11 release notes](release/v0.5.11/README.md) for the checked image,
-measurements and current limitations.
+measurements and limitations of that published image. The main branch includes
+subsequent compiler and I/O work; its source and tests are the development baseline.
 
 For a guided tour of the source tree, compilation stages and recommended
 reading order, see the [codebase guide](docs/codebase.md).
+
+The [I/O reference](docs/ports.md) describes ports, sequential files and source
+helpers.

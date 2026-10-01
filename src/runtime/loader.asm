@@ -8,20 +8,17 @@ SCLOADRT:
         LD HL,SCRTFNM              ; Select the fixed provider file on the active drive.
         CALL CTOPENR               ; Open it through the binary transport adapter.
         JR C,SCRTFAIL              ; A missing or unreadable provider aborts setup.
-        LD HL,SCIMG                ; The staged image begins at the NOBJ payload base.
         LD BC,SRTLEN               ; Copy the exact ATOM image extent, excluding padding.
 SCRTREAD:
         LD A,B                     ; Test the high byte of the remaining count first.
         OR C                       ; Zero means every provider byte has been copied.
         JP Z,SCRTCLS                ; Close the provider before accepting the image.
-        PUSH HL                    ; CTREAD uses HL for its private DMA cursor.
         PUSH BC                    ; CTREAD may use BC while fetching a record.
         CALL CTREAD                ; Read one binary provider byte.
         POP BC                     ; Restore the remaining logical byte count.
-        POP HL                     ; Restore the staged destination cursor.
         JR C,SCRTFAIL              ; A short file or transport error is a setup failure.
-        LD (HL),A                  ; Publish the byte only after CTREAD succeeds.
-        INC HL                     ; Advance to the next staged provider position.
+        CALL SINKBYTE              ; Publish the byte through the ASO image sink.
+        RET C                      ; A spool failure is a setup failure.
         DEC BC                     ; Account for the byte just copied.
         JR SCRTREAD                ; Continue until the metadata length is exhausted.
 SCRTCLS:

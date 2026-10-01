@@ -13,6 +13,7 @@ import {
   installCpm22File,
   readCpm22File,
 } from "../../../triptych/tools/lib/cpm22-disk.mjs";
+import { validateAso } from "./aso-proof.mjs";
 
 const triptychRoot = fileURLToPath(
   new URL("../../../triptych/", import.meta.url),
@@ -44,6 +45,11 @@ const runtimeLength = provider.image.bytes.length - 0x0100;
 assert.equal(runtimeLength, compiler.address("SRTLEN"));
 const heapPointerAddress = provider.address("SRTHEAPP");
 const lowStackAddress = provider.address("SRTLOWSP");
+const bindingAllocationAddress = provider.address("SRTBCNT");
+const closureAllocationAddress = provider.address("SRTCCNT");
+const pairAllocationAddress = provider.address("SRTPCNT");
+const collectionCountAddress = provider.address("SRTGCNT");
+const frameCountAddress = provider.address("SRTACNT");
 let disk = installCpm22File(backing, {
   name: "SKATE.COM",
   bytes: compiler.image.bytes.slice(0x0100),
@@ -54,6 +60,22 @@ disk = installCpm22File(disk, {
   bytes: provider.image.bytes.slice(0x0100),
   padByte: 0x1a,
 });
+if (Deno.args.includes("--data")) {
+  disk = installCpm22File(disk, {
+    name: "LIST.SK8",
+    bytes: await Deno.readFile("libraries/LIST.SK8"),
+    padByte: 0x1a,
+  });
+  disk = installCpm22File(disk, {
+    name: "ASSOC.SK8",
+    bytes: await Deno.readFile("libraries/ASSOC.SK8"),
+    padByte: 0x1a,
+  });
+}
+
+const longA = `"${"a".repeat(200)}"`;
+const longB = `"${"b".repeat(100)}"`;
+const boundary = `"${"c".repeat(254)}"`;
 const dataCases = [
   [
     "DIGITS.SK8",
@@ -88,6 +110,61 @@ const dataCases = [
   ["DISPLAY.SK8", '(begin (display "hi") (newline))', "hi"],
   ["NEWLINE.SK8", '(begin (display "x") (newline))', "x"],
   ["EMPTYSTR.SK8", '(begin (write "") (newline))', '""'],
+  [
+    "STRLEN.SK8",
+    '(begin (write (string-length "hello")) (newline))',
+    "5",
+  ],
+  [
+    "STRREF.SK8",
+    '(begin (write (string-ref "hello" 1)) (newline))',
+    "#\\x65",
+  ],
+  [
+    "CHARINT.SK8",
+    "(begin (write (char->integer #\\A)) (newline))",
+    "65",
+  ],
+  [
+    "INTCHAR.SK8",
+    "(begin (write (integer->char 65)) (newline))",
+    "#\\x41",
+  ],
+  [
+    "PRIMSTR.SK8",
+    "(begin (write (procedure? string-length)) (write (number? string-length)) (newline))",
+    "#t#f",
+  ],
+  [
+    "QCALL.SK8",
+    "(define f (lambda () (quote (x)))) (begin (write (f)) (newline))",
+    "(x)",
+  ],
+  [
+    "LISTLIB.SK8",
+    '(include "LIST.SK8") (begin (write (list-length (list 1 2 3))) (write (list-reverse (list 1 2 3))) (write (list-append (list 1) (list 2 3))) (write (list-map (lambda (x) (+ x 1)) (list 1 2))) (list-for-each (lambda (x) (write x)) (list 4 5)) (newline))',
+    "3(3 2 1)(1 2 3)(2 3)45",
+  ],
+  [
+    "LISTEDGE.SK8",
+    "(include \"LIST.SK8\") (begin (write (list-length '())) (write (list-reverse '())) (write (list-append '() (list 9))) (write (list-length '(1 2 3 4 5 6 7 8))) (write (list-map (lambda (x) x) '(1 2 3 4 5 6 7 8))) (newline))",
+    "0()(9)8(1 2 3 4 5 6 7 8)",
+  ],
+  [
+    "ASSOCLIB.SK8",
+    "(include \"ASSOC.SK8\") (define entries (list (cons 'a #f) (cons 'b 7))) (begin (write (member-eq? 'a (list 'a 'b))) (write (member-eq? 'c (list 'a 'b))) (write (assoc-eq 'a entries)) (write (assoc-eq 'b entries)) (write (assoc-eq 'c entries)) (newline))",
+    "#t#f(a . #f)(b . 7)#f",
+  ],
+  [
+    "ASORT.SK8",
+    "(include \"ASSOC.SK8\") (begin (write (member-eq? 'a (cons 'a 2))) (write (assoc-eq 'a (cons (cons 'a #f) 2))) (newline))",
+    "#t(a . #f)",
+  ],
+  [
+    "STRLIB.SK8",
+    `(define source (string #\\a #\\b)) (define copy (string-copy source)) (define loop (lambda (n) (if (zero? n) 0 (begin (string-copy "discard") (loop (- n 1)))))) (define build (lambda (n acc) (if (zero? n) acc (build (- n 1) (cons n acc))))) (define tail (lambda (p n) (if (zero? n) p (tail (cdr p) (- n 1))))) (define root (build 600 (string #\\z))) (loop 1200) (begin (write (string #\\A #\\B)) (write (string-length (string #\\x #\\y))) (write (string-ref (string #\\a #\\b) 1)) (write (string? (string #\\z))) (write (eq? "x" "x")) (write (eq? 'x 'x)) (write copy) (write (eq? source copy)) (write (string-append "ab" (string #\\c #\\d))) (write (string-length (string-copy ${boundary}))) (write (string? (tail root 600))) (newline) (write 0) (newline))`,
+    '"AB"2#\\x62#t#t#t"ab"#f"abcd"254#t\r\n0',
+  ],
   [
     "NESTQ.SK8",
     "(write ''x) (newline) (write (quote (a (quote x)))) (newline) (write '''x) (newline) (write (quote 'x)) (newline) (write '(a 'x)) (newline)",
@@ -315,6 +392,11 @@ const cases = [
     "0",
   ],
   [
+    "GCLOCAL.SK8",
+    "(define churn (lambda (n) (if (zero? n) 0 (begin (cons n 0) (churn (- n 1)))))) (let ((root (cons 41 42))) (begin (churn 5000) (car root)))",
+    "41",
+  ],
+  [
     "ECGCMAP.SK8",
     "(let ((root (cons 41 42))) (call/ec (lambda (escape) (letrec ((loop (lambda (n) (if (zero? n) (escape (car root)) (begin (cons n 0) (loop (- n 1))))))) (loop 3000)))))",
     "41",
@@ -336,6 +418,11 @@ const cases = [
     "8",
   ],
   ["CAPTURE.SK8", "((lambda (x) ((lambda () x))) 42)", "42"],
+  [
+    "CAPTURE2.SK8",
+    "((lambda (a b) ((lambda () b))) 1 42)",
+    "42",
+  ],
   ["PKGCAP.SK8", "(define f (let ((x 42)) (lambda () x))) (f)", "42"],
   [
     "TENV.SK8",
@@ -631,6 +718,35 @@ const dataErrorCases = [
 const dataRuntimeErrorCases = [
   ["CARERR.SK8", "(car 1)", "RUNTIME ERROR\r\n"],
   ["CDRERR.SK8", "(cdr 1)", "RUNTIME ERROR\r\n"],
+  [
+    "LISTBAD.SK8",
+    '(include "LIST.SK8") (list-length (cons 1 2))',
+    "RUNTIME ERROR\r\n",
+  ],
+  [
+    "LAPPERR.SK8",
+    '(include "LIST.SK8") (list-append \'() (cons 1 2))',
+    "RUNTIME ERROR\r\n",
+  ],
+  [
+    "ASSOCBAD.SK8",
+    "(include \"ASSOC.SK8\") (member-eq? 'missing (cons 'present 2))",
+    "RUNTIME ERROR\r\n",
+  ],
+  ["STCHERR.SK8", "(string 65)", "RUNTIME ERROR\r\n"],
+  [
+    "SRFDYN.SK8",
+    "(string-ref (string #\\a) 1)",
+    "RUNTIME ERROR\r\n",
+  ],
+  [
+    "STRLONG.SK8",
+    `(string-append ${longA} ${longB})`,
+    "RUNTIME ERROR\r\n",
+  ],
+  ["STRREFER.SK8", '(string-ref "x" 1)', "RUNTIME ERROR\r\n"],
+  ["STRTYPE.SK8", '(string-ref "x" #\\A)', "RUNTIME ERROR\r\n"],
+  ["CHINTERR.SK8", "(char->integer 65)", "RUNTIME ERROR\r\n"],
 ];
 const selectedErrorCases = runtimeErrorMode
   ? []
@@ -656,6 +772,22 @@ const selectedRuntimeErrorCases = runtimeErrorMode
   : Deno.args.includes("--data")
   ? dataRuntimeErrorCases
   : [];
+const caseArgument = Deno.args.find((argument) =>
+  argument.startsWith("--case=")
+);
+if (caseArgument !== undefined) {
+  const requestedName = caseArgument.slice("--case=".length).toUpperCase();
+  const groups = [selectedCases, selectedErrorCases, selectedRuntimeErrorCases];
+  assert.ok(
+    groups.some((group) => group.some(([name]) => name === requestedName)),
+    `No case ${requestedName} in the selected proof group`,
+  );
+  for (const group of groups) {
+    const matching = group.filter(([name]) => name === requestedName);
+    group.splice(0, group.length, ...matching);
+  }
+}
+
 for (
   const [name, source] of [
     ...selectedCases,
@@ -720,78 +852,6 @@ function programOutput(output) {
   return output.slice(commandEnd + 3, prompt);
 }
 
-function validateObject(object, com, name) {
-  assert.equal(
-    object[0],
-    1,
-    `${name}: missing NOBJ header record (${[...object.slice(0, 12)]})`,
-  );
-  assert.deepEqual(
-    [...object.slice(3, 7)],
-    [0x4e, 0x4f, 0x42, 0x4a],
-    `${name}: wrong NOBJ signature`,
-  );
-  let cursor = 70;
-  let image = null;
-  const kinds = [];
-  let commitEnd = -1;
-  while (cursor + 3 <= object.length) {
-    const kind = object[cursor];
-    const length = object[cursor + 1] | object[cursor + 2] << 8;
-    const end = cursor + 3 + length;
-    assert.ok(
-      end <= object.length,
-      `${name}: truncated NOBJ record at ${cursor} kind ${kind} length ${length} file ${object.length}`,
-    );
-    kinds.push(kind);
-    if (kind === 6) {
-      assert.ok(length >= 6, `${name}: short IMAGE record`);
-      image = object.slice(cursor + 9, end);
-    }
-    cursor = end;
-    if (kind === 12) {
-      commitEnd = end;
-      break;
-    }
-  }
-  assert.ok(kinds.includes(6), `${name}: missing IMAGE record`);
-  assert.ok(kinds.includes(8), `${name}: missing symbol record`);
-  assert.ok(kinds.includes(11), `${name}: missing relocation record`);
-  assert.equal(kinds.at(-1), 12, `${name}: missing COMMIT record`);
-  assert.ok(commitEnd > 0, `${name}: missing complete COMMIT record`);
-  for (const byte of object.slice(commitEnd)) {
-    assert.ok(
-      byte === 0x00 || byte === 0x1a,
-      `${name}: non-padding after COMMIT`,
-    );
-  }
-
-  let crc = 0xffff;
-  const stream = object.slice(0, commitEnd);
-  for (const byte of stream.slice(0, stream.length - 2)) {
-    crc ^= byte << 8;
-    for (let bit = 0; bit < 8; bit += 1) {
-      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : crc << 1;
-      crc &= 0xffff;
-    }
-  }
-  const stored = stream[stream.length - 2] | stream[stream.length - 1] << 8;
-  assert.equal(stored, crc, `${name}: NOBJ CRC mismatch`);
-  assert.ok(image, `${name}: image payload was not recorded`);
-  assert.deepEqual(
-    image,
-    com.slice(0, image.length),
-    `${name}: NOBJ image differs from COM`,
-  );
-  for (const byte of com.slice(image.length)) {
-    assert.ok(
-      byte === 0x00 || byte === 0x1a,
-      `${name}: non-padding after COM image`,
-    );
-  }
-  return image.length;
-}
-
 try {
   machine.install_drive(0, disk, true);
   runUntilPrompt(0, "the boot prompt");
@@ -801,8 +861,12 @@ try {
     runCommand(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
     const image = machine.export_drive(0);
     const generated = readCpm22File(image, outputName);
-    const object = readCpm22File(image, name.replace(".SK8", ".NOB"));
-    const imageLength = validateObject(object, generated, name);
+    const aso = readCpm22File(image, name.replace(".SK8", ".ASO"));
+    const { imageBytes: imageLength, asoBytes } = validateAso(
+      aso,
+      generated,
+      name,
+    );
     const imageEndOffset = provider.address("SRTIMGE") - 0x0100;
     const publishedImageEnd = generated[imageEndOffset] |
       generated[imageEndOffset + 1] << 8;
@@ -837,6 +901,12 @@ try {
         `${name}: generated operands crossed the heap boundary`,
       );
     }
+    if (name === "GCLOCAL.SK8" || name === "ECGCMAP.SK8") {
+      assert.ok(
+        readWord(collectionCountAddress) > 0,
+        `${name}: did not exercise GC`,
+      );
+    }
     const nativeLowSp = readWord(lowStackAddress);
     const heapEnd = readWord(heapPointerAddress);
     assert.ok(nativeLowSp >= 0xd400, `${name}: native stack crossed its guard`);
@@ -844,13 +914,23 @@ try {
     measurements.push({
       name,
       result: expected,
+      imageBytes: imageLength,
       comBytes: generated.length,
-      nobjBytes: object.length,
+      asoBytes,
       lowSp: nativeLowSp,
       heapEnd,
+      bindingAllocations: readWord(bindingAllocationAddress),
+      closureAllocations: readWord(closureAllocationAddress),
+      pairAllocations: readWord(pairAllocationAddress),
+      collections: readWord(collectionCountAddress),
+      activations: readWord(frameCountAddress),
     });
     runCommand(`ERA ${outputName}`, "A>", `remove ${outputName}`);
-    runCommand(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
+    runCommand(
+      `ERA ${name.replace(".SK8", ".ASO")}`,
+      "A>",
+      `remove ${name.replace(".SK8", ".ASO")}`,
+    );
     runCommand(`ERA ${name}`, "A>", `remove ${name}`);
   }
   for (const [name, , expected] of selectedErrorCases) {
@@ -866,7 +946,11 @@ try {
       `reject ${outputName}`,
     );
     runCommand(`ERA ${outputName}`, "A>", `remove ${outputName}`);
-    runCommand(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
+    runCommand(
+      `ERA ${name.replace(".SK8", ".ASO")}`,
+      "A>",
+      `remove ${name.replace(".SK8", ".ASO")}`,
+    );
     runCommand(`ERA ${name}`, "A>", `remove ${name}`);
   }
   console.log(JSON.stringify(
@@ -881,8 +965,8 @@ try {
       largestComBytes: Math.max(
         ...measurements.map(({ comBytes }) => comBytes),
       ),
-      largestNobjBytes: Math.max(
-        ...measurements.map(({ nobjBytes }) => nobjBytes),
+      largestAsoBytes: Math.max(
+        ...measurements.map(({ asoBytes }) => asoBytes),
       ),
       measurements,
     },

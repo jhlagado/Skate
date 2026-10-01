@@ -1,0 +1,55 @@
+; Small console helpers built on the standard ports.
+; Lines are limited to 255 bytes.  A longer line follows the runtime error
+; path rather than silently returning a partial value.
+; The wrong-direction read below is the library's bounded-error hook; Skate has
+; no general source-level raise procedure yet.
+
+(define (io-read-line-loop input result length)
+  (let ((character (read-char input)))
+    (if (eof-object? character)
+        (if (= length 0) character result)
+        (if (eq? character #\newline)
+            result
+            (if (= length 255)
+                (read-char (current-output-port))
+                (io-read-line-loop input
+                    (string-append result (string character))
+                    (+ length 1)))))))
+
+(define (read-line-from input)
+  (io-read-line-loop input "" 0))
+
+(define (read-line)
+  (read-line-from (current-input-port)))
+
+(define (write-line-to text output)
+  (begin
+    (display text output)
+    (newline output)))
+
+(define (write-line text)
+  (write-line-to text (current-output-port)))
+
+(define (prompt-to text output)
+  (display text output))
+
+(define (prompt text)
+  (prompt-to text (current-output-port)))
+
+(define (io-copy-loop input output count)
+  (let ((character (read-char input)))
+    (if (eof-object? character)
+        count
+        (if (eq? character #\newline)
+            (begin
+              (newline output)
+              (io-copy-loop input output (+ count 1)))
+            (begin
+              (write-char character output)
+              (io-copy-loop input output (+ count 1)))))))
+
+(define (copy-stream-from-to input output)
+  (io-copy-loop input output 0))
+
+(define (copy-stream)
+  (copy-stream-from-to (current-input-port) (current-output-port)))

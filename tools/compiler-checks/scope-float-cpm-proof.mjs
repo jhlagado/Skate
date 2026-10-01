@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 import { loadAssembly } from "../../tests/z80.ts";
+import { validateAso } from "./aso-proof.mjs";
 import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 import {
   installCpm22File,
@@ -180,20 +181,23 @@ try {
   for (const [name, , expected] of cases) {
     command(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
     const image = machine.export_drive(0);
+    const generated = readCpm22File(image, name.replace(".SK8", ".COM"));
+    const aso = readCpm22File(image, name.replace(".SK8", ".ASO"));
+    const { asoBytes } = validateAso(aso, generated, name);
     measurements.push({
       name,
-      comBytes: readCpm22File(image, name.replace(".SK8", ".COM")).length,
-      nobjBytes: readCpm22File(image, name.replace(".SK8", ".NOB")).length,
+      comBytes: generated.length,
+      asoBytes,
     });
     runProgram(name, expected);
     command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
-    command(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
+    command(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
   }
   for (const [name] of errorCases) {
     command(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
     runProgram(name, "RUNTIME ERROR\r\n");
     command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
-    command(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
+    command(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
   }
   console.log(JSON.stringify(
     {
@@ -204,8 +208,8 @@ try {
       largestComBytes: Math.max(
         ...measurements.map(({ comBytes }) => comBytes),
       ),
-      largestNobjBytes: Math.max(
-        ...measurements.map(({ nobjBytes }) => nobjBytes),
+      largestAsoBytes: Math.max(
+        ...measurements.map(({ asoBytes }) => asoBytes),
       ),
       measurements,
     },

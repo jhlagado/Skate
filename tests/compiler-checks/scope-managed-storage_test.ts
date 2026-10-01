@@ -1,111 +1,9 @@
 import assert from "node:assert/strict";
-import { loadAssembly } from "../z80.ts";
-
-function writeWord(memory: Uint8Array, address: number, value: number) {
-  memory[address] = value & 255;
-  memory[address + 1] = value >>> 8;
-}
-
-async function managedRuntime(withPairs = false) {
-  const assembled = await loadAssembly(
-    "src/runtime/image.asm",
-  );
-  const memory = assembled.runtime.hardware.memory;
-  const cpu = assembled.runtime.cpu;
-  const imageEnd = (assembled.image.end + 0xff) & 0xff00;
-  const closureMapBytes = assembled.address("SRTCLMK") -
-    assembled.address("SRTCLBM");
-  const bindingMapBytes = assembled.address("SRTMPEND") -
-    assembled.address("SRTBMB");
-  memory.fill(0, imageEnd, 0xe000);
-  memory.fill(
-    0,
-    assembled.address("SRTCLBM"),
-    assembled.address("SRTCLBM") + closureMapBytes,
-  );
-  memory.fill(
-    0,
-    assembled.address("SRTCLMK"),
-    assembled.address("SRTCLMK") + closureMapBytes,
-  );
-  memory.fill(
-    0,
-    assembled.address("SRTBMB"),
-    assembled.address("SRTBMB") + bindingMapBytes,
-  );
-  memory.fill(
-    0,
-    assembled.address("SRTCFREE"),
-    assembled.address("SRTCFREE") + 130,
-  );
-  memory.fill(
-    0,
-    assembled.address("SRTCLOWN"),
-    assembled.address("SRTCLOWN") + 128,
-  );
-  memory.fill(
-    0,
-    assembled.address("SRTCLUSE"),
-    assembled.address("SRTCLUSE") + 128,
-  );
-  memory.fill(
-    0,
-    assembled.address("SRTCLPBA"),
-    assembled.address("SRTCLPBA") + 128,
-  );
-  memory.fill(
-    0,
-    assembled.address("SRTBPGS"),
-    assembled.address("SRTBPGS") + 128,
-  );
-  writeWord(memory, assembled.address("SRTCLCUR"), 0);
-  writeWord(memory, assembled.address("SRTBEND"), 0);
-  writeWord(memory, assembled.address("SRTHEAPP"), 0xc000);
-  // Test descriptors live in the transient area, beyond the assembled image.
-  // Keep the published-image bound above them while the allocator still uses
-  // the real image end for its first managed page.
-  writeWord(memory, assembled.address("SRTIMGE"), 0xc200);
-  writeWord(memory, assembled.address("SRTGBASE"), 0);
-  writeWord(memory, assembled.address("SRTGEND"), 0);
-  writeWord(memory, assembled.address("SRTQROOT"), 0);
-  writeWord(memory, assembled.address("SRTQENDR"), 0);
-  writeWord(memory, assembled.address("SRTENV"), 0);
-  writeWord(memory, assembled.address("SRTCENV"), 0);
-  writeWord(memory, assembled.address("SRTOPS"), assembled.address("SRTOPB"));
-  writeWord(memory, assembled.address("SRTQSP"), assembled.address("SRTQBASE"));
-  memory[assembled.address("SRTSLOTS")] = 0;
-  memory[assembled.address("SRTCENVN")] = 0;
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTQACTV")] = 0;
-  memory[assembled.address("SRTCRON")] = 0;
-
-  function call(label: string, hl = 0) {
-    cpu.h = hl >>> 8;
-    cpu.l = hl & 255;
-    cpu.pc = assembled.address(label);
-    cpu.sp = 0xdff0;
-    writeWord(memory, cpu.sp, 0xef00);
-    let steps = 0;
-    while (cpu.pc !== 0xef00) {
-      assert.ok(++steps < 50_000_000, `${label} did not return`);
-      assembled.runtime.step();
-    }
-    assert.equal(cpu.sp, 0xdff2, `${label} stack`);
-    return {
-      carry: cpu.flags.C,
-      tag: cpu.a,
-      payload: (cpu.h << 8) | cpu.l,
-    };
-  }
-
-  assert.equal(call("SRTGPINI", imageEnd).carry, 0);
-
-  if (withPairs) {
-    assert.equal(call("SRTPIN").carry, 0);
-  }
-
-  return { assembled, memory, cpu, call };
-}
+import {
+  managedRuntime,
+  readWord,
+  writeWord,
+} from "./scope-runtime-fixture.ts";
 
 Deno.test("three-byte bindings descend, load and store without changing their shape", async () => {
   const { assembled, memory, cpu, call } = await managedRuntime();
@@ -150,6 +48,8 @@ Deno.test("unreachable bindings return to a same-sized free block", async () => 
   call("SRTBSTOR", 0x1234);
   const map = 0xd700;
   writeWord(memory, map, binding);
+  memory[map + 2] = 0;
+  memory[map + 3] = 2;
   writeWord(memory, assembled.address("SRTENV"), map);
   memory[assembled.address("SRTSLOTS")] = 1;
 
@@ -176,6 +76,8 @@ Deno.test("retained binding pages rebuild free cells after repeated collection",
   const survivor = allocated[0];
   const map = 0xd700;
   writeWord(memory, map, survivor);
+  memory[map + 2] = 0;
+  memory[map + 3] = 2;
   writeWord(memory, assembled.address("SRTENV"), map);
   memory[assembled.address("SRTSLOTS")] = 1;
 
@@ -206,6 +108,8 @@ Deno.test("an active uninitialized binding remains allocated through collection"
   const binding = call("SRTCELL").payload;
   const map = 0xd700;
   writeWord(memory, map, binding);
+  memory[map + 2] = 0;
+  memory[map + 3] = 2;
   writeWord(memory, assembled.address("SRTENV"), map);
   memory[assembled.address("SRTSLOTS")] = 1;
 
@@ -238,6 +142,8 @@ Deno.test("tail-owned cells clear their old value and initialization state", asy
   const map = 0xd700;
   const descriptor = 0xc100;
   writeWord(memory, map, binding);
+  memory[map + 2] = 0;
+  memory[map + 3] = 2;
   writeWord(memory, assembled.address("SRTENV"), map);
   writeWord(memory, assembled.address("SRTDESC"), descriptor);
   memory[assembled.address("SRTSLOTS")] = 1;
@@ -248,6 +154,57 @@ Deno.test("tail-owned cells clear their old value and initialization state", asy
 
   call("SRTOWN");
   assert.deepEqual([...memory.slice(binding, binding + 3)], [0, 0, 0x20]);
+});
+
+Deno.test("promotion keeps an inline pair live when allocation collects", async () => {
+  const { assembled, memory, cpu, call } = await managedRuntime(true);
+  const map = 0xd700;
+  const pair = call("SRTMAKEP");
+  assert.equal(pair.tag, 1);
+
+  // Leave one binding unreachable so the forced collection can reclaim
+  // storage for the promotion allocation.
+  const dead = call("SRTCELL").payload;
+  writeWord(memory, map, pair.payload);
+  memory[map + 2] = pair.tag;
+  memory[map + 3] = 1;
+  writeWord(memory, map + 4, 0x1357);
+  memory[map + 6] = 3;
+  memory[map + 7] = 1;
+  writeWord(memory, assembled.address("SRTENV"), map);
+  memory[assembled.address("SRTSLOTS")] = 2;
+
+  // Exhaust the current page.  Allocate every remaining page through the
+  // page manager so the binding-page directory stays structurally valid while
+  // the next binding allocation is forced through collection.
+  writeWord(
+    memory,
+    assembled.address("SRTBPGP"),
+    readWord(memory, assembled.address("SRTBPGED")),
+  );
+  for (let index = 0; index < 256; index++) {
+    const page = call("SRTGPALL", 1);
+    if (page.carry) break;
+    assert.equal(page.payload & 0xff, 0);
+    assert.ok(index < 255, "page manager did not report exhaustion");
+  }
+
+  cpu.a = 0;
+  const promoted = call("SRTPROM");
+  assert.equal(promoted.carry, 0);
+  assert.equal(readWord(memory, assembled.address("SRTGCNT")), 1);
+  assert.equal(memory[map + 3], 2);
+  assert.deepEqual(
+    [...memory.slice(map + 4, map + 8)],
+    [0x57, 0x13, 3, 1],
+  );
+  const cell = readWord(memory, map);
+  assert.equal(cell, dead);
+  const loaded = call("SRTBLOAD", cell);
+  assert.equal(loaded.tag, pair.tag);
+  assert.equal(loaded.payload, pair.payload);
+  cpu.a = 1;
+  assert.equal(call("SRTPCHK", pair.payload).carry, 0);
 });
 
 Deno.test("closure classes round at the supported 128-slot boundary", async () => {
@@ -267,6 +224,55 @@ Deno.test("closure classes round at the supported 128-slot boundary", async () =
     assert.equal(readWord(memory, rounded), size, `slot count ${count}`);
     assert.equal(memory[index], classIndex, `class ${count}`);
   }
+});
+
+Deno.test("closure creation clears every uncaptured environment byte", async () => {
+  const { assembled, memory, call } = await managedRuntime();
+  const descriptor = 0xc100;
+  writeWord(memory, descriptor, 0x4000);
+  memory[descriptor + 3] = 3;
+  memory[descriptor + 28] = 0;
+
+  const closure = call("SRTMAKE", descriptor);
+  assert.equal(closure.tag, 2);
+  const extent = readWord(memory, assembled.address("SRTCLSZ"));
+  assert.equal(extent, 8);
+  assert.deepEqual(
+    [...memory.slice(closure.payload + 2, closure.payload + extent)],
+    [0, 0, 0, 0, 0, 0],
+  );
+});
+
+Deno.test("activation maps keep helper calls above the collector worklist", async () => {
+  const { assembled, memory, cpu } = await managedRuntime();
+  const guard = assembled.address("SRTSTKGU");
+  const worklistEnd = assembled.address("SRTMKBE");
+  assert.equal(guard, worklistEnd + 0x100);
+
+  memory.fill(0xa5, 0xd000, worklistEnd);
+  const descriptor = 0xc100;
+  writeWord(memory, assembled.address("SRTDESC"), descriptor);
+  memory[descriptor + 12] = 0;
+  memory[descriptor + 28] = 0;
+  memory[assembled.address("SRTSLOTS")] = 1;
+  writeWord(memory, assembled.address("SRTENV"), 0);
+
+  // POP HL in SRTENVIN advances this return stack by two bytes.  Four bytes
+  // for one active slot therefore put the candidate map exactly at the guard.
+  cpu.pc = assembled.address("SRTENVIN");
+  cpu.sp = guard + 2;
+  writeWord(memory, cpu.sp, 0xef00);
+  let steps = 0;
+  while (cpu.pc !== 0xef00) {
+    assert.ok(++steps < 1_000_000, "activation setup did not return");
+    assembled.runtime.step();
+  }
+
+  assert.equal(readWord(memory, assembled.address("SRTENV")), guard);
+  assert.deepEqual(
+    [...memory.slice(0xd000, worklistEnd)],
+    new Array(0x400).fill(0xa5),
+  );
 });
 
 Deno.test("large closures own and release a contiguous two-page run", async () => {
@@ -485,6 +491,8 @@ Deno.test("a closure capture keeps a pair alive and releases both together", asy
   cpu.a = 1;
   call("SRTBSTOR", pair.payload);
   writeWord(memory, map, binding);
+  memory[map + 2] = 0;
+  memory[map + 3] = 2;
   writeWord(memory, assembled.address("SRTENV"), map);
   memory[assembled.address("SRTSLOTS")] = 1;
   const closure = call("SRTMAKE", descriptor);
@@ -510,7 +518,3 @@ Deno.test("a closure capture keeps a pair alive and releases both together", asy
   cpu.a = 1;
   assert.equal(call("SRTPCHK", pair.payload).carry, 1);
 });
-
-function readWord(memory: Uint8Array, address: number) {
-  return memory[address] | memory[address + 1] << 8;
-}

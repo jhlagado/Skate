@@ -40,8 +40,9 @@ async function collectorFixture(rootCount: number) {
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
   memory.fill(0, 0x8000, 0x9000);
-  const slabBase = 0x5000; // Keep the fixture above the runtime's static image.
+  const slabBase = (assembled.image.end + 0xff) & 0xff00;
   const slabCount = 11;
+  assert.ok(slabBase + slabCount * 0x100 <= 0x8000, "slabs overlap roots");
   const recordsPerSlab = 51;
   memory[assembled.address("SRTPSLBN")] = slabCount;
   for (let slab = 0; slab < slabCount; slab++) {
@@ -116,7 +117,6 @@ Deno.test("collector does not read past a root scan interval", async () => {
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
-  memory.fill(0, 0x4000, 0x4100);
   memory[0xa000] = 1;
   writeWord(memory, 0x9ffe, 0xa000);
   cpu.h = 0x9f;
@@ -189,8 +189,8 @@ Deno.test("constructor roots survive collection and retain both inputs", async (
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
-  cpu.h = 0x5e;
-  cpu.l = 0;
+  cpu.h = assembled.image.end >>> 8;
+  cpu.l = assembled.image.end & 255;
   assert.equal(callLabel(assembled, "SRTGPINI", memory, cpu).carry, 0);
   assert.equal(callLabel(assembled, "SRTPIN", memory, cpu).carry, 0);
   // Keep the fixture at one slab so the constructor exercises collection
@@ -243,14 +243,15 @@ Deno.test("overflow fallback restores its slab cursor after child tracing", asyn
   const cpu = assembled.runtime.cpu;
   const table = assembled.address("SRTPSLT");
   memory[assembled.address("SRTPSLBN")] = 2;
-  memory[table] = 0x40;
+  const first = (assembled.image.end + 0xff) & 0xff00;
+  const second = first + 0x100;
+  assert.ok(second + 0x100 <= 0x8000, "slabs overlap root workspace");
+  memory[table] = first >>> 8;
   memory[table + 1] = 0;
   memory[table + 2] = 0xff;
-  memory[table + 3] = 0x41;
+  memory[table + 3] = second >>> 8;
   memory[table + 4] = 0;
   memory[table + 5] = 0xff;
-  const first = 0x4000;
-  const second = 0x4100;
   writeWord(memory, first, 0);
   writeWord(memory, first + 2, second);
   memory[first + 4] = 0xc9;
@@ -270,12 +271,13 @@ Deno.test("pair slabs return pages and reuse released descriptors", async () => 
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
-  cpu.h = 0x5e;
-  cpu.l = 0;
+  cpu.h = assembled.image.end >>> 8;
+  cpu.l = assembled.image.end & 255;
   assert.equal(callLabel(assembled, "SRTGPINI", memory, cpu).carry, 0);
   const before = memory[assembled.address("SRTPGFRE")] |
     memory[assembled.address("SRTPGFRE") + 1] << 8;
   assert.equal(callLabel(assembled, "SRTPIN", memory, cpu).carry, 0);
+  const firstPairPage = memory[assembled.address("SRTPSLT")] << 8;
   assert.equal(callLabel(assembled, "SRTGC", memory, cpu).carry, 0);
   const after = memory[assembled.address("SRTPGFRE")] |
     memory[assembled.address("SRTPGFRE") + 1] << 8;
@@ -283,7 +285,7 @@ Deno.test("pair slabs return pages and reuse released descriptors", async () => 
   assert.equal(memory[assembled.address("SRTPSLT")], 0);
   const reused = callLabel(assembled, "SRTFINDP", memory, cpu);
   assert.equal(reused.carry, 0);
-  assert.equal(reused.payload, 0x5f00);
+  assert.equal(reused.payload, firstPairPage);
   assert.equal(memory[assembled.address("SRTPSLBN")], 1);
 });
 

@@ -156,10 +156,9 @@ function runBareProgram(bytes, effects, vectors, inputBytes) {
     ]
   ) {
     const offset = vector - 0x100;
-    assert.ok(offset >= 0 && offset + 2 < bytes.length);
-    memory[vector] = 0xc3; // JP target: the vector is part of the image ABI.
-    memory[vector + 1] = target & 0xff;
-    memory[vector + 2] = target >>> 8;
+    assert.ok(offset >= 0 && offset + 1 < bytes.length);
+    memory[vector] = target & 0xff; // Provider cells hold a service address.
+    memory[vector + 1] = target >>> 8;
   }
   memory[outputTrap] = 0xc9;
   memory[inputTrap] = 0xc9;
@@ -172,10 +171,12 @@ function runBareProgram(bytes, effects, vectors, inputBytes) {
       "generated program exceeded the step budget",
     );
     if (runtime.cpu.pc === outputTrap) {
+      runtime.cpu.f &= 0xfe; // Carry clear acknowledges successful byte output.
       output.push(runtime.cpu.a);
       effects.client.sendText(String.fromCharCode(runtime.cpu.a));
     } else if (runtime.cpu.pc === inputTrap) {
       runtime.cpu.a = input.shift() ?? 0;
+      runtime.cpu.f &= 0xfe; // Carry clear acknowledges successful byte input.
     } else if (runtime.cpu.pc === 5) {
       throw new Error("generated program entered the CP/M BDOS vector");
     }
@@ -196,8 +197,8 @@ try {
 
   const effects = createTriptychEffectClient();
   const bareOutput = runBareProgram(generated, effects, {
-    output: providerImage.address("SRTOUTV"),
-    input: providerImage.address("SRTINV"),
+    output: providerImage.address("SRTIOPUT"),
+    input: providerImage.address("SRTIOGET"),
   }, ["Q".charCodeAt(0)]);
   assert.deepEqual(
     new TextEncoder().encode(cpmOutput),
@@ -221,7 +222,7 @@ try {
       generatedBytes: generated.length,
       trace: [...bareOutput],
       limitation:
-        "The image includes a CP/M default adapter; native/WASM hosts patch SRTOUTV and SRTINV to their byte gateway before running.",
+        "The image includes a CP/M default adapter; native/WASM hosts patch SRTIOPUT and SRTIOGET to their byte gateway before running.",
     },
     null,
     2,

@@ -13,7 +13,7 @@ const assembled = await assembleAtomProject({
   sink: undefined,
 });
 const image = materializeAtomGeneration(assembled.generation);
-if (!image) throw new Error("Skate runtime produced no image");
+if (!image) throw new Error("scope-control runtime produced no image");
 const payload = image.bytes.slice(0x0100);
 const symbols = new Map<string, number>(
   assembled.generation.symbols.map((symbol: {
@@ -25,7 +25,7 @@ const symbols = new Map<string, number>(
 function address(name: string): number {
   const value = symbols.get(name.toLowerCase());
   if (value === undefined) {
-    throw new Error(`Skate runtime has no ${name}`);
+    throw new Error(`scope-control runtime has no ${name}`);
   }
   return value;
 }
@@ -35,7 +35,7 @@ function offset(name: string): number {
 }
 
 const values = [
-  "; Runtime addresses used by the compiler.",
+  "; Runtime addresses used by the scope-control compiler.",
   `SRTLEN EQU ${payload.length}`,
   `SRTCLP EQU ${offset("SRTCALL") + 1}`,
   `SRTLDA EQU ${address("SRTLOAD")}`,
@@ -55,6 +55,7 @@ const values = [
   `SRTNROOT EQU ${address("SRTNROOT")}`,
   `SRTNPOPB EQU ${address("SRTNPOPB")}`,
   `SRTNPOP1 EQU ${address("SRTNPOP1")}`,
+  `SRTCECAL EQU ${address("SRTCECAL")}`,
   `SRTTAIL EQU ${address("SRTTAIL")}`,
   `SRTTCALL EQU ${address("SRTTCALL")}`,
   `SRTLOADI EQU ${address("SRTLOADI")}`,
@@ -68,6 +69,8 @@ const values = [
   `SRTGEND EQU ${offset("SRTGEND")}`,
   `SRTQROOT EQU ${offset("SRTQROOT")}`,
   `SRTQENDR EQU ${offset("SRTQENDR")}`,
+  `SRTSYMB EQU ${offset("SRTSYMB")}`,
+  `SRTSYME EQU ${offset("SRTSYME")}`,
   `SRTLOW EQU ${address("SRTLOWSP")}`,
   `SRTZERO EQU ${address("SRTZERO")}`,
   `SRTPRI EQU ${address("SRTPRINT")}`,
@@ -78,12 +81,9 @@ const values = [
   `SRTCDR EQU ${address("SRTCDR")}`,
   `SRTPAIRP EQU ${address("SRTPAIRP")}`,
   `SRTNULLP EQU ${address("SRTNULLP")}`,
-  `SRTOUTV EQU ${address("SRTOUTV")}`,
-  `SRTINV EQU ${address("SRTINV")}`,
-  `SRTCECAL EQU ${address("SRTCECAL")}`,
 ];
 const lines = [
-  "; Runtime image generated from src/runtime/image.asm.",
+  "; Runtime image generated from image.asm.",
   "SRTIMAGE:",
 ];
 for (let index = 0; index < payload.length; index += 32) {
@@ -107,4 +107,4 @@ await Deno.writeTextFile(
   ),
   lines.join("\n") + "\n",
 );
-console.log(`Scope runtime template: ${payload.length} bytes`);
+console.log(`Scope-control runtime template: ${payload.length} bytes`);

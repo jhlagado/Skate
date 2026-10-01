@@ -12,6 +12,7 @@ async function rootRuntime() {
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
+  assert.ok(assembled.image.end <= 0x5c00, "runtime overlaps fixture scratch");
   const pairBase = 0x8000;
   const heapBase = assembled.address("SRTHEAP");
   const descriptor = assembled.address("SRTPSLT");
@@ -223,6 +224,8 @@ Deno.test("an active environment traces its binding value", async () => {
   bindingStart(binding);
   bindingPages(0x62);
   writeWord(memory, map, binding);
+  memory[map + 2] = 0;
+  memory[map + 3] = 2;
   writeWord(memory, binding, pairBase);
   memory[binding + 2] = 0x29;
   writeWord(memory, assembled.address("SRTENV"), map);
@@ -256,6 +259,10 @@ Deno.test("suspended environments remain roots through their frame maps", async 
   bindingPages(0x62);
   writeWord(memory, currentMap, currentBinding);
   writeWord(memory, callerMap, callerBinding);
+  memory[currentMap + 2] = 0;
+  memory[currentMap + 3] = 2;
+  memory[callerMap + 2] = 0;
+  memory[callerMap + 3] = 2;
   writeWord(memory, currentBinding, pairBase);
   writeWord(memory, callerBinding, pairBase + 5);
   memory[currentBinding + 2] = 0x29;
@@ -314,7 +321,8 @@ Deno.test("closure roots drain a full worklist without reporting an error", asyn
   const { assembled, memory, heapBase, call } = fixture;
   const descriptor = 0xc100;
   const closureBase = 0x7000;
-  const roots = 0x5000;
+  const roots = 0x8200;
+  assert.ok(roots + 513 * 4 <= assembled.address("SRTLOEND"));
   const count = 513;
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 2] = 0;
@@ -361,7 +369,8 @@ Deno.test("closure overflow fallback stays within the native stack", async () =>
   const chainBase = 0x7000;
   const emptyBase = 0x7800;
   const bindingBase = 0x6000;
-  const roots = 0x5000;
+  const roots = 0x8200;
+  assert.ok(roots + 513 * 4 <= assembled.address("SRTLOEND"));
   const chainCount = 160;
   const emptyCount = 511;
   writeWord(memory, branchDescriptor, 0x4000);

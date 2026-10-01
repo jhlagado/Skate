@@ -41,14 +41,10 @@ SCMNO:
         OR A                       ; Set the mismatch flags without carry.
         RET                        ; The caller tries another static spelling.
 
-; Convert a staged image pointer in HL to its absolute address in the COM.
+; Generated cursors are already logical COM addresses.  Keep this helper for
+; the callers that still express the conversion explicitly.
 SCABS:
-        LD DE,SCIMG                ; The first staged payload byte executes at $0100.
-        OR A                       ; Clear carry before the pointer subtraction.
-        SBC HL,DE                  ; Compute the output-image offset.
-        LD DE,0100H               ; Add the CP/M program load origin.
-        ADD HL,DE                  ; HL now holds the executable absolute address.
-        RET                        ; Return with the converted target address.
+        RET                        ; HL already holds the logical COM address.
 
 ; Save one short-circuit branch patch address in the generic branch stack.
 SCBRPUSH:
@@ -88,7 +84,7 @@ SCBRPAT:
         LD D,(HL)                 ; DE now identifies the staged patch word.
         EX DE,HL                  ; HL=patch address, DE=temporary old value.
         LD DE,(SCBTARG)            ; Restore the requested absolute target.
-        JP SCPATCH                 ; Write both target bytes and return.
+        JP SINKPTCH                ; Write both target bytes and return.
 
 ; Save an if false-branch patch address at the current if depth.
 SCIFPUSH:
@@ -149,7 +145,7 @@ SCIFPATE:
         LD D,(HL)                 ; DE now identifies the staged patch word.
         EX DE,HL                  ; HL=patch, DE=temporary old value.
         LD DE,(SCBTARG)            ; Restore the requested absolute target.
-        JP SCPATCH                 ; Write both target bytes and return.
+        JP SINKPTCH                ; Write both target bytes and return.
 
 ; False and end if records use the same table arithmetic.
 SCIFPAT:
@@ -168,7 +164,7 @@ SCIFPAT:
         LD D,(HL)                 ; DE now identifies the staged patch word.
         EX DE,HL                  ; HL=patch, DE=temporary old value.
         LD DE,(SCBTARG)            ; Restore the requested absolute target.
-        JP SCPATCH                 ; Write both target bytes and return.
+        JP SINKPTCH                ; Write both target bytes and return.
 
 ; Release the current if patch record after both branch targets are fixed.
 SCIFPOP:

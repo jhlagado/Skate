@@ -70,6 +70,20 @@ Deno.test("bounded files support short reads, sync and replacement", () => {
   client.close(writer);
 });
 
+Deno.test("abort discards a staged writable file through the wire service", () => {
+  const backend = new MemoryFileBackend({
+    files: { "SAVE.DAT": text("old") },
+  });
+  const client = filesClient(backend);
+  const writer = client.open("SAVE.DAT", "write");
+  client.write(writer, text("new"));
+  client.abort(writer);
+
+  const reader = client.open("SAVE.DAT", "read");
+  assert.deepEqual(client.read(reader, 20), text("old"));
+  client.close(reader);
+});
+
 Deno.test("file paths preserve BOMs and reject invalid UTF-8", () => {
   const backend = new CountingMemoryFileBackend({
     files: {

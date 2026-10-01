@@ -35,13 +35,13 @@ the compiler's representation of a source name. A slot is the storage selected
 for that name's value. Keeping those two things separate explains much of the
 binding code.
 
-The relevant files are [bindings.asm](../../src/compiler/scope/bindings.asm),
+The relevant files are [bindings/forms.asm](../../src/compiler/scope/bindings/forms.asm),
 [emitter.asm](../../src/compiler/scope/emitter.asm) and
-[core.asm](../../src/runtime/core.asm). The excerpts below cover the relevant paths through these files.
+[core/startup.asm](../../src/runtime/core/startup.asm). The excerpts below cover the relevant paths through these files.
 
 ## Reserving a place for `base`
 
-In `bindings.asm`, `SCLETF` begins compilation of an ordinary `let`. It calls
+In `bindings/forms.asm`, `SCLETF` begins compilation of an ordinary `let`. It calls
 `SCLETSET` to save the enclosing scope state and open the binding list. The
 loop at `SCLETB` checks that each binding has the required list structure.
 After reading a name, it reaches this sequence:
@@ -149,7 +149,7 @@ slot + 2    value tag
 slot + 3    flags, including bit 0 for initialisation
 ```
 
-In `core.asm`, `SRTSTORE` writes the payload and tag before setting the
+In `core/startup.asm`, `SRTSTORE` writes the payload and tag before setting the
 initialisation bit. Its final flag update is:
 
 ```asm
@@ -226,7 +226,7 @@ projects described in the main guide available:
 
 ```sh
 deno run --config deno.runtime.json \
-  --allow-read=.,../atom,../debug80-runtime,../z80-tool-services,../triptych \
+  --allow-read=.,../atom,../z80-tool-services,../triptych \
   --allow-write=build tools/compiler-checks/scope-cpm-proof.mjs
 ```
 

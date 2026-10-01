@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadAssembly } from "../../tests/z80.ts";
+import { validateAso } from "./aso-proof.mjs";
 import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 import {
   createBlankCpm22Disk,
@@ -42,64 +43,6 @@ function makeSystemDisk(firmware) {
   const disk = new Uint8Array(Math.ceil(system.length / 512) * 512);
   disk.set(system);
   return disk;
-}
-
-function committedObject(bytes, name) {
-  let cursor = 0;
-  while (cursor + 3 <= bytes.length) {
-    const kind = bytes[cursor];
-    const length = bytes[cursor + 1] | bytes[cursor + 2] << 8;
-    const end = cursor + 3 + length;
-    if (end > bytes.length) break;
-    if (kind === 12) {
-      for (const padding of bytes.slice(end)) {
-        assert.ok(
-          padding === 0 || padding === 0x1a,
-          `${name}: non-padding after COMMIT`,
-        );
-      }
-      return bytes.slice(0, end);
-    }
-    cursor = end;
-  }
-  throw new Error(`${name}: missing NOBJ COMMIT`);
-}
-
-function validateObject(object, com, name) {
-  assert.deepEqual(
-    [...object.slice(3, 7)],
-    [0x4e, 0x4f, 0x42, 0x4a],
-    `${name}: wrong NOBJ signature`,
-  );
-  let cursor = 70;
-  let image = null;
-  const kinds = [];
-  while (cursor + 3 <= object.length) {
-    const kind = object[cursor];
-    const length = object[cursor + 1] | object[cursor + 2] << 8;
-    const end = cursor + 3 + length;
-    assert.ok(end <= object.length, `${name}: truncated NOBJ record`);
-    kinds.push(kind);
-    if (kind === 6) image = object.slice(cursor + 9, end);
-    cursor = end;
-    if (kind === 12) break;
-  }
-  assert.ok(kinds.includes(6), `${name}: missing IMAGE record`);
-  assert.ok(kinds.includes(8), `${name}: missing symbol record`);
-  assert.ok(kinds.includes(11), `${name}: missing relocation record`);
-  assert.equal(kinds.at(-1), 12, `${name}: missing COMMIT record`);
-  assert.ok(image, `${name}: missing image payload`);
-  assert.deepEqual(
-    [...image],
-    [...com.slice(0, image.length)],
-    `${name}: NOBJ image differs from COM`,
-  );
-  for (const padding of com.slice(image.length)) {
-    assert.ok(
-      padding === 0 || padding === 0x1a,
-      `${name}: non-padding after COM image`,
-    );
-  }
 }
 
 function directoryFiles(image) {
@@ -232,11 +175,8 @@ try {
     );
     const saved = machine.export_drive(0);
     const com = readCpm22File(saved, name + ".COM");
-    validateObject(
-      committedObject(readCpm22File(saved, name + ".NOB"), name),
-      com,
-      name,
-    );
+    const aso = readCpm22File(saved, name + ".ASO");
+    validateAso(aso, com, name);
     records.push({
       name,
       bytes: com.length,
@@ -244,9 +184,9 @@ try {
     });
     // Keep runnable examples and source; intermediate objects can be rebuilt.
     terminal.command(
-      "ERA " + name + ".NOB",
+      "ERA " + name + ".ASO",
       "A>",
-      "remove intermediate " + name,
+      "remove ASO intermediate " + name,
     );
   }
   disk = machine.export_drive(0);

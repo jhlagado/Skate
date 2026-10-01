@@ -1,4 +1,4 @@
-; Managed closure and binding storage for the Skate runtime.
+; Managed closure and binding storage for the scope-control runtime.
 ;
 ; Compiler-owned static records remain four bytes.  Dynamic environment cells
 ; use three bytes: two payload bytes followed by packed tag, state and mark
@@ -77,6 +77,13 @@ SRTBSET:
 ; environment supplies the shared cell pointers for a nested lambda.
 SRTMAKE:
         LD (SRTNEWD),HL           ; Retain the immutable procedure descriptor.
+        LD HL,(SRTENV)             ; Captured inline values must be promoted before allocation.
+        LD A,H
+        OR L
+        JR Z,SRTMKTOP              ; A top-level closure has no active parent map.
+        CALL SRTPRALL              ; Promotion keeps every captured value GC-visible.
+SRTMKTOP:
+        LD HL,(SRTNEWD)
         LD DE,3                   ; Descriptor byte three stores the slot count.
         ADD HL,DE                 ; Read the fixed environment extent.
         LD A,(HL)                 ; Every closure receives that bounded slot area.
@@ -92,11 +99,15 @@ SRTMAKE:
         CALL SRTCLALC
         JP C,SRTERROR             ; No class block remains after one collection.
 SRTMKOK:
+        LD DE,(SRTCCNT)            ; Count this successful closure allocation.
+        INC DE
+        LD (SRTCCNT),DE
         LD (SRTOBJ),HL            ; Return this pointer after copying the frame.
         LD (SRTCELLP),HL          ; Clear the entire rounded block before publishing.
         LD BC,(SRTCLSZ)
         XOR A
 SRTMKCLR:
+        XOR A
         LD HL,(SRTCELLP)
         LD (HL),A
         INC HL
@@ -119,11 +130,7 @@ SRTMKCLR:
         LD A,H
         OR L
         JR Z,SRTMAKE0              ; Top-level closures receive cleared slots.
-        LD BC,(SRTBYTES)           ; Copy complete logical slots, including tags.
-        LD A,B                     ; A nullary closure has no map to copy.
-        OR C
-        JR Z,SRTMAKEM              ; Skip LDIR when its count is zero.
-        LDIR                       ; Source and destination are nonoverlapping.
+        CALL SRTCLSC               ; Copy only promoted captured pointers.
 SRTMAKEM:
         CALL SRTMARKC              ; Captured cells must survive later tail calls.
         JR SRTMAKER                ; Return the object pointer and procedure tag.
@@ -229,6 +236,9 @@ SRTCELL:
         CALL SRTBALC
         JP C,SRTERROR
 SRTCELOK:
+        LD DE,(SRTBCNT)            ; Count this successful binding allocation.
+        INC DE
+        LD (SRTBCNT),DE
         LD (SRTCELLP),HL
         CALL SRTBNEW                 ; Publish the exact binding start before stores.
         XOR A

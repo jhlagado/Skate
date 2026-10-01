@@ -142,6 +142,9 @@ export class FileEffectProvider implements EffectProvider {
       case "sync":
         this.backend.sync(operation.handle);
         return new Uint8Array(0);
+      case "abort":
+        this.backend.abort(operation.handle);
+        return new Uint8Array(0);
       case "status":
         return encodeStatus(this.backend.status(operation.handle));
     }
@@ -184,6 +187,7 @@ type FileOperation =
   }
   | { readonly type: "close"; readonly handle: number }
   | { readonly type: "sync"; readonly handle: number }
+  | { readonly type: "abort"; readonly handle: number }
   | { readonly type: "status"; readonly handle: number };
 
 function decodeFileOperation(
@@ -259,6 +263,7 @@ function decodeFileOperation(
   if (opcode === 4) return { type: "close", handle };
   if (opcode === 5) return { type: "status", handle };
   if (opcode === 6) return { type: "sync", handle };
+  if (opcode === 7) return { type: "abort", handle };
   throw new EffectProtocolError(
     "unsupported",
     `File operation ${opcode} is unsupported`,
@@ -356,6 +361,10 @@ export class EffectFileClient {
 
   sync(handle: number): void {
     this.expectEmpty(this.command(handlePayload(6, handle)));
+  }
+
+  abort(handle: number): void {
+    this.expectEmpty(this.command(handlePayload(7, handle)));
   }
 
   status(handle: number): FileHandleStatus {

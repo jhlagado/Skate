@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadAssembly } from "../../tests/z80.ts";
+import { validateAso } from "./aso-proof.mjs";
 import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 import {
   installCpm22File,
@@ -51,66 +52,9 @@ function makeSystemDisk(firmware, sourceDisk) {
   system.set(firmware.bios, 0x1600);
   const disk = new Uint8Array(Math.ceil(system.length / 512) * 512);
   disk.set(system);
+  // Qualification installs its own files; bundled examples consume spool space.
+  disk.fill(0xe5, 52 * 128, 52 * 128 + 64 * 32);
   return disk;
-}
-
-function committedObject(bytes, name) {
-  let cursor = 0;
-  while (cursor + 3 <= bytes.length) {
-    const kind = bytes[cursor];
-    const length = bytes[cursor + 1] | bytes[cursor + 2] << 8;
-    const end = cursor + 3 + length;
-    if (end > bytes.length) break;
-    if (kind === 12) {
-      for (const padding of bytes.slice(end)) {
-        assert.ok(
-          padding === 0 || padding === 0x1a,
-          `${name}: non-padding after COMMIT`,
-        );
-      }
-      return bytes.slice(0, end);
-    }
-    cursor = end;
-  }
-  throw new Error(`${name}: missing NOBJ COMMIT`);
-}
-
-function validateObject(object, com, name) {
-  assert.deepEqual(
-    [...object.slice(3, 7)],
-    [0x4e, 0x4f, 0x42, 0x4a],
-    `${name}: wrong NOBJ signature`,
-  );
-  let cursor = 70;
-  let image = null;
-  const kinds = [];
-  while (cursor + 3 <= object.length) {
-    const kind = object[cursor];
-    const length = object[cursor + 1] | object[cursor + 2] << 8;
-    const end = cursor + 3 + length;
-    assert.ok(end <= object.length, `${name}: truncated NOBJ record`);
-    kinds.push(kind);
-    if (kind === 6) image = object.slice(cursor + 9, end);
-    cursor = end;
-    if (kind === 12) break;
-  }
-  assert.ok(kinds.includes(6), `${name}: missing IMAGE record`);
-  assert.ok(kinds.includes(8), `${name}: missing symbol record`);
-  assert.ok(kinds.includes(11), `${name}: missing relocation record`);
-  assert.equal(kinds.at(-1), 12, `${name}: missing COMMIT record`);
-  assert.ok(image, `${name}: missing image payload`);
-  assert.deepEqual(
-    [...image],
-    [...com.slice(0, image.length)],
-    `${name}: NOBJ image differs from COM`,
-  );
-  for (const padding of com.slice(image.length)) {
-    assert.ok(
-      padding === 0 || padding === 0x1a,
-      `${name}: non-padding after COM image`,
-    );
-  }
-  return { imageBytes: image.length, objectBytes: object.length };
 }
 
 function directoryFiles(image) {
@@ -364,9 +308,8 @@ try {
   );
   stableImage = machine.export_drive(0);
   const com = readCpm22File(stableImage, "RELEASE.COM");
-  const objectPhysical = readCpm22File(stableImage, "RELEASE.NOB");
-  const object = committedObject(objectPhysical, "RELEASE.NOB");
-  const objectLengths = validateObject(object, com, "RELEASE.NOB");
+  const aso = readCpm22File(stableImage, "RELEASE.ASO");
+  const asoLengths = validateAso(aso, com, "RELEASE");
   assert.equal(com[0], 0x31, "generated program did not set its private stack");
   const run = first.command("RELEASE", "95\r\n", "run the release program");
   const lowSp = readWord(machine, lowStackAddress);
@@ -377,15 +320,14 @@ try {
   records.initial = {
     sourceBytes: sourceTotal,
     comBytes: com.length,
-    comImageBytes: objectLengths.imageBytes,
-    nobjBytes: objectPhysical.length,
-    nobjCommittedBytes: objectLengths.objectBytes,
+    comImageBytes: asoLengths.imageBytes,
+    asoBytes: asoLengths.asoBytes,
     compile,
     run,
     lowSp,
     heapEnd,
     comSha256: sha256(com),
-    nobjSha256: sha256(object),
+    asoSha256: sha256(aso),
   };
 
   machine.free();
@@ -399,7 +341,7 @@ try {
   );
 
   const stableCom = readCpm22File(stableImage, "RELEASE.COM");
-  const stableObject = readCpm22File(stableImage, "RELEASE.NOB");
+  const stableAso = readCpm22File(stableImage, "RELEASE.ASO");
   const fullDisk = installCpm22File(stableImage, {
     name: "FULL.BIN",
     bytes: new Uint8Array(diskStats(stableImage).freeBlocks * 1024).fill(0x1a),
@@ -421,14 +363,19 @@ try {
       "full-disk failure damaged the previous COM",
     );
     assert.deepEqual(
-      [...readCpm22File(afterFull, "RELEASE.NOB")],
-      [...stableObject],
-      "full-disk failure damaged the previous NOBJ",
+      [...readCpm22File(afterFull, "RELEASE.ASO")],
+      [...stableAso],
+      "full-disk failure damaged the previous ASO",
     );
   } finally {
     fullMachine.free();
   }
 
+  assert.ok(
+    diskStats(stableImage).freeBlocks >=
+      Math.ceil(stableCom.length / 1024) + Math.ceil(stableAso.length / 1024),
+    "syntax-error fixture needs space for a replacement COM and ASO",
+  );
   const failedPart = installCpm22File(stableImage, {
     name: "PART08.SK8",
     bytes: encoder.encode("(let ((value 1 2)) value)\x1a"),
@@ -455,9 +402,9 @@ try {
     "compile failure damaged the previous COM",
   );
   assert.deepEqual(
-    [...readCpm22File(afterCompileFailure, "RELEASE.NOB")],
-    [...stableObject],
-    "compile failure damaged the previous NOBJ",
+    [...readCpm22File(afterCompileFailure, "RELEASE.ASO")],
+    [...stableAso],
+    "compile failure damaged the previous ASO",
   );
 
   const reopenedImage = machine.export_drive(0);
@@ -526,8 +473,7 @@ console.log(JSON.stringify(
     sourceBytes: sourceTotal,
     outputBytes: records.initial.comBytes,
     outputImageBytes: records.initial.comImageBytes,
-    objectBytes: records.initial.nobjBytes,
-    objectCommittedBytes: records.initial.nobjCommittedBytes,
+    asoBytes: records.initial.asoBytes,
     disk: diskStats(stableImage),
     ...(imagePath
       ? {

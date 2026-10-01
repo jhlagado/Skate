@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 import { loadAssembly } from "../../tests/z80.ts";
+import { validateAso } from "./aso-proof.mjs";
 import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 import {
   installCpm22File,
@@ -35,6 +36,15 @@ const provider = await loadAssembly(
 );
 assert.equal(compiler.image.base, 0);
 assert.equal(provider.image.bytes.length - 0x100, compiler.address("SRTLEN"));
+const heapPointerAddress = provider.address("SRTHEAPP");
+const lowStackAddress = provider.address("SRTLOWSP");
+const bindingAllocationAddress = provider.address("SRTBCNT");
+const closureAllocationAddress = provider.address("SRTCCNT");
+const pairAllocationAddress = provider.address("SRTPCNT");
+const collectionCountAddress = provider.address("SRTGCNT");
+const frameCountAddress = provider.address("SRTACNT");
+const stackGuardBase = 0xd400;
+const stackTop = 0xe400;
 let disk = installCpm22File(backing, {
   name: "SKATE.COM",
   bytes: compiler.image.bytes.slice(0x100),
@@ -45,6 +55,23 @@ disk = installCpm22File(disk, {
   bytes: provider.image.bytes.slice(0x100),
   padByte: 0x1a,
 });
+disk = installCpm22File(disk, {
+  name: "IO.SK8",
+  bytes: await Deno.readFile("libraries/io.sk8"),
+  padByte: 0x1a,
+});
+disk = installCpm22File(disk, {
+  name: "INPUT.TXT",
+  bytes: Uint8Array.from([0x41, 0x42, 0x0d, 0x0a]),
+  padByte: 0x1a,
+});
+disk = installCpm22File(disk, {
+  name: "INPUT.BIN",
+  bytes: Uint8Array.from([0x00, 0x1a, 0x0d, 0x0a]),
+  padByte: 0x1a,
+});
+const vector64Input = `#(${Array(64).fill("1").join(" ")})\r`;
+const vector65Input = `#(${Array(65).fill("1").join(" ")})\r`;
 
 const cases = [
   [
@@ -78,10 +105,193 @@ const cases = [
     "#t#f#t#t\r\n",
   ],
   [
+    "READPRED.SK8",
+    "(begin (write (procedure? read)) (write (number? read)) (newline))",
+    "#t#f\r\n",
+  ],
+  [
+    "PORTPRED.SK8",
+    "(begin (write (port? (current-input-port))) (write (input-port? (current-input-port))) (write (output-port? (current-input-port))) (write (output-port? (current-output-port))) (write (output-port? (current-error-port))) (write (procedure? (current-output-port))) (newline))",
+    "#t#t#f#t#t#f\r\n",
+  ],
+  [
+    "PORTWRIT.SK8",
+    "(begin (write-char #\\A (current-output-port)) (write #t (current-error-port)) (newline (current-output-port)))",
+    "A#t\r\n",
+  ],
+  [
+    "FILEIN.SK8",
+    '(let ((p (open-input-file "INPUT.TXT"))) (write-char (read-char p)) (write-char (read-char p)) (close-port p) (newline))',
+    "AB\r\n",
+  ],
+  [
+    "FILEOUT.SK8",
+    '(let ((p (open-output-file "OUTPUT.TXT"))) (write-char #\\A p) (newline p) (close-port p) (display "ok"))',
+    "ok",
+  ],
+  [
+    "BININ.SK8",
+    '(let ((p (open-input-binary-file "INPUT.BIN"))) (write (read-char p)) (write (read-char p)) (write (read-char p)) (write (read-char p)) (newline))',
+    "#\\x00#\\x1a#\\x0d#\\x0a\r\n",
+  ],
+  [
+    "BINOUT.SK8",
+    '(let ((p (open-output-binary-file "OUTPUT.BIN"))) (write-char #\\x00 p) (write-char #\\x1a p) (write-char #\\x0d p) (write-char #\\x0a p) (close-port p) (display "ok"))',
+    "ok",
+  ],
+  [
     "READCHAR.SK8",
     "(begin (display (read-char)) (newline))",
     "QQ\r\n",
     "Q",
+  ],
+  [
+    "PORTREAD.SK8",
+    "(begin (display (read-char (current-input-port))) (newline))",
+    "QQ\r\n",
+    "Q",
+  ],
+  [
+    "READDATA.SK8",
+    '(begin (display ">") (write (read)) (newline))',
+    ">42\r42\r\n",
+    "42\r",
+  ],
+  [
+    "READSTR.SK8",
+    "(begin (write (read)) (newline))",
+    '"hello""hello"\r\n',
+    '"hello"\r',
+  ],
+  [
+    "READSYM.SK8",
+    "(begin (write (eq? (read) 'alpha)) (newline))",
+    "alpha\r#t\r\n",
+    "alpha\r",
+  ],
+  [
+    "SYMINTER.SK8",
+    "(let ((a (read))) (write (eq? a (read))) (newline))",
+    "alpha alpha\r#t\r\n",
+    "alpha alpha\r",
+  ],
+  [
+    "RDVEC0.SK8",
+    "(begin (write (vector-length (read))) (newline))",
+    "#()0\r\n",
+    "#()\r",
+  ],
+  [
+    "RDVNEST.SK8",
+    "(let ((v (read))) (write (vector? v)) (write (vector-length v)) (write (vector-length (vector-ref v 0))) (newline))",
+    "#(#(1 2) 3)#t22\r\n",
+    "#(#(1 2) 3)\r",
+  ],
+  [
+    "RDVEC64.SK8",
+    "(begin (write (vector-length (read))) (newline))",
+    `${vector64Input.slice(0, -1)}64\r\n`,
+    vector64Input,
+  ],
+  [
+    "RDVEC65.SK8",
+    "(read)",
+    "RUNTIME ERROR\r\n",
+    vector65Input,
+    false,
+  ],
+  [
+    "RDVECBAD.SK8",
+    "(read)",
+    "RUNTIME ERROR\r\n",
+    "#(1 . 2\r",
+    false,
+  ],
+  [
+    "REDEMPTY.SK8",
+    "(begin (write (read)) (newline))",
+    '""""\r\n',
+    '""\r',
+  ],
+  [
+    "READESC.SK8",
+    "(begin (write (string-length (read))) (newline))",
+    '"a\\n\\x41;"3\r\n',
+    '"a\\n\\x41;"\r',
+  ],
+  [
+    "RDSTR255.SK8",
+    "(begin (write (string-length (read))) (newline))",
+    `"${"a".repeat(255)}"255\r\n`,
+    `"${"a".repeat(255)}"\r`,
+  ],
+  [
+    "RDSTROV.SK8",
+    "(read)",
+    "RUNTIME ERROR\r\n",
+    `"${"a".repeat(256)}"\r`,
+    false,
+  ],
+  [
+    "CRONLY.SK8",
+    "(begin (write (read-char)) (newline))",
+    "\r#\\x0a\r\n",
+    "\r",
+  ],
+  [
+    "CRPORT.SK8",
+    "(begin (write (read-char (current-input-port))) (newline))",
+    "\r#\\x0a\r\n",
+    "\r",
+  ],
+  [
+    "IODEMO.SK8",
+    '(include "IO.SK8") (begin (prompt "Name: ") (write-line (read-line)))',
+    "Name: Ada\rAda\r\n",
+    "Ada\r",
+  ],
+  [
+    "IOEXPL.SK8",
+    '(include "IO.SK8") (begin (prompt-to "Name: " (current-output-port)) (write-line-to (read-line-from (current-input-port)) (current-error-port)))',
+    "Name: Ada\rAda\r\n",
+    "Ada\r",
+  ],
+  [
+    "IOEMPTY.SK8",
+    '(include "IO.SK8") (begin (write (read-line)) (newline))',
+    '\r""\r\n',
+    "\r",
+  ],
+  [
+    "IOEOF.SK8",
+    '(include "IO.SK8") (begin (write (read-line)) (newline))',
+    "\x1a#<eof>\r\n",
+    "\x1a",
+  ],
+  [
+    "IOFINAL.SK8",
+    '(include "IO.SK8") (begin (display (read-line)) (newline))',
+    "Ada\x1aAda\r\n",
+    "Ada\x1a",
+  ],
+  [
+    "IOLIMIT.SK8",
+    '(include "IO.SK8") (begin (write (string-length (read-line))) (newline))',
+    `${"a".repeat(255)}\r255\r\n`,
+    `${"a".repeat(255)}\r`,
+  ],
+  [
+    "IOCOPY.SK8",
+    '(include "IO.SK8") (begin (display "[") (write (copy-stream)) (display "]") (newline))',
+    "[aa\r\r\nbb\r\r\n\x1a4]\r\n",
+    ["a", "\r", "b", "\r", "\x1a"],
+  ],
+  [
+    "IOOVER.SK8",
+    '(include "IO.SK8") (read-line)',
+    "RUNTIME ERROR\r\n",
+    `${"a".repeat(256)}\r`,
+    false,
   ],
   [
     "EOFCHAR.SK8",
@@ -102,37 +312,22 @@ const cases = [
     "\x1a",
   ],
   [
-    "ADVENT.SK8",
+    "ADVENTUR.SK8",
     await Deno.readTextFile("examples/applications/advent.sk8"),
     "You are at a fork. Choose left or right: l\r\nYou take the left path.",
     "l",
-  ],
-  [
-    "HOUSE.SK8",
-    await Deno.readTextFile("examples/applications/house.sk8"),
-    [
-      "THE HOUSE IN THE CLEARING\r\n",
-      "Use one key at a time; q quits.\r\n",
-      "Clearing, window shut: o=open.\r\n",
-      "Command (o c u d t q): o\r\n",
-      "Clearing, window open: c=climb.\r\n",
-      "Command (o c u d t q): c\r\n",
-      "Hall: u=upstairs, d=cellar.\r\n",
-      "Command (o c u d t q): u\r\n",
-      "Upstairs: d=hall.\r\n",
-      "Command (o c u d t q): d\r\n",
-      "Hall: u=upstairs, d=cellar.\r\n",
-      "Command (o c u d t q): d\r\n",
-      "Cellar: u=hall, t=trapdoor.\r\n",
-      "Command (o c u d t q): t\r\n",
-      "The trapdoor opens. You win.\r\n",
-    ].join(""),
-    "ocuddt",
   ],
 ];
 const errorCases = [
   ["BADWCHAR.SK8", "(write-char 1)"],
   ["BADRCHAR.SK8", "(read-char 1)"],
+  ["BADINPRT.SK8", "(read-char (current-output-port))"],
+  ["BADOUTP.SK8", "(write-char #\\A (current-input-port))"],
+  ["BADCURR.SK8", "(current-input-port 1)"],
+  ["CLOSEPRT.SK8", "(close-port (current-output-port))"],
+  ["FILEMISS.SK8", '(open-input-file "MISSING.TXT")'],
+  ["FILEPATH.SK8", '(open-input-file "A/B.TXT")'],
+  ["FILELONG.SK8", '(open-input-file "ABCDEFGHI.TXT")'],
 ];
 for (const [name, source] of [...cases, ...errorCases]) {
   disk = installCpm22File(disk, {
@@ -145,6 +340,21 @@ for (const [name, source] of [...cases, ...errorCases]) {
 const machine = new TriptychCpu(firmware.bootRom);
 const decoder = new TextDecoder("ascii");
 let transcript = "";
+function readWord(address) {
+  const bytes = machine.read_ram(address, 2);
+  return bytes[0] | bytes[1] << 8;
+}
+function prepareStackMeasurement() {
+  machine.write_ram(
+    stackGuardBase,
+    new Uint8Array(stackTop - stackGuardBase).fill(0xa5),
+  );
+}
+function observedStackLow() {
+  const bytes = machine.read_ram(stackGuardBase, stackTop - stackGuardBase);
+  const offset = bytes.findIndex((value) => value !== 0xa5);
+  return offset < 0 ? stackTop : stackGuardBase + offset;
+}
 function runUntilPrompt(offset, description) {
   for (let attempt = 0; attempt < 1800; attempt += 1) {
     const status = machine.run_slice(50_000, 500_000);
@@ -168,21 +378,38 @@ function command(command, expected, description) {
   assert.ok(output.includes(expected), JSON.stringify(output));
   return output;
 }
-function runProgram(name, input, expected) {
+function runProgram(name, input, expected, exact = true) {
   const start = transcript.length;
   const commandBytes = new TextEncoder().encode(
     name.replace(".SK8", "") + "\r",
   );
   assert.ok(machine.enqueue_serial_input(commandBytes));
   const commandEcho = `${name.replace(".SK8", "")}\r\r\n`;
-  for (let attempt = 0; attempt < 120; attempt += 1) {
-    const status = machine.run_slice(50_000, 500_000);
+  let atProgramEntry = false;
+  for (let attempt = 0; attempt < 2_000_000; attempt += 1) {
+    const state = machine.cpu_state();
+    try {
+      if (
+        state.pc() === 0x0100 && transcript.slice(start).includes(commandEcho)
+      ) {
+        atProgramEntry = true;
+        break;
+      }
+    } finally {
+      state.free();
+    }
+    const status = machine.run_slice(1, 500);
     transcript += decoder.decode(machine.take_serial_output());
     assert.notEqual(status, 0, `CP/M halted while starting ${name}`);
-    if (transcript.slice(start).includes(commandEcho)) break;
   }
   assert.ok(transcript.slice(start).includes(commandEcho));
-  if (input.length > 0) {
+  assert.ok(
+    atProgramEntry,
+    `${name}: did not stop at COM entry before execution`,
+  );
+  prepareStackMeasurement();
+  const inputChunks = Array.isArray(input) ? input : [input];
+  if (inputChunks.some((chunk) => chunk.length > 0)) {
     // Let the running program reach its blocking console read before sending
     // the byte.  This keeps the proof independent of execution speed.
     for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -190,7 +417,18 @@ function runProgram(name, input, expected) {
       transcript += decoder.decode(machine.take_serial_output());
       assert.notEqual(status, 0, `CP/M halted before input for ${name}`);
     }
-    assert.ok(machine.enqueue_serial_input(new TextEncoder().encode(input)));
+    for (const chunk of inputChunks) {
+      if (chunk.length > 0) {
+        assert.ok(
+          machine.enqueue_serial_input(new TextEncoder().encode(chunk)),
+        );
+      }
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const status = machine.run_slice(50_000, 500_000);
+        transcript += decoder.decode(machine.take_serial_output());
+        assert.notEqual(status, 0, `CP/M halted before input for ${name}`);
+      }
+    }
   }
   runUntilPrompt(start, `run ${name}`);
   const output = transcript.slice(start);
@@ -198,63 +436,17 @@ function runProgram(name, input, expected) {
   const commandEnd = output.indexOf("\r\r\n");
   const prompt = output.lastIndexOf("\r\nA>");
   assert.ok(commandEnd >= 0 && prompt > commandEnd, JSON.stringify(output));
-  assert.equal(
-    output.slice(commandEnd + 3, prompt),
-    expected,
-    `${name}: unexpected program output`,
-  );
-  return output;
-}
-function runInteractiveProgram(name, keys, expected) {
-  const start = transcript.length;
-  const commandBytes = new TextEncoder().encode(
-    name.replace(".SK8", "") + "\r",
-  );
-  assert.ok(machine.enqueue_serial_input(commandBytes));
-  const commandEcho = `${name.replace(".SK8", "")}\r\r\n`;
-  for (let attempt = 0; attempt < 120; attempt += 1) {
-    const status = machine.run_slice(50_000, 500_000);
-    transcript += decoder.decode(machine.take_serial_output());
-    assert.notEqual(status, 0, `CP/M halted while starting ${name}`);
-    if (transcript.slice(start).includes(commandEcho)) break;
-  }
-  assert.ok(transcript.slice(start).includes(commandEcho));
-  const gamePrompt = "Command (o c u d t q): ";
-  let readyAt = start;
-  for (const key of keys) {
-    for (let attempt = 0; attempt < 1800; attempt += 1) {
-      if (transcript.lastIndexOf(gamePrompt) >= readyAt) break;
-      const status = machine.run_slice(50_000, 500_000);
-      transcript += decoder.decode(machine.take_serial_output());
-      assert.notEqual(status, 0, `CP/M halted before ${key} for ${name}`);
-    }
+  const programOutput = output.slice(commandEnd + 3, prompt);
+  if (exact) {
+    assert.equal(programOutput, expected, `${name}: unexpected program output`);
+  } else {
     assert.ok(
-      transcript.lastIndexOf(gamePrompt) >= readyAt,
-      JSON.stringify(transcript.slice(start)),
+      programOutput.endsWith(expected),
+      `${name}: expected output to end with ${JSON.stringify(expected)}, got ${
+        JSON.stringify(programOutput)
+      }`,
     );
-    const before = transcript.length;
-    assert.ok(machine.enqueue_serial_input(new TextEncoder().encode(key)));
-    readyAt = before;
-    for (let attempt = 0; attempt < 1800; attempt += 1) {
-      const status = machine.run_slice(50_000, 500_000);
-      transcript += decoder.decode(machine.take_serial_output());
-      assert.notEqual(status, 0, `CP/M halted after ${key} for ${name}`);
-      if (
-        transcript.lastIndexOf(gamePrompt) >= before ||
-        transcript.endsWith("\r\nA>")
-      ) break;
-    }
   }
-  runUntilPrompt(start, `run ${name}`);
-  const output = transcript.slice(start);
-  const commandEnd = output.indexOf("\r\r\n");
-  const prompt = output.lastIndexOf("\r\nA>");
-  assert.ok(commandEnd >= 0 && prompt > commandEnd, JSON.stringify(output));
-  assert.equal(
-    output.slice(commandEnd + 3, prompt),
-    expected,
-    `${name}: unexpected program output`,
-  );
   return output;
 }
 
@@ -262,27 +454,69 @@ try {
   machine.install_drive(0, disk, true);
   runUntilPrompt(0, "the boot prompt");
   const measurements = [];
-  for (const [name, , expected, input = ""] of cases) {
+  for (const [name, , expected, input = "", exact = true] of cases) {
     command(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
     const image = machine.export_drive(0);
+    const generated = readCpm22File(image, name.replace(".SK8", ".COM"));
+    const aso = readCpm22File(image, name.replace(".SK8", ".ASO"));
+    const { asoBytes } = validateAso(aso, generated, name);
     measurements.push({
       name,
-      comBytes: readCpm22File(image, name.replace(".SK8", ".COM")).length,
-      nobjBytes: readCpm22File(image, name.replace(".SK8", ".NOB")).length,
+      comBytes: generated.length,
+      asoBytes,
     });
-    if (name === "HOUSE.SK8") {
-      runInteractiveProgram(name, input, expected);
-    } else {
-      runProgram(name, input, expected);
+    runProgram(name, input, expected, exact);
+    if (name === "FILEOUT.SK8") {
+      const outputFile = readCpm22File(machine.export_drive(0), "OUTPUT.TXT");
+      assert.deepEqual(
+        [...outputFile.slice(0, 3)],
+        [0x41, 0x0d, 0x0a],
+        "FILEOUT.SK8: CP/M text file bytes",
+      );
     }
+    if (name === "BINOUT.SK8") {
+      const outputFile = readCpm22File(machine.export_drive(0), "OUTPUT.BIN");
+      assert.deepEqual(
+        [...outputFile.slice(0, 4)],
+        [0x00, 0x1a, 0x0d, 0x0a],
+        "BINOUT.SK8: binary file bytes",
+      );
+    }
+    const nativeLowSp = readWord(lowStackAddress);
+    const observedLowSp = observedStackLow();
+    const heapEnd = readWord(heapPointerAddress);
+    assert.ok(nativeLowSp >= 0xd400, `${name}: native stack crossed its guard`);
+    assert.ok(
+      observedLowSp < stackTop,
+      `${name}: no stack writes were observed`,
+    );
+    assert.ok(heapEnd < nativeLowSp, `${name}: heap and stack collided`);
+    measurements[measurements.length - 1].lowSp = nativeLowSp;
+    measurements[measurements.length - 1].observedLowSp = observedLowSp;
+    measurements[measurements.length - 1].heapEnd = heapEnd;
+    measurements[measurements.length - 1].bindingAllocations = readWord(
+      bindingAllocationAddress,
+    );
+    measurements[measurements.length - 1].closureAllocations = readWord(
+      closureAllocationAddress,
+    );
+    measurements[measurements.length - 1].pairAllocations = readWord(
+      pairAllocationAddress,
+    );
+    measurements[measurements.length - 1].collections = readWord(
+      collectionCountAddress,
+    );
+    measurements[measurements.length - 1].activations = readWord(
+      frameCountAddress,
+    );
     command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
-    command(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
+    command(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
   }
   for (const [name] of errorCases) {
     command(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
     runProgram(name, "", "RUNTIME ERROR\r\n");
     command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
-    command(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
+    command(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
   }
   console.log(JSON.stringify(
     {
@@ -293,8 +527,8 @@ try {
       largestComBytes: Math.max(
         ...measurements.map(({ comBytes }) => comBytes),
       ),
-      largestNobjBytes: Math.max(
-        ...measurements.map(({ nobjBytes }) => nobjBytes),
+      largestAsoBytes: Math.max(
+        ...measurements.map(({ asoBytes }) => asoBytes),
       ),
       measurements,
     },

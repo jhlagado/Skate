@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 import { loadAssembly } from "../../tests/z80.ts";
+import { validateAso } from "./aso-proof.mjs";
 import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 import {
   installCpm22File,
@@ -120,11 +121,12 @@ try {
     runCommand(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
     const image = machine.export_drive(0);
     const generated = readCpm22File(image, name.replace(".SK8", ".COM"));
-    const object = readCpm22File(image, name.replace(".SK8", ".NOB"));
+    const aso = readCpm22File(image, name.replace(".SK8", ".ASO"));
+    const { asoBytes } = validateAso(aso, generated, name);
     measurements.push({
       name,
       comBytes: generated.length,
-      nobjBytes: object.length,
+      asoBytes,
     });
     const runOutput = runCommand(
       name.replace(".SK8", ""),
@@ -137,7 +139,7 @@ try {
       `${name}: unexpected program output`,
     );
     runCommand(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
-    runCommand(`ERA ${name.replace(".SK8", ".NOB")}`, "A>", `remove ${name}`);
+    runCommand(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
   }
   console.log(JSON.stringify(
     {
@@ -149,8 +151,8 @@ try {
       largestComBytes: Math.max(
         ...measurements.map(({ comBytes }) => comBytes),
       ),
-      largestNobjBytes: Math.max(
-        ...measurements.map(({ nobjBytes }) => nobjBytes),
+      largestAsoBytes: Math.max(
+        ...measurements.map(({ asoBytes }) => asoBytes),
       ),
       measurements,
     },

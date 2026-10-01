@@ -172,7 +172,7 @@ RATOMVAL:
     PUSH HL                 ; Completion may inspect the nesting workspace.
     CALL RCOMPDAT              ; Complete quotes and update the containing list.
     POP HL                  ; Restore the tagged result's payload.
-    JR REVTGOOD               ; Return the event with carry clear.
+    JP REVTGOOD               ; Return the event with carry clear.
 
 ; A frame is 00 empty list, 01 nonempty list, 03 awaiting dotted tail,
 ; 05 completed dotted tail, or 80 pending quote. Sixty-four frames are fixed.
@@ -193,7 +193,7 @@ RPUSHFRM:
     LD (HL),C               ; Publish the pending list or quote state.
     INC A                   ; One more structural frame is now active.
     LD (RDEPTH),A           ; Record the new depth.
-    JR REVTGOOD               ; Return the open or quote event.
+    JP REVTGOOD               ; Return the open or quote event.
 
 ; Close only a list with no missing dotted-tail datum.
 RCLOSE:
@@ -206,7 +206,7 @@ RCLOSE:
     DEC A                   ; The enclosing frame becomes the new top.
     LD (RDEPTH),A           ; Publish the reduced structural depth.
     CALL RCOMPDAT              ; The completed list may finish enclosing quotes.
-    JR REVTGOOD               ; Emit its close event.
+    JP REVTGOOD               ; Emit its close event.
 
 ; A dot requires at least one completed element and no previous dot.
 RDOTMARK:
@@ -214,7 +214,7 @@ RDOTMARK:
     CP 1                    ; Only an ordinary nonempty list permits a dot.
     JR NZ,RSYNTAX           ; Reject bare dots, leading dots and repeated dots.
     LD (HL),3               ; This list now requires exactly one tail datum.
-    JR REVTGOOD               ; Expose the separator to the consuming compiler.
+    JP REVTGOOD               ; Expose the separator to the consuming compiler.
 
 ; Return A=top state and HL=its address, or A=FF when the stack is empty.
 RSTACKTP:
@@ -256,10 +256,12 @@ RCPSTORE:
 REOFREAD:
     LD A,(RDEPTH)           ; Check for unfinished structure at lexical EOF.
     OR A                    ; Zero means the source ended between datums.
-    JR NZ,RSYNTAX           ; Report incomplete structure at the EOF location.
-    LD A,1                  ; Record terminal successful EOF.
-    LD (REOFSEEN),A             ; Further calls need not invoke the source.
+    JP Z,REOFGOOD            ; A complete source ends between datums.
+    CALL LSETLOC             ; Refresh the location to the actual EOF cursor.
+    JP RSYNTAX               ; Report incomplete structure at the EOF location.
 REOFGOOD:
+    LD A,1                  ; Record terminal successful EOF.
+    LD (REOFSEEN),A         ; Further calls need not invoke the source.
     XOR A                   ; Event zero, carry clear.
     RET                     ; Return stable EOF.
 REVTGOOD:

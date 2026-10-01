@@ -160,6 +160,12 @@ SCPLOOK:
         LD DE,SCNAPP
         CALL SCPMATCH
         JP Z,SCPAPPLY
+        LD DE,SCNREAD
+        CALL SCPMATCH
+        JP Z,SCPREAD
+        CALL SCPPORT
+        OR A
+        RET NZ
         JP SCPNONE
 SCPZERO:
         LD A,4                     ; Kind four identifies zero? at runtime.
@@ -299,8 +305,55 @@ SCPVSET:
 SCPAPPLY:
         LD A,46                    ; Kind forty-six identifies apply.
         RET
+SCPREAD:
+        LD A,54                    ; Kind fifty-four identifies read.
+        RET
 SCPNONE:
         XOR A                      ; Ordinary names receive no primitive mark.
+        RET
+
+; Match the seven port names through one compact length-prefixed table.  The
+; table returns the one-based compiler kind directly, avoiding one branch and
+; one return label for every new primitive.
+SCPPORT:
+        LD HL,SCPORTTB
+        LD B,11
+SCPPTRY:
+        LD A,(HL)                  ; Read the candidate spelling length.
+        LD C,A                     ; Keep it while comparing the source name.
+        LD A,(SCPNLEN)
+        CP C
+        JR NZ,SCPPADV              ; A different length skips this record.
+        INC HL                     ; The kind follows the length byte.
+        LD A,(HL)
+        LD (SCPKIND),A
+        INC HL                     ; HL now points at the candidate spelling.
+        LD DE,(SCPNADR)
+SCPPCMP:
+        LD A,(DE)
+        CP (HL)
+        JR NZ,SCPPMISM
+        INC DE
+        INC HL
+        DEC C
+        JR NZ,SCPPCMP
+        LD A,(SCPKIND)
+        RET
+SCPPMISM:
+        LD A,C                     ; Skip the unexamined remainder of the name.
+        LD E,A
+        LD D,0
+        ADD HL,DE
+        JR SCPPNEXT
+SCPPADV:
+        INC HL                     ; Skip the candidate kind.
+        INC HL                     ; Move from its length to its spelling.
+        LD E,C
+        LD D,0
+        ADD HL,DE
+SCPPNEXT:
+        DJNZ SCPPTRY
+        XOR A                      ; No port name matched this source symbol.
         RET
 
 ; Compare the saved interned spelling with one length-prefixed static name.

@@ -2,16 +2,14 @@
 
 This document is a route through the public Skate source tree. It is written
 for a reader who knows Scheme and can read Z80 assembly but has not yet learned
-how this repository is put together. It explains the public 0.5.11 compiler,
+how this repository is put together. It explains the current native compiler,
 runtime and proof paths, then shows where to look when one feature needs to be
 understood.
 
-The public repository is the curated product tree. It contains the reviewed
-language implementation, examples, release notes, provider tools and target
-proofs. The private `skate-legacy` repository is a development archive. It
-contains design notes, experiments and newer branches such as the ASO work. A
-private change becomes part of public Skate only after it has been selected,
-reconciled with the public tree and verified as a release increment.
+The public repository is the development home for Skate. It contains the
+compiler, runtime, examples and tests needed to build and run the language.
+Release directories preserve published snapshots; the source tree may contain
+changes made since the latest release.
 
 ## The reading route
 
@@ -113,8 +111,8 @@ Scope compiler
     ▼
 Publication stream
     │
-    ├─ object records for the staged image
-    ├─ resolved addresses and descriptors
+    ├─ ASO byte, reservation and patch records
+    ├─ bounded replay windows and resolved addresses
     └─ matching runnable image bytes
     │
     ▼
@@ -125,11 +123,11 @@ CP/M .COM program
     └─ frames, managed storage, stack and heap
 ```
 
-The public compiler stages checked publication data beside the COM file. The
-intermediate format is an implementation detail, not a supported user
-artifact. The public contract is the runnable COM program. New publication
-work in `skate-legacy` must be promoted and verified before it becomes part of
-this tree.
+The compiler records emitted bytes and address patches in an ASO stream on
+disk. The materializer replays it through a bounded memory window, writing the
+COM in sections. The complete output need not fit inside the compiler's
+workspace. The intermediate stream is a build detail; the runnable COM is the
+program the user starts.
 
 ## The native compiler
 
@@ -151,7 +149,9 @@ order affects addresses and workspace, so a composition change needs a proof.
 | `src/compiler/procedure-forms.asm` | Compile calls, lambdas, captures and descriptors |
 | `src/compiler/call-ec.asm` | Compile one-shot escape procedures |
 | `src/compiler/scope/emitter.asm` | Emit runtime calls, values and patch sites |
-| `src/compiler/scope/publication.asm` | Build checked publication records, matching COM bytes and CP/M output |
+| `src/compiler/scope/output-sink.asm` and `aso-writer.asm` | Record emitted bytes and patches using logical image addresses |
+| `src/compiler/scope/aso-materializer.asm` | Replay the stream through bounded windows into the COM file |
+| `src/compiler/scope/publication.asm` and `publication-recovery.asm` | Publish files and recover interrupted replacement |
 
 A compiler feature normally crosses the form compiler, the emitter and the
 runtime primitive. Changes to a form can therefore affect all three interfaces.
@@ -164,13 +164,16 @@ native compiler. These are the current public runtime modules.
 | File or group | Responsibility |
 | --- | --- |
 | `core.asm` | Startup, invocation and frame coordination |
-| `managed.asm`, `page.asm` and `slabs.asm` | Managed storage pages and allocation state |
-| `pair-management.asm` and `pairs.asm` | Pair construction, lists and collector-visible links |
+| `storage/managed.asm`, `storage/page.asm` and `storage/slabs.asm` | Managed storage pages and allocation state |
+| `storage/pair-management.asm` and `storage/pairs.asm` | Pair construction, lists and collector-visible links |
 | `roots.asm` and `data.asm` | Root descriptors, literal data and collector state |
 | `primitives.asm` | Primitive dispatch and shared primitive support |
 | `binary16.asm`, `numeric.asm` and `float.asm` | Exact arithmetic, division, conversion and binary16 operations |
 | `strings.asm`, `managed-strings.asm` and `vectors.asm` | String and vector storage and operations |
-| `output.asm` | Value printing and console output |
+| `storage/stack-slots.asm` | Inline local bindings and promotion of captured bindings |
+| `ports.asm`, `cpm-ports.asm` and `file-ports.asm` | Scheme port values and CP/M byte/file services |
+| `datum-*.asm` | Read Scheme data from an input port |
+| `output.asm` | Value printing and port output |
 | `rest.asm`, `apply.asm` and `escape.asm` | Rest arguments, proper-list application and `call/ec` |
 | `external-effects.asm` | Optional provider-facing byte boundary |
 | `loader.asm` | Loads the runtime image into the generated program |
@@ -214,16 +217,18 @@ equality, argument lists and collection all depend on the same representation.
 
 ### Console and external effects
 
-`output.asm` and `external-effects.asm` implement the output boundary described
-in `docs/public/external-effects.md` and exercised by the host provider tools. Ordinary console
-text goes through the CP/M character boundary. Optional terminal, video, sound
-and file requests use provider messages. The Scheme program emits bytes and
+`ports.asm` implements Scheme stream operations. `cpm-ports.asm` supplies
+replaceable byte services for the console; `file-ports.asm` uses CP/M file
+services for sequential files. Host provider tools can instead carry file and
+device requests in messages. The byte-service boundary and command protocol
+are described separately in `docs/public/external-effects.md`. The Scheme program emits bytes and
 commands; it does not call a TMS9918 routine directly.
 
 ### Publication
 
 Publication is implemented in `scope/publication.asm` and `runtime/loader.asm`,
-with execution checks in the corresponding CP/M proof. The publisher stages publication data and COM files, replaces the previous
+with windowed replay in `scope/aso-materializer.asm`. The publisher prepares
+the stream and COM files, replaces the previous
 pair transactionally and checks the generated program after installation.
 
 ## Tests and verification
@@ -237,28 +242,18 @@ public check before publishing an assembly change.
 | `deno task test:source-inclusion` | Include ordering, path rules and source-package preparation |
 | `deno task test:cpm:procedures` | Procedures, closures, tail calls and ordinary application |
 | `deno task test:cpm:features` | Vectors, bounded `apply` and one-shot `call/ec` |
-| `deno task test:cpm:console` | Console input, output and runtime counters |
+| `deno task test:cpm:console` | Standard and file ports, datum input and source I/O helpers |
+| `deno task test:cpm:recovery` | Replacement failure and preservation of prior output |
+| `deno task test:cpm:full-image` | Materialization of a 65,280-byte image; does not execute that image |
+| `deno task test:aso` | Stream validation and window-boundary patches |
 | `deno task test:cpm:generated-effects` | Provider-facing generated effect bytes |
 | `deno task test:cpm:release` | Release disk, examples and publication checks |
 | `deno task test:effects` | Host provider, terminal and bounded file tests |
 | `deno task test:effects:cpm` | CP/M byte bridge tests |
 
-The CP/M commands require sibling checkouts of ATOM, Debug80 runtime,
+The CP/M commands require sibling checkouts of ATOM (including its Z80 runtime dependency),
 Z80 tool services and Triptych. Host provider tests can run without booting
 CP/M, but they do not replace the target proof.
-
-## Public contents and promotion
-
-Public commits should contain the implementation needed to build and run the
-reviewed language, its tests, examples, release notes and concise public
-contracts. Private roadmaps, abandoned experiments, review transcripts and
-unreleased allocator studies belong in `skate-legacy` until a decision promotes
-them.
-
-Promotion is a deliberate step. Copy the selected code and tests into the
-public tree, update the public README and release notes, run the public checks
-from a clean checkout and publish one versioned result. Do not make public
-Skate depend on a private working directory or on a private manifest.
 
 ## Small glossary
 

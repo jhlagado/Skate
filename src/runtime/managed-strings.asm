@@ -200,7 +200,7 @@ SRTSSZ:
         LD A,(SRTSLENB)
         INC A
         JR NZ,SRTSSZ8             ; Lengths below 255 fit in one byte here.
-        LD HL,0100H                 ; 255 data bytes plus the length byte.
+        LD HL,0100H                 ; 255 data bytes plus the length byte fit one page.
         JR SRTSSZC
 SRTSSZ8:
         LD L,A

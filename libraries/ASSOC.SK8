@@ -1,0 +1,27 @@
+; Identity-based association helpers for programs that include this file.
+; Each procedure walks a list until it finds a match or reaches the end.  An
+; improper tail reached during that walk reports the runtime's ordinary pair
+; error; a matching item may therefore short-circuit before a bad tail.
+
+; Return true when item is the identical value of one list element.
+(define (member-eq? item items)
+  (if (null? items)
+      #f
+      (if (pair? items)
+          (if (eq? item (car items))
+              #t
+              (member-eq? item (cdr items)))
+          (car items))))
+
+; Return the first association pair whose key is identical to key, or #f.
+(define (assoc-eq key entries)
+  (if (null? entries)
+      #f
+      (if (pair? entries)
+          (let ((entry (car entries)))
+            (if (pair? entry)
+                (if (eq? key (car entry))
+                    entry
+                    (assoc-eq key (cdr entries)))
+                (car entry)))
+          (car entries))))

@@ -1,4 +1,4 @@
-; Binary16 value printer for the Skate runtime.
+; Binary16 value printer for the scope-control runtime.
 ;
 ; Finite binary16 values are exact dyadic fractions.  The printer converts
 ; the small significand to decimal digits, multiplies those digits by five
@@ -304,14 +304,11 @@ SRTFFIN:
         LD HL,(SRTFPTR)             ; Locate the first byte after the final digit.
         LD (HL),'$'                 ; BDOS function 9 stops at the dollar byte.
         LD DE,SRTBUF                ; DE selects the completed output buffer.
-        LD C,9                      ; CP/M function 9 prints a dollar-terminated string.
-        JP 5                         ; Send only the value; newline is a separate primitive.
+        JP SRTTEXT                  ; Send only the value; newline is a separate primitive.
 
 ; Print one of the fixed special-value messages selected by DE.
 SRTFMSG:
-        LD C,9                      ; CP/M function 9 prints a dollar-terminated string.
-        CALL 5                      ; Send +inf.0, -inf.0 or +nan.0 to the console.
-        RET                         ; Return to the generated program continuation.
+        JP SRTTEXT                  ; Send +inf.0, -inf.0 or +nan.0 through the provider.
 
 SRTFNMSG: DB "+nan.0$"              ; Canonical Scheme NaN spelling.
 SRTFIPMS: DB "+inf.0$"              ; Positive infinity spelling.

@@ -36,8 +36,9 @@ owned by the provider. The current Triptych profile reserves `0100` for video,
 `0200`–`02FF` range are reserved and rejected.
 
 The file service provides staged open, read, write, status, synchronise and
-close operations. Paths, handles, chunks and status records are bounded. A
-failed write is discarded so the previous committed file remains available.
+close operations, plus abort for discarding an unfinished write. Paths,
+handles, chunks and status records are bounded. A successful synchronise or
+close commits the staged data; abort preserves the latest committed state.
 
 The CP/M bridge provides direct console bytes where the portable BDOS contract
 is sufficient. Full raw framing and device commands require a provider that
@@ -58,10 +59,10 @@ requiring a particular video or sound backend.
 ## Generated Z80 console vectors
 
 The generated runtime image contains the CP/M console adapter for the ordinary
-CP/M profile, but generated code enters it through two three-byte `JP` vectors:
-`SRTOUTV` for output and `SRTINV` for input. A native or WASM machine profile
-may patch each vector's 16-bit target before starting the image. The target
-receives or returns one byte in `A` and must return with the call stack
-balanced; the surrounding runtime preserves the other caller-visible
-registers. This keeps the language-visible byte-gateway meaning independent of
-BDOS while retaining a period-appropriate CP/M default.
+CP/M profile. Two 16-bit pointer cells, `SRTIOPUT` and `SRTIOGET`, select
+its byte output and input services. A native or WASM machine profile may replace
+these addresses before starting the image. The service receives or returns a
+byte in `A`, returns with a balanced stack, and clears carry on success or sets
+carry on failure. These hooks transport bytes; they do not interpret video or
+sound commands. Source libraries encode those commands and the receiving
+provider interprets them.

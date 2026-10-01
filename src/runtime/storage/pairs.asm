@@ -94,6 +94,9 @@ SRTMAKEP:
         CALL SRTFINDP               ; Retry after the complete collection.
         JP C,SRTERROR               ; No managed page or record remains.
 SRTPINIT:
+        LD DE,(SRTPCNT)             ; Count this successfully reserved pair.
+        INC DE
+        LD (SRTPCNT),DE
         LD (SRTQPAIR),HL            ; Keep the reserved record across root restore.
         XOR A                       ; The record is reserved; constructor roots can clear.
         LD (SRTCRON),A

@@ -59,12 +59,10 @@ SRTSARGS:
 SRTSETLP:
         LD HL,(SRTNEXT)          ; Resume at the next formal slot record.
         LD A,(HL)                ; Read the compiler slot index from the descriptor.
+        LD (SRTSNUM),A           ; Keep the slot index while the loop counts formals.
         INC HL                   ; Advance to the high index byte.
         INC HL                   ; The next formal slot follows by two bytes.
         LD (SRTNEXT),HL          ; Keep the cursor while loading this argument.
-        CALL SRTADR              ; Convert the slot index to the target cell address.
-        JP C,SRTERROR              ; Every formal must have an owned cell.
-        LD (SRTSLOT),HL          ; Preserve the destination across packet addressing.
         LD A,C                   ; Address packet index C.
         LD L,A                   ; Widen the packet index.
         LD H,0                   ; Each packet value occupies four bytes.
@@ -77,10 +75,13 @@ SRTSETLP:
         LD D,(HL)                ; DE now contains the payload value.
         INC HL                   ; Advance to the packet tag.
         LD A,(HL)                ; A contains the logical value tag.
-        EX DE,HL                 ; HL receives the payload expected by SRTSTORE.
-        LD DE,(SRTSLOT)          ; Restore the formal slot address.
-        PUSH BC                   ; SRTBSTOR uses B while preserving the count.
-        CALL SRTBSTOR             ; Publish the three-byte heap binding value.
+        LD (SRTSVTAG),A          ; Keep the tag while selecting the active slot.
+        EX DE,HL                 ; HL receives the payload expected by SRTSSTOR.
+        PUSH BC                   ; Preserve the formal and packet cursors.
+        LD A,(SRTSNUM)
+        LD B,A                   ; The active slot helper receives its index in B.
+        LD A,(SRTSVTAG)
+        CALL SRTSSTOR             ; Publish the value in the active four-byte slot.
         POP BC                    ; Continue with the remaining formal slots.
         INC C                    ; Advance to the next source argument.
         DJNZ SRTSETLP            ; Fill every formal slot.
@@ -124,15 +125,12 @@ SRTREMP:
         LD HL,0FE02H
 SRTRSTOR:
         LD (SRTATMP),A            ; Preserve the list tag while locating the slot.
-        LD (SRTVAL),HL            ; Preserve the list payload across SRTADR.
+        LD (SRTVAL),HL            ; Preserve the list payload across slot selection.
         CALL SRTRSLOT           ; Return the compiler-recorded rest slot in A.
-        CALL SRTADR                ; Resolve that slot through the active map.
-        JP C,SRTERROR              ; Every rest binding must have an owned cell.
-        LD (SRTSLOT),HL           ; Preserve the destination while restoring the value.
-        LD DE,(SRTSLOT)
+        LD B,A                    ; Active slot helpers take the index in B.
         LD HL,(SRTVAL)
         LD A,(SRTATMP)
-        JP SRTBSTOR                ; Publish the list as an ordinary local value.
+        JP SRTSSTOR                ; Publish the list as an ordinary local value.
 
 ; Read the packet record selected by SRTRESTI.
 SRTRREAD:
