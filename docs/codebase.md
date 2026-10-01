@@ -183,6 +183,18 @@ the call, the primitive that implements it and the storage or root code that
 keeps values live. The procedure and managed-storage proofs are the first tests
 to read for such a change.
 
+The vector implementation separates three parts of one value.
+[`vectors/ops.asm`](../src/runtime/vectors/ops.asm) contains the Scheme
+operations, [`vectors/storage.asm`](../src/runtime/vectors/storage.asm) allocates
+and validates blocks, and [`vectors/trace.asm`](../src/runtime/vectors/trace.asm)
+marks and traverses their elements. `vectors/state.asm` holds shared scratch.
+Managed strings use the same separation between operations and storage in
+[`strings/ops.asm`](../src/runtime/strings/ops.asm) and
+[`strings/storage.asm`](../src/runtime/strings/storage.asm), with scratch in
+`strings/state.asm`. Strings contain bytes rather than managed references, so
+their collector support only marks a leaf. The composition files retain the
+original emitted order.
+
 ## Following common features
 
 ### Arithmetic

@@ -1,0 +1,12 @@
+; Scratch is kept outside the collector's existing fields.
+SRTSLENB:  DB 0
+SRTSLLN: DB 0
+SRTSRLN: DB 0
+SRTSOFF:  DB 0
+SRTSSRC:  DW 0
+SRTSSRCB: DW 0
+SRTSLHS:  DW 0
+SRTSRHS:  DW 0
+SRTSDST:  DW 0
+SRTSDSTB: DW 0
+SRTSTMP:  DW 0
