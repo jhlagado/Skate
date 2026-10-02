@@ -46,6 +46,8 @@ the source tree and names that cannot be represented on a CP/M disk.
 
 (define counter (make-counter 0))
 (counter)
+(write (counter)) ; prints 2
+(newline)
 ```
 
 ## Build
@@ -68,9 +70,11 @@ current-drive CP/M 8.3 spelling; append, seeking and multiple handles per
 direction are not implemented. `libraries/io.sk8` provides line input, line
 output, prompting and stream copying with explicit ports.
 
-See the [0.5.11 release notes](release/v0.5.11/README.md) for the checked image,
-measurements and limitations of that published image. The main branch includes
-subsequent compiler and I/O work; its source and tests are the development baseline.
+The [0.5.11 release notes](release/v0.5.11/README.md) describe the checked image
+and measurements of that published release. Their limitations apply to 0.5.11
+only: that image predates Scheme ports and file procedures. The main branch adds
+the standard ports, sequential CP/M file ports and later compiler work described
+above; its source and tests are the development baseline.
 
 For a guided tour of the source tree, compilation stages and recommended
 reading order, see the [codebase guide](docs/codebase.md).
