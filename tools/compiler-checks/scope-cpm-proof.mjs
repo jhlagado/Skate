@@ -296,10 +296,39 @@ const errorCases = [
     "EXPECT\r\n",
     "BROKEN.SK8:2:16: EXPECT\r\n",
   ],
+  [
+    "COL105.SK8",
+    " ".repeat(89) + "(let ((value 1 2)) value)",
+    "EXPECT\r\n",
+    "COL105.SK8:1:105: EXPECT\r\n",
+  ],
+  [
+    "INCPOS.SK8",
+    '; header\r\n(include "INCLIB.SK8")\r\n(let ((value 1 2)) value)',
+    "EXPECT\r\n",
+    "INCPOS.SK8:3:16: EXPECT\r\n",
+  ],
+  [
+    "INCLINE.SK8",
+    '(include "INCLIB.SK8") (let ((value 1 2)) value)',
+    "EXPECT\r\n",
+    "INCLINE.SK8:1:39: EXPECT\r\n",
+  ],
+  [
+    "INCNEST.SK8",
+    '(include "INCMID.SK8")\r\n1',
+    "EXPECT\r\n",
+    "INCMID.SK8:3:16: EXPECT\r\n",
+  ],
   ["INCMISS.SK8", '(include "ABSENT.SK8")\r\n1', "INCLUDE ERROR\r\n"],
 ];
 const includeErrorFiles = [
   ["BROKEN.SK8", "(begin\r\n(let ((value 1 2)) value))\r\n"],
+  ["INCLIB.SK8", "(define inclib 1)"],
+  [
+    "INCMID.SK8",
+    '(include\r\n "INCLIB.SK8")\r\n(let ((value 1 2)) value)',
+  ],
 ];
 const noOutputCases = [["NOAUTO.SK8", "42"]];
 // The CP/M 2.2 disk has 64 directory entries.  The valid and error corpora

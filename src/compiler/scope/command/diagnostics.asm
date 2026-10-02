@@ -111,8 +111,8 @@ SCDECP:
         JR NZ,.OUT
         LD A,(SCDECH)
         OR A
-        RET NZ                         ; Suppress leading zeroes.
-        RET
+        RET Z                          ; Suppress leading zeroes only.
+        XOR A                          ; An inner zero digit is printed.
 .OUT:  PUSH AF
         LD A,1
         LD (SCDECH),A
