@@ -284,6 +284,9 @@ SCREF:
         LD A,(SCRECPHS)
         OR A
         JR Z,SCGGETP                ; The recursive body has a closed binding range.
+        LD A,(SCCURPR)              ; Inside a procedure body the name cannot be a
+        INC A                       ; later binding of this scope: every recursive
+        JR NZ,SCGGETP               ; name is predeclared, so it is a global.
         CALL SCRECREF                ; Reserve a bounded forward local cell.
         RET C
         LD L,A

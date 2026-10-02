@@ -607,9 +607,19 @@ const regressionCases = [
     "11",
   ],
   [
+    "FWDREC.SK8",
+    "(define (f) (letrec ((a (lambda () (g)))) (a))) (define (g) 5) (f)",
+    "5",
+  ],
+  [
     "SHADOWQ.SK8",
     "(define (f q) (let ((a 1)) (lambda () a)) ((lambda (x) (define q 3) (+ q x)) 1)) (f 9)",
     "4",
+  ],
+  [
+    "FWDLET.SK8",
+    "(define (f) (letrec ((a (let ((t 1)) (+ t (g))))) a)) (define (g) 5) (f)",
+    "6",
   ],
 ];
 const regressionErrorCases = [
