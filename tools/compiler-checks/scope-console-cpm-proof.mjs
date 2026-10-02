@@ -312,6 +312,26 @@ const cases = [
     "\x1a",
   ],
   [
+    "PRINTPRC.SK8",
+    "(begin (display car) (write car) (display (lambda (x) x)) (newline))",
+    "#<procedure>#<procedure>#<procedure>\r\n",
+  ],
+  [
+    "PRINTVEC.SK8",
+    "(begin (write (vector 1 (vector 2 3) '(4))) (display (vector)) (newline))",
+    "#(1 #(2 3) (4))#()\r\n",
+  ],
+  [
+    "PRINTPRT.SK8",
+    "(begin (display (current-output-port)) (write (list (current-input-port))) (newline))",
+    "#<port>(#<port>)\r\n",
+  ],
+  [
+    "PRINTESC.SK8",
+    "(begin (call/ec (lambda (k) (display k))) (newline))",
+    "#<procedure>\r\n",
+  ],
+  [
     "ADVENTUR.SK8",
     await Deno.readTextFile("examples/applications/advent.sk8"),
     "You are at a fork. Choose left or right: l\r\nYou take the left path.",
@@ -329,6 +349,22 @@ const errorCases = [
   ["FILEPATH.SK8", '(open-input-file "A/B.TXT")'],
   ["FILELONG.SK8", '(open-input-file "ABCDEFGHI.TXT")'],
 ];
+// `--only=NAME,NAME` limits a development run to the named programs.
+const onlyArgument = Deno.args.find((argument) =>
+  argument.startsWith("--only=")
+);
+if (onlyArgument) {
+  const selected = new Set(
+    onlyArgument.slice("--only=".length).split(",").map((name) =>
+      name.endsWith(".SK8") ? name : `${name}.SK8`
+    ),
+  );
+  for (const list of [cases, errorCases]) {
+    for (let index = list.length - 1; index >= 0; index -= 1) {
+      if (!selected.has(list[index][0])) list.splice(index, 1);
+    }
+  }
+}
 for (const [name, source] of [...cases, ...errorCases]) {
   disk = installCpm22File(disk, {
     name,

@@ -17,8 +17,23 @@ SRTWRVAL:
         JP C,SRTERROR
         JP SRTWRSTR
 SRTWREST:
-        OR A
-        JP NZ,SRTERROR
+        OR A                       ; Tag zero holds the scalar family below.
+        JR Z,SRTWSCAL
+        CP 2                       ; Closures print as opaque procedures.
+        JR Z,SRTWPROC
+        CP 7                       ; Vectors print with the #( reader syntax.
+        JP Z,SRTWVEC
+        CP 8                       ; Tag eight holds ports and escape tokens.
+        JP NZ,SRTERROR             ; No other tag is a printable Scheme value.
+        LD A,H                     ; Ports occupy the F000H token namespace.
+        CP 0F0H
+        JR NZ,SRTWPROC             ; An escape token is a callable procedure.
+        LD DE,SRTWPRTT             ; Every port prints as one opaque spelling.
+        JP SRTTEXT                 ; Send it through the selected output adapter.
+SRTWPROC:
+        LD DE,SRTWPRCT             ; Primitives, closures and escapes share this.
+        JP SRTTEXT                 ; Send it through the selected output adapter.
+SRTWSCAL:
         LD A,H
         CP 0FFH
         JP Z,SRTWCHAR              ; Byte characters share the scalar tag with booleans.
@@ -52,6 +67,9 @@ SRTWREST:
         SBC HL,DE                  ; Test whether the payload is exactly FE01H.
         POP HL                     ; Restore the value for the following formatter.
         JR Z,SRTWBOOL              ; Preserve the established #t spelling.
+        LD A,H                     ; Remaining FExx scalars are primitive values.
+        CP 0FEH
+        JR Z,SRTWPROC              ; Print them as procedures, not as booleans.
         PUSH HL
         XOR A
         CALL NCLASS
@@ -228,6 +246,44 @@ SRTWTDOT:
         POP HL
         RET
 
+; Print a tag-seven vector as #( elements ).  Elements recurse through
+; SRTWRVAL; the cursor and remaining count are kept on the native stack.
+SRTWVEC:
+        CALL SRTVLD                ; Validate the block and return its base in HL.
+        JP C,SRTERROR              ; A corrupt vector cannot be printed safely.
+        LD A,35                    ; Open the vector with its reader prefix.
+        CALL SRTCH                 ; SRTCH preserves the vector base in HL.
+        LD A,'('                   ; Complete the opening delimiter.
+        CALL SRTCH
+        LD B,(HL)                  ; B counts the elements still to print.
+        INC HL                     ; HL addresses the first four-byte element.
+        LD A,B                     ; An empty vector closes immediately.
+        OR A
+        JR Z,SRTWVCLS
+SRTWVLP:
+        PUSH BC                    ; Keep the remaining count across recursion.
+        PUSH HL                    ; Keep the element cursor across recursion.
+        LD E,(HL)                  ; Read the element payload low byte.
+        INC HL
+        LD D,(HL)                  ; Read the element payload high byte.
+        INC HL
+        INC HL                     ; Skip the reserved extension byte.
+        LD A,(HL)                  ; Read the element's logical tag.
+        EX DE,HL                   ; A:HL is now the element value.
+        CALL SRTWRVAL              ; Print the element in the current mode.
+        POP HL                     ; Recover the element cursor.
+        LD DE,4                    ; Advance to the next four-byte element.
+        ADD HL,DE
+        POP BC                     ; Recover the remaining count.
+        DEC B                      ; Count the element just printed.
+        JR Z,SRTWVCLS              ; The final element needs no separator.
+        LD A,' '                   ; Separate consecutive elements.
+        CALL SRTCH                 ; SRTCH preserves the cursor and count.
+        JR SRTWVLP
+SRTWVCLS:
+        LD A,')'                   ; Close the vector spelling.
+        JP SRTCH
+
 SRTWRSTR:
         PUSH HL                     ; Preserve the literal pointer across BDOS.
         LD A,'"'
@@ -347,3 +403,6 @@ SRTIN:
         POP BC                     ; Restore the caller's packet count and counters.
         LD A,(SRTINB)              ; Return the byte obtained from the console.
         RET                        ; The primitive maps Control-Z to the EOF value.
+
+SRTWPRCT:  DB "#<procedure>$"
+SRTWPRTT:  DB "#<port>$"
