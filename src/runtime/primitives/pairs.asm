@@ -67,9 +67,9 @@ SRTNPRED:
 
 ; list consumes the bounded packet in source order and folds it into pairs.
 SRTLIST:
-        LD A,(SRTARGC)
-        CP 8
-        JP NC,SRTERROR
+        LD A,(SRTARGC)             ; The packet holds zero through eight values.
+        CP 9                       ; Eight is the full packet, not an overflow.
+        JP NC,SRTERROR             ; Reject only a count beyond the eight records.
         LD (SRTLCN),A
         LD HL,SRTARGPK
         LD (SRTLCP),HL

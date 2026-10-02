@@ -106,6 +106,12 @@ const dataCases = [
   ["PAIRP.SK8", "(pair? (cons 1 2))", "#t"],
   ["NULLP.SK8", "(null? (quote ()))", "#t"],
   ["LISTCASE.SK8", "(list 1 2 3)", "(1 2 3)"],
+  ["LIST8.SK8", "(list 1 2 3 4 5 6 7 8)", "(1 2 3 4 5 6 7 8)"],
+  [
+    "STRING8.SK8",
+    "(string #\\a #\\b #\\c #\\d #\\e #\\f #\\g #\\h)",
+    '"abcdefgh"',
+  ],
   ["EQ.SK8", "(eq? 1 1)", "#t"],
   ["WRITE.SK8", "(begin (write (quote (1 2))) (newline))", "(1 2)"],
   ["DISPLAY.SK8", '(begin (display "hi") (newline))', "hi"],
@@ -195,6 +201,11 @@ const dataCases = [
   ["LAMBDAW.SK8", "(begin (write ((lambda (x) x) 42)))", "42"],
 ];
 const vectorCases = [
+  [
+    "VECTOR8.SK8",
+    "(define v (vector 1 2 3 4 5 6 7 8)) (begin (write (vector-length v)) (write (vector-ref v 0)) (write (vector-ref v 7)) (newline))",
+    "818",
+  ],
   [
     "VECTOR.SK8",
     "(begin (write (vector-ref (vector 10 20 30) 1)) (newline))",
