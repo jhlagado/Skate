@@ -63,9 +63,7 @@ SRTINSET:
         LD A,(SRTARGC)
         OR A
         JR NZ,SRTINEXP             ; An argument selects a specific input port.
-        XOR A
-        LD (SRTINSEL),A             ; The compatibility form uses console input.
-        RET
+        JR SRTINUSE                ; A is zero: the default form uses console input.
 SRTINEXP:
         CP 1
         JP NZ,SRTERROR
@@ -86,16 +84,43 @@ SRTINEXP:
         LD A,(SRTFIACT)
         OR A
         JP Z,SRTERROR               ; A closed file token cannot be read.
-        LD A,1
-        LD (SRTINSEL),A             ; Select the native file adapter.
-        XOR A
-        LD (SRTARGC),A
-        RET
-SRTINCON:
-        XOR A
-        LD (SRTINSEL),A             ; Select the direct console adapter.
         XOR A                      ; Normalize the explicit form to no arguments.
         LD (SRTARGC),A
+        INC A                      ; Select the native file adapter.
+        JR SRTINUSE
+SRTINCON:
+        XOR A                      ; Normalize the explicit form to no arguments.
+        LD (SRTARGC),A             ; A remains zero to select the console adapter.
+
+; Make input source A live (zero console, one file).  Each source owns its
+; lookahead state, pending byte and pending CR; the inactive source's copy is
+; parked so file lookahead or EOF never leaks into console reads.
+SRTINUSE:
+        LD HL,SRTINSEL             ; Compare the request with the live source.
+        CP (HL)
+        RET Z                      ; The requested source already owns live state.
+        LD (HL),A                  ; Publish the new live source.
+        LD HL,(SRTINST)            ; The live state and pending byte form one word.
+        LD DE,(SRTINPKS)           ; Load the other source's parked word.
+        LD (SRTINST),DE            ; The parked source becomes live.
+        LD (SRTINPKS),HL           ; The previous live source is parked.
+        LD A,(SRTINCR)             ; Exchange the pending-CR flags as well.
+        LD B,A
+        LD A,(SRTINPKC)
+        LD (SRTINCR),A
+        LD A,B
+        LD (SRTINPKC),A
+        RET
+
+; Return to console input and forget the file's input state.  File open and
+; close use this so a new or closed file starts with no lookahead or EOF.
+SRTINRST:
+        XOR A                      ; Console input becomes the live source.
+        CALL SRTINUSE
+        LD HL,0                    ; Empty state and no pending byte for the file.
+        LD (SRTINPKS),HL
+        XOR A                      ; No CR is pending for the file either.
+        LD (SRTINPKC),A
         RET
 
 ; Select output or error for a one-value operation.  The value remains in the
@@ -357,4 +382,6 @@ SRTINBIN:
 SRTINST:  DB 0                     ; Empty, pending byte or sticky EOF.
 SRTINPBY:  DB 0                     ; Logical byte retained by datum lookahead.
 SRTINSEL:  DB 0                     ; Zero selects console input; one selects a file.
+SRTINPKS:  DW 0                     ; Parked state and pending byte of the idle source.
+SRTINPKC:  DB 0                     ; Parked pending-CR flag of the idle source.
 SRTOUTS: DB 0                     ; Zero selects console output; one selects a file.

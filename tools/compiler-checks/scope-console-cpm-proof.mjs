@@ -404,6 +404,18 @@ const cases = [
     "42\r",
   ],
   [
+    "MIXCLOSE.SK8",
+    '(let ((p (open-input-file "INPUT.TXT"))) (write (read p)) (write (read p)) (close-port p) (write (read-char)) (newline))',
+    String.raw`AB#<eof>Q#\Q` + "\r\n",
+    "Q",
+  ],
+  [
+    "MIXOPEN.SK8",
+    '(let ((p (open-input-file "INPUT.TXT"))) (write (read p)) (write (read-char)) (write (read-char p)) (close-port p) (newline))',
+    String.raw`ABQ#\Q#\newline` + "\r\n",
+    "Q",
+  ],
+  [
     "ADVENTUR.SK8",
     await Deno.readTextFile("examples/applications/advent.sk8"),
     "You are at a fork. Choose left or right: l\r\nYou take the left path.",

@@ -50,9 +50,7 @@ SRTFOPI:
         LD (SRTFIACT),A
         LD A,(SRTFOMOD)
         LD (SRTFIMOD),A
-        XOR A
-        LD (SRTINCR),A
-        LD (SRTINST),A
+        CALL SRTINRST              ; The new file starts with no lookahead or EOF.
         LD A,8
         LD HL,SRTFIPT
         PUSH IX
@@ -110,7 +108,7 @@ SRTFCLR:
         JR Z,SRTFCBAD
         XOR A
         LD (SRTFIACT),A
-        LD (SRTINSEL),A
+        CALL SRTINRST              ; Restore console state and drop the file's state.
         JP CTCLOSER
 
 ; Close the output stream and flush its final record.
