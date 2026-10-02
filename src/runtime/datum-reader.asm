@@ -6,12 +6,7 @@
 
 ; Read one datum from the current input port or an explicit input port.
 SRTDRRD:
-        LD A,(SRTARGC)              ; Read accepts no argument or one input port.
-        OR A                        ; Zero arguments select current input.
-        JR Z,SRTDRST             ; Begin the parser with the default port.
-        CP 1                        ; One argument is the only explicit form.
-        JP NZ,SRTERROR              ; Other arities are malformed calls.
-        CALL SRTINSET               ; Validate and select the explicit input port.
+        CALL SRTINSET               ; No argument selects current input; one names a port.
 SRTDRST:
         LD A,1                      ; Mark the reader active for root cleanup.
         LD (SRTDRACT),A

@@ -82,6 +82,11 @@ disk = installCpm22File(disk, {
   bytes: Uint8Array.from([0x41, 0x0d, 0x0a, 0x42, 0x0d, 0x0a]),
   padByte: 0x1a,
 });
+disk = installCpm22File(disk, {
+  name: "DATUM.TXT",
+  bytes: new TextEncoder().encode("(1 2) foo\r\n"),
+  padByte: 0x1a,
+});
 const vector64Input = `#(${Array(64).fill("1").join(" ")})\r`;
 const vector65Input = `#(${Array(65).fill("1").join(" ")})\r`;
 
@@ -391,6 +396,12 @@ const cases = [
     "FILECOPY.SK8",
     '(include "IO.SK8") (let ((p (open-input-file "CRLF.TXT"))) (write (copy-stream-from-to p (current-output-port))) (close-port p) (newline))',
     "A\r\nB\r\n4\r\n",
+  ],
+  [
+    "READDFLT.SK8",
+    '(let ((p (open-input-file "DATUM.TXT"))) (write (read p)) (write (read)) (close-port p) (newline))',
+    "(1 2)42\r42\r\n",
+    "42\r",
   ],
   [
     "ADVENTUR.SK8",
