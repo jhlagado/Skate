@@ -101,7 +101,8 @@ SRTFREAD:
 SRTFROK:
         JP CTREAD
 
-; Close the input stream.  A failed close poisons the logical port.
+; Close the input stream.  A closed stream is left alone; a failed close
+; poisons the logical port.
 SRTFCLR:
         LD A,(SRTFIACT)
         OR A
@@ -122,13 +123,13 @@ SRTFCLW:
         JP CTCLOSEW
 
 SRTFCBAD:
-        SCF
-        RET
+        XOR A                      ; Closing a closed port is a no-op, as in R7RS.
+        RET                        ; Carry clear reports success to close-port.
 
 ; Leave the program after flushing and closing any open output file, so text
 ; written without close-port survives a normal exit.
 SRTEXIT:
-        CALL SRTFCLW               ; Carry only reports there was nothing to close.
+        CALL SRTFCLW               ; A close failure cannot be reported here.
         JP 0                       ; Return to CP/M through the warm start.
 
 ; Write one byte to the active output stream.  Text mode turns a bare LF into
