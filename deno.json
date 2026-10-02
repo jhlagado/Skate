@@ -23,7 +23,7 @@
     "test:cpm:recovery": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych tools/compiler-checks/scope-recovery-proof.mjs",
     "test:cpm:capacity": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych tools/compiler-checks/scope-capacity-proof.mjs",
     "test:cpm:large": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych tools/compiler-checks/scope-large-cpm-proof.mjs --count=6200",
-    "test:cpm:full-image": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych tools/compiler-checks/scope-large-cpm-proof.mjs --count=8569 --tail-length=2 --expect-image=65280 --expect-com=65280",
+    "test:cpm:full-image": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych tools/compiler-checks/scope-large-cpm-proof.mjs --count=8569 --tail-length=30 --expect-image=65280 --expect-com=65280",
     "measure": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services tools/compiler-checks/scope-budget.ts",
     "fmt": "deno fmt",
     "lint": "deno lint",
