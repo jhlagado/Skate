@@ -123,24 +123,8 @@ SCFLOOP:
         LD C,(HL)                  ; Read one formal's local slot number.
         INC HL
         INC HL                     ; Skip the reserved high slot byte.
-        PUSH HL                    ; Keep the next formal cursor across lookup.
-        LD L,C
-        LD H,0
-        ADD HL,HL                  ; Active IDs use two bytes per slot.
-        LD DE,SCLOCIDS
-        ADD HL,DE
-        LD A,(SCID)
-        CP (HL)
-        JR NZ,SCFNO
-        INC HL
-        LD A,(SCID+1)
-        CP (HL)
-        JR NZ,SCFNO
-        POP HL
-        SCF
-        RET
-SCFNO:
-        POP HL
+        CALL SCFHAS                ; Is SCID bound to that slot in an active record?
+        RET C                      ; Carry: SCID names this formal.
         DJNZ SCFLOOP
         LD A,(SCPHIGH)             ; Fixed names were absent; inspect the rest slot.
         AND 80H
@@ -167,6 +151,48 @@ SCFNOFIX:
         LD (SCPHIGH),A
         LD B,1
         JR SCFLOOP
+
+; Return carry when an active binding record for local slot C holds SCID.
+; SCLOCIDS and SCLOCSLT are parallel by active-record position, not by slot.
+; BC and HL are preserved; A, DE and flags are clobbered.
+SCFHAS:
+        PUSH HL
+        PUSH BC
+        LD A,(SCLOCTOP)            ; No active records means no match.
+        OR A
+        JR Z,SCFHNO
+        LD B,A                     ; B counts the active records.
+        LD HL,SCLOCIDS             ; HL scans the two-byte identities.
+        LD DE,SCLOCSLT             ; DE scans the matching slot numbers.
+SCFHLP:
+        LD A,(DE)                  ; Only records for the formal's slot qualify.
+        CP C
+        JR NZ,SCFHNX
+        PUSH HL                    ; Keep the record cursor across the compare.
+        LD A,(SCID)                ; Compare the identity low byte.
+        CP (HL)
+        JR NZ,SCFHNE
+        INC HL
+        LD A,(SCID+1)              ; Compare the identity high byte.
+        CP (HL)
+SCFHNE:
+        POP HL
+        JR Z,SCFHYES               ; Both bytes matched.
+SCFHNX:
+        INC HL                     ; Advance to the next two-byte identity.
+        INC HL
+        INC DE                     ; Advance to the next slot number.
+        DJNZ SCFHLP
+SCFHNO:
+        POP BC
+        POP HL
+        OR A                       ; Carry clear: no active record matched.
+        RET
+SCFHYES:
+        POP BC
+        POP HL
+        SCF                        ; Carry: SCID is bound to slot C.
+        RET
 
 ; Keep recursive forward cells while discarding the lambda's private locals.
 ; A forward name may have been discovered after the lambda's formals, so its
@@ -432,17 +458,12 @@ SCBITSET:
         LD (SCMTADR),HL            ; Save the selected mask's first byte.
         LD A,(SCMSLOT)             ; The low three bits select a bit in that byte.
         AND 7
-        LD B,A
-        LD A,B
-        OR A
-        JR Z,SCMSK0
+        LD B,A                     ; B shifts the bit; Z means bit zero.
         LD A,1
+        JR Z,SCMSKBIT
 SCMSKSH:
         ADD A,A
         DJNZ SCMSKSH
-        JR SCMSKBIT
-SCMSK0:
-        LD A,1
 SCMSKBIT:
         LD C,A                     ; Preserve the one-bit mask across the read.
         LD HL,(SCMTADR)

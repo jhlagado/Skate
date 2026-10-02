@@ -606,6 +606,11 @@ const regressionCases = [
     "(define (g) 10) (+ 1 (if ((lambda () (if #t #t #f))) (g) 0))",
     "11",
   ],
+  [
+    "SHADOWQ.SK8",
+    "(define (f q) (let ((a 1)) (lambda () a)) ((lambda (x) (define q 3) (+ q x)) 1)) (f 9)",
+    "4",
+  ],
 ];
 const regressionErrorCases = [
 ];

@@ -57,7 +57,8 @@ SCNSDONE:
         LD A,(SCRECMOD)             ; Recursive checking ignores ordinary lambda locals.
         OR A
         JR Z,SCRNOFL
-        LD L,B
+        LD A,(SCMSLOT)              ; SCBITSET consumed B; SCOWNSET kept the slot here.
+        LD L,A
         LD H,0
         LD DE,SCRECBND
         ADD HL,DE
