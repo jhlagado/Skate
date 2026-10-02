@@ -86,8 +86,9 @@ SRTCLVLD:
         SBC HL,DE
         JR C,SRTCLBAD
         LD HL,(SRTCLOBJ)
-        BIT 0,L
-        JR NZ,SRTCLBAD
+        LD A,L                     ; Closure starts occupy even map units only.
+        AND 3                      ; An address 2 mod 4 names a string-marker bit.
+        JR NZ,SRTCLBAD             ; Require four-byte alignment before the map test.
         LD DE,2
         ADD HL,DE
         LD DE,(SRTHEAPP)

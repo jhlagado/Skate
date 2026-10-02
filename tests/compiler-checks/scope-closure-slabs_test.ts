@@ -64,3 +64,19 @@ Deno.test("released closure pages clear their physical base entries", async () =
   assert.equal(memory[base + runIndex], 0);
   assert.equal(memory[base + runIndex + 1], 0);
 });
+
+Deno.test("closure validation rejects an address two bytes past alignment", async () => {
+  const { assembled, memory, call } = await managedRuntime();
+  const startMap = assembled.address("SRTCLBM");
+  const descriptor = assembled.address("SRTSTART");
+  for (const object of [0x8000, 0x8002]) {
+    const unit = (object - 0x3000) >> 1;
+    memory[startMap + (unit >> 3)] |= 1 << (unit & 7);
+    writeWord(memory, object, descriptor);
+  }
+  writeWord(memory, assembled.address("SRTCLOBJ"), 0x8000);
+  assert.equal(call("SRTCLVLD").carry, 0, "the aligned start is valid");
+  // 8002H maps to the odd string-marker bit, which is never a start bit.
+  writeWord(memory, assembled.address("SRTCLOBJ"), 0x8002);
+  assert.equal(call("SRTCLVLD").carry, 1);
+});
