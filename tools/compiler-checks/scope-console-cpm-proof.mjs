@@ -454,6 +454,13 @@ const errorCases = [
   ["FILEMISS.SK8", '(open-input-file "MISSING.TXT")'],
   ["FILEPATH.SK8", '(open-input-file "A/B.TXT")'],
   ["FILELONG.SK8", '(open-input-file "ABCDEFGHI.TXT")'],
+  ["FILESPC.SK8", '(open-output-file "A B.TXT")'],
+  ["FILEDLM.SK8", '(open-output-file "A<B.TXT")'],
+  ["FILECOMA.SK8", '(open-output-file "A,B")'],
+  [
+    "FILESAME.SK8",
+    '(let ((p (open-input-file "INPUT.TXT"))) (open-output-file "input.txt"))',
+  ],
 ];
 // `--only=NAME,NAME` limits a development run to the named programs.
 const onlyArgument = Deno.args.find((argument) =>
@@ -698,6 +705,16 @@ try {
   for (const [name] of errorCases) {
     command(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
     checkCase(name, () => runProgram(name, "", "RUNTIME ERROR\r\n"));
+    if (name === "FILESAME.SK8") {
+      checkCase(name, () => {
+        const inputFile = readCpm22File(machine.export_drive(0), "INPUT.TXT");
+        assert.deepEqual(
+          [...inputFile.slice(0, 4)],
+          [0x41, 0x42, 0x0d, 0x0a],
+          "FILESAME.SK8: the open input file was replaced",
+        );
+      });
+    }
     command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
     command(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
   }

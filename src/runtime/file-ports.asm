@@ -6,8 +6,9 @@
 ; only the port token and the ordinary character operations.
 ;
 ; The accepted name is a current-drive CP/M 8.3 spelling.  Drive prefixes,
-; wildcards and directory separators are deliberately rejected until the
-; provider-backed file contract has a portable path policy.
+; wildcards, directory separators, spaces and CP/M command-line delimiters are
+; deliberately rejected until the provider-backed file contract has a portable
+; path policy.  Opening the input file's name for output is also rejected.
 
 ; Dispatch the four file-opening primitives (runtime kinds 55 through 58).
 SRTFILE:
@@ -77,6 +78,22 @@ SRTFOWI:
         CALL SRTPVAL
         CALL SRTFBLD
         JP C,SRTERROR
+        LD A,(SRTFIACT)            ; Only an open input file can share the name.
+        OR A
+        JR Z,SRTFWNEW
+        LD HL,SRTFCBP+1            ; Compare the new name with the input FCB name.
+        LD DE,CTINFCB+1
+        LD B,11                    ; Eight name bytes and three extension bytes.
+SRTFWCMP:
+        LD A,(DE)                  ; BDOS may set attribute bits in the input FCB.
+        AND 7FH
+        CP (HL)
+        JR NZ,SRTFWNEW             ; A different name may be replaced safely.
+        INC HL
+        INC DE
+        DJNZ SRTFWCMP
+        JP SRTERROR                ; Replacing the file being read would delete it.
+SRTFWNEW:
         LD HL,SRTFCBP
         CALL CTOPENW
         JP C,SRTERROR
@@ -218,19 +235,13 @@ SRTFPLP:
         ; updated.  Reloading from SRTFFPTR here would skip the first byte.
         CP '.'
         JR Z,SRTFFDOT
-        CP ':'
-        JP Z,SRTERROR
-        CP '/'
-        JP Z,SRTERROR
-        CP 5CH
-        JP Z,SRTERROR
-        CP '*'
-        JP Z,SRTERROR
-        CP '?'
-        JP Z,SRTERROR
-        CP 20H
+        LD HL,SRTFBADC             ; Search the bytes CP/M reserves in names.
+        LD BC,13                   ; The table holds thirteen reserved bytes.
+        CPIR                       ; Z means A matched a reserved byte.
+        JP Z,SRTERROR              ; Reject drives, paths, wildcards and delimiters.
+        CP 21H                     ; Controls and space are not name bytes.
         JP C,SRTERROR
-        CP 7FH
+        CP 7FH                     ; DEL and high bytes are not name bytes.
         JP NC,SRTERROR
         CP 'a'
         JR C,SRTFCASE
@@ -292,6 +303,9 @@ SRTFPDON:
 SRTFGOOD:
         XOR A
         RET
+
+; Drive, path, wildcard and CP/M command-line delimiter bytes.
+SRTFBADC:  DB ":/",5CH,"*?<>=,;[]|"
 
 SRTFOMOD: DB 0
 SRTFIACT:    DB 0
