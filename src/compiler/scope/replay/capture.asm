@@ -11,14 +11,8 @@ SCRECBUF:
         LD (SCREDEP),A            ; The binding list is at structural depth zero.
         LD (SCRECHD),A            ; No binding header is awaiting its symbol.
 SCRECSCN:
-        LD A,(SCREP)               ; A nested scope reads from its enclosing stream.
-        OR A
-        JR Z,SCRECRN               ; The outermost scope reads the source directly.
-        CALL SCNEXT                ; Consume the enclosing retained event stream.
-        JR SCRECGET
-SCRECRN:
-        CALL RNEXT                 ; Scan the real source once, without replay.
-SCRECGET:
+        CALL SCNEXT                ; Source or enclosing replay; binary16 literals
+                                   ; are captured as 87H so replay keeps them.
         RET C                      ; Preserve source I/O or syntax failure.
         LD (SCBEV),A              ; Save the event while it is copied.
         LD (SCBVAL),HL

@@ -48,13 +48,6 @@ SCDEFPR:
         LD (SCIDMODE),A            ; SCIDPROC stores the closure in a global cell.
         JP SCIDPROC
 
-; Read from the enclosing replay when this body is nested in a retained form.
-SCDEFGET:
-        LD A,(SCREP)
-        OR A
-        JP NZ,SCNEXT
-        JP RNEXT
-
 ; Copy the current reader event into the bounded replay stream.
 SCDEFPUT:
         LD (SCBEV),A
@@ -92,7 +85,7 @@ SCDFOK:
         LD (SCRECMOD),A
         LD (SCRECPHS),A
 SCDEFFRM:
-        CALL SCDEFGET              ; Read the next top-level body form.
+        CALL SCNEXT                ; Read the next body form, marking binary16 literals.
         JP C,SCDEFFAL
         CALL SCDEFPUT
         JP C,SCDEFFAL
@@ -103,7 +96,7 @@ SCDEFFRM:
         JP NZ,SCDEFDON             ; A scalar body form needs only one replay event.
         LD A,1
         LD (SCREDEP),A
-        CALL SCDEFGET              ; The operator identifies a definition form.
+        CALL SCNEXT                ; The operator identifies a definition form.
         JP C,SCDEFFAL
         CALL SCDEFPUT
         JP C,SCDEFFAL
@@ -120,7 +113,7 @@ SCDEFYES:
         LD A,1
         LD (SCDFMOD),A
 SCDEFSKP:
-        CALL SCDEFGET
+        CALL SCNEXT                ; Source or enclosing replay, as SCNEXT selects.
         JP C,SCDEFFAL
         CALL SCDEFPUT
         JP C,SCDEFFAL
