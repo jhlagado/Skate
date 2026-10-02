@@ -592,7 +592,25 @@ const integerRuntimeErrorCases = [
   ["MINUS0.SK8", "(-)", "RUNTIME ERROR\r\n"],
   ["CMPARITY.SK8", "(< 1)", "RUNTIME ERROR\r\n"],
 ];
+// Compiler regressions: tail context across nested ifs, forward global
+// references from procedures, formal shadowing, if nesting capacity and
+// control bytes inside tokens.
+const regressionCases = [
+  [
+    "TAILIFIF.SK8",
+    "(define (loop n) (if (if (= n 0) #f #t) (loop (- n 1)) 0)) (loop 4000)",
+    "0",
+  ],
+  [
+    "TAILIFLM.SK8",
+    "(define (g) 10) (+ 1 (if ((lambda () (if #t #t #f))) (g) 0))",
+    "11",
+  ],
+];
+const regressionErrorCases = [
+];
 const integerMode = Deno.args.includes("--integers");
+const regressionMode = Deno.args.includes("--regressions");
 const applyMode = Deno.args.includes("--apply");
 const ecMode = Deno.args.includes("--ec");
 const runtimeErrorMode = Deno.args.includes("--runtime-errors");
@@ -614,6 +632,8 @@ const regularCases = cases.filter(([name]) =>
 );
 const selectedCases = runtimeErrorMode
   ? []
+  : regressionMode
+  ? regressionCases
   : integerMode
   ? integerCases
   : applyMode
@@ -751,6 +771,8 @@ const dataRuntimeErrorCases = [
 ];
 const selectedErrorCases = runtimeErrorMode
   ? []
+  : regressionMode
+  ? regressionErrorCases
   : applyMode
   ? []
   : integerMode
@@ -762,6 +784,8 @@ const selectedErrorCases = runtimeErrorMode
   : [...errorCases, ...restErrorCases];
 const selectedRuntimeErrorCases = runtimeErrorMode
   ? runtimeErrorCases
+  : regressionMode
+  ? []
   : applyMode
   ? applyRuntimeErrorCases
   : integerMode

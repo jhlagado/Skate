@@ -120,7 +120,6 @@ SCSETUP:
         LD (SCROLLF),A            ; No publication rollback is active at setup.
         LD (SCTCTX),A             ; Top-level expressions are not tail calls.
         LD (SCMUT),A          ; Stores initialize bindings until set! selects checks.
-        LD (SCIFTAIL),A           ; No branch context is active at package entry.
         LD (SCTTOP),A             ; No pending tail-call target words exist.
         LD (SCLITN),A             ; No copied symbol or string literals exist yet.
         LD (SCLITUSE),A           ; The literal byte pool starts empty.

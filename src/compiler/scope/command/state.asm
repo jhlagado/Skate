@@ -74,7 +74,6 @@ SCRESTF:    DB 0                   ; Nonzero when the current procedure has a re
 SCRESTS:    DB 0                   ; Local slot receiving the constructed rest list.
 SCARGN:     DB 0                   ; Generic application argument count.
 SCTCTX:     DB 0                   ; Nonzero when the current expression is tail code.
-SCIFTAIL:   DB 0                   ; Tail context saved while compiling an if.
 SCTLSAV:    DB 0                   ; Saved tail context while evaluating arguments.
 SCSKIP:     DW 0                   ; Lambda jump-over patch address.
 SCPBODY:    DW 0                   ; Procedure body staged address during setup.
