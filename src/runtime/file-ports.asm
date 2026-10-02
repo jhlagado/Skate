@@ -6,8 +6,9 @@
 ; only the port token and the ordinary character operations.
 ;
 ; The accepted name is a current-drive CP/M 8.3 spelling.  Drive prefixes,
-; wildcards and directory separators are deliberately rejected until the
-; provider-backed file contract has a portable path policy.
+; wildcards, directory separators, spaces and CP/M command-line delimiters are
+; deliberately rejected until the provider-backed file contract has a portable
+; path policy.  Opening the input file's name for output is also rejected.
 
 ; Dispatch the four file-opening primitives (runtime kinds 55 through 58).
 SRTFILE:
@@ -50,9 +51,7 @@ SRTFOPI:
         LD (SRTFIACT),A
         LD A,(SRTFOMOD)
         LD (SRTFIMOD),A
-        XOR A
-        LD (SRTINCR),A
-        LD (SRTINST),A
+        CALL SRTINRST              ; The new file starts with no lookahead or EOF.
         LD A,8
         LD HL,SRTFIPT
         PUSH IX
@@ -79,6 +78,22 @@ SRTFOWI:
         CALL SRTPVAL
         CALL SRTFBLD
         JP C,SRTERROR
+        LD A,(SRTFIACT)            ; Only an open input file can share the name.
+        OR A
+        JR Z,SRTFWNEW
+        LD HL,SRTFCBP+1            ; Compare the new name with the input FCB name.
+        LD DE,CTINFCB+1
+        LD B,11                    ; Eight name bytes and three extension bytes.
+SRTFWCMP:
+        LD A,(DE)                  ; BDOS may set attribute bits in the input FCB.
+        AND 7FH
+        CP (HL)
+        JR NZ,SRTFWNEW             ; A different name may be replaced safely.
+        INC HL
+        INC DE
+        DJNZ SRTFWCMP
+        JP SRTERROR                ; Replacing the file being read would delete it.
+SRTFWNEW:
         LD HL,SRTFCBP
         CALL CTOPENW
         JP C,SRTERROR
@@ -103,14 +118,15 @@ SRTFREAD:
 SRTFROK:
         JP CTREAD
 
-; Close the input stream.  A failed close poisons the logical port.
+; Close the input stream.  A closed stream is left alone; a failed close
+; poisons the logical port.
 SRTFCLR:
         LD A,(SRTFIACT)
         OR A
         JR Z,SRTFCBAD
         XOR A
         LD (SRTFIACT),A
-        LD (SRTINSEL),A
+        CALL SRTINRST              ; Restore console state and drop the file's state.
         JP CTCLOSER
 
 ; Close the output stream and flush its final record.
@@ -124,8 +140,14 @@ SRTFCLW:
         JP CTCLOSEW
 
 SRTFCBAD:
-        SCF
-        RET
+        XOR A                      ; Closing a closed port is a no-op, as in R7RS.
+        RET                        ; Carry clear reports success to close-port.
+
+; Leave the program after flushing and closing any open output file, so text
+; written without close-port survives a normal exit.
+SRTEXIT:
+        CALL SRTFCLW               ; A close failure cannot be reported here.
+        JP 0                       ; Return to CP/M through the warm start.
 
 ; Write one byte to the active output stream.  Text mode turns a bare LF into
 ; CR/LF and avoids adding a second CR when newline has already emitted CR.
@@ -213,19 +235,13 @@ SRTFPLP:
         ; updated.  Reloading from SRTFFPTR here would skip the first byte.
         CP '.'
         JR Z,SRTFFDOT
-        CP ':'
-        JP Z,SRTERROR
-        CP '/'
-        JP Z,SRTERROR
-        CP 5CH
-        JP Z,SRTERROR
-        CP '*'
-        JP Z,SRTERROR
-        CP '?'
-        JP Z,SRTERROR
-        CP 20H
+        LD HL,SRTFBADC             ; Search the bytes CP/M reserves in names.
+        LD BC,13                   ; The table holds thirteen reserved bytes.
+        CPIR                       ; Z means A matched a reserved byte.
+        JP Z,SRTERROR              ; Reject drives, paths, wildcards and delimiters.
+        CP 21H                     ; Controls and space are not name bytes.
         JP C,SRTERROR
-        CP 7FH
+        CP 7FH                     ; DEL and high bytes are not name bytes.
         JP NC,SRTERROR
         CP 'a'
         JR C,SRTFCASE
@@ -287,6 +303,9 @@ SRTFPDON:
 SRTFGOOD:
         XOR A
         RET
+
+; Drive, path, wildcard and CP/M command-line delimiter bytes.
+SRTFBADC:  DB ":/",5CH,"*?<>=,;[]|"
 
 SRTFOMOD: DB 0
 SRTFIACT:    DB 0

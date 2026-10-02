@@ -107,7 +107,7 @@ const dataCases = [
   [
     "STRREF.SK8",
     '(begin (write (string-ref "hello" 1)) (newline))',
-    "#\\x65",
+    "#\\e",
   ],
   [
     "CHARINT.SK8",
@@ -117,7 +117,7 @@ const dataCases = [
   [
     "INTCHAR.SK8",
     "(begin (write (integer->char 65)) (newline))",
-    "#\\x41",
+    "#\\A",
   ],
   [
     "PRIMSTR.SK8",
@@ -152,7 +152,7 @@ const dataCases = [
   [
     "STRLIB.SK8",
     `(define source (string #\\a #\\b)) (define copy (string-copy source)) (define loop (lambda (n) (if (zero? n) 0 (begin (string-copy "discard") (loop (- n 1)))))) (define build (lambda (n acc) (if (zero? n) acc (build (- n 1) (cons n acc))))) (define tail (lambda (p n) (if (zero? n) p (tail (cdr p) (- n 1))))) (define root (build 600 (string #\\z))) (loop 1200) (begin (write (string #\\A #\\B)) (write (string-length (string #\\x #\\y))) (write (string-ref (string #\\a #\\b) 1)) (write (string? (string #\\z))) (write (eq? "x" "x")) (write (eq? 'x 'x)) (write copy) (write (eq? source copy)) (write (string-append "ab" (string #\\c #\\d))) (write (string-length (string-copy ${boundary}))) (write (string? (tail root 600))) (newline) (write 0) (newline))`,
-    '"AB"2#\\x62#t#t#t"ab"#f"abcd"254#t\r\n0',
+    '"AB"2#\\b#t#t#t"ab"#f"abcd"254#t\r\n0',
   ],
   [
     "NESTQ.SK8",

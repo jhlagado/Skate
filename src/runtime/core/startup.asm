@@ -124,7 +124,7 @@ SRTSTART:
         LD (SRTQACTV),A            ; No quoted-list accumulator is live yet.
 SRTCALL:
         CALL 0000H                ; The compiler patches the generated entry.
-        JP 0                      ; Return to CP/M through the warm start.
+        JP SRTEXIT                ; Close open files, then warm-start CP/M.
 
 ; Dynamic apply state is declared in this source part so later modules can
 ; resolve the shared fields without retaining cross-part forward records.
