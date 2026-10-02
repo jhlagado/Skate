@@ -478,15 +478,10 @@ if (onlyArgument) {
     }
   }
 }
-for (const [name, source] of [...cases, ...errorCases]) {
-  disk = installCpm22File(disk, {
-    name,
-    bytes: new TextEncoder().encode(source + "\x1a"),
-    padByte: 0x1a,
-  });
-}
-
-const machine = new TriptychCpu(firmware.bootRom);
+// Sources are installed per CP/M session so the 64-entry directory has room
+// for every case and the files each program creates.
+const baseDisk = disk;
+let machine;
 const decoder = new TextDecoder("ascii");
 let transcript = "";
 function readWord(address) {
@@ -611,134 +606,158 @@ function checkCase(name, check) {
   }
 }
 
-try {
-  machine.install_drive(0, disk, true);
-  runUntilPrompt(0, "the boot prompt");
-  const measurements = [];
-  for (const [name, , expected, input = "", exact = true] of cases) {
-    command(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
-    const image = machine.export_drive(0);
-    const generated = readCpm22File(image, name.replace(".SK8", ".COM"));
-    const aso = readCpm22File(image, name.replace(".SK8", ".ASO"));
-    const { asoBytes } = validateAso(aso, generated, name);
-    measurements.push({
-      name,
-      comBytes: generated.length,
-      asoBytes,
+function runCase([name, , expected, input = "", exact = true], measurements) {
+  command(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
+  const image = machine.export_drive(0);
+  const generated = readCpm22File(image, name.replace(".SK8", ".COM"));
+  const aso = readCpm22File(image, name.replace(".SK8", ".ASO"));
+  const { asoBytes } = validateAso(aso, generated, name);
+  measurements.push({
+    name,
+    comBytes: generated.length,
+    asoBytes,
+  });
+  checkCase(name, () => runProgram(name, input, expected, exact));
+  if (name === "FILEOUT.SK8") {
+    const outputFile = readCpm22File(machine.export_drive(0), "OUTPUT.TXT");
+    assert.deepEqual(
+      [...outputFile.slice(0, 3)],
+      [0x41, 0x0d, 0x0a],
+      "FILEOUT.SK8: CP/M text file bytes",
+    );
+  }
+  if (name === "BINOUT.SK8") {
+    const outputFile = readCpm22File(machine.export_drive(0), "OUTPUT.BIN");
+    assert.deepEqual(
+      [...outputFile.slice(0, 4)],
+      [0x00, 0x1a, 0x0d, 0x0a],
+      "BINOUT.SK8: binary file bytes",
+    );
+  }
+  if (name === "FILEERR.SK8") {
+    checkCase(name, () => {
+      const outputFile = readCpm22File(machine.export_drive(0), "PART.TXT");
+      assert.equal(
+        decoder.decode(outputFile.slice(0, 131)),
+        "0123456789".repeat(13) + "\x1a",
+        "FILEERR.SK8: bytes written before the error",
+      );
     });
-    checkCase(name, () => runProgram(name, input, expected, exact));
-    if (name === "FILEOUT.SK8") {
-      const outputFile = readCpm22File(machine.export_drive(0), "OUTPUT.TXT");
-      assert.deepEqual(
-        [...outputFile.slice(0, 3)],
-        [0x41, 0x0d, 0x0a],
-        "FILEOUT.SK8: CP/M text file bytes",
+  }
+  if (name === "FILEEXIT.SK8") {
+    checkCase(name, () => {
+      const outputFile = readCpm22File(machine.export_drive(0), "EXIT.TXT");
+      assert.equal(
+        decoder.decode(outputFile.slice(0, 5)),
+        "kept\x1a",
+        "FILEEXIT.SK8: bytes written before normal exit",
       );
-    }
-    if (name === "BINOUT.SK8") {
-      const outputFile = readCpm22File(machine.export_drive(0), "OUTPUT.BIN");
-      assert.deepEqual(
-        [...outputFile.slice(0, 4)],
-        [0x00, 0x1a, 0x0d, 0x0a],
-        "BINOUT.SK8: binary file bytes",
-      );
-    }
-    if (name === "FILEERR.SK8") {
-      checkCase(name, () => {
-        const outputFile = readCpm22File(machine.export_drive(0), "PART.TXT");
-        assert.equal(
-          decoder.decode(outputFile.slice(0, 131)),
-          "0123456789".repeat(13) + "\x1a",
-          "FILEERR.SK8: bytes written before the error",
-        );
-      });
-    }
-    if (name === "FILEEXIT.SK8") {
-      checkCase(name, () => {
-        const outputFile = readCpm22File(machine.export_drive(0), "EXIT.TXT");
-        assert.equal(
-          decoder.decode(outputFile.slice(0, 5)),
-          "kept\x1a",
-          "FILEEXIT.SK8: bytes written before normal exit",
-        );
-      });
-    }
-    const nativeLowSp = readWord(lowStackAddress);
-    const observedLowSp = observedStackLow();
-    if (name === "LONGLST.SK8") {
-      checkCase(name, () =>
-        assert.ok(
-          observedLowSp >= 0xd500,
-          `LONGLST.SK8: printing used stack down to ${
-            observedLowSp.toString(16)
-          }`,
-        ));
-    }
-    const heapEnd = readWord(heapPointerAddress);
-    assert.ok(nativeLowSp >= 0xd400, `${name}: native stack crossed its guard`);
-    assert.ok(
-      observedLowSp < stackTop,
-      `${name}: no stack writes were observed`,
-    );
-    assert.ok(heapEnd < nativeLowSp, `${name}: heap and stack collided`);
-    measurements[measurements.length - 1].lowSp = nativeLowSp;
-    measurements[measurements.length - 1].observedLowSp = observedLowSp;
-    measurements[measurements.length - 1].heapEnd = heapEnd;
-    measurements[measurements.length - 1].bindingAllocations = readWord(
-      bindingAllocationAddress,
-    );
-    measurements[measurements.length - 1].closureAllocations = readWord(
-      closureAllocationAddress,
-    );
-    measurements[measurements.length - 1].pairAllocations = readWord(
-      pairAllocationAddress,
-    );
-    measurements[measurements.length - 1].collections = readWord(
-      collectionCountAddress,
-    );
-    measurements[measurements.length - 1].activations = readWord(
-      frameCountAddress,
-    );
-    command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
-    command(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
+    });
   }
-  for (const [name] of errorCases) {
-    command(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
-    checkCase(name, () => runProgram(name, "", "RUNTIME ERROR\r\n"));
-    if (name === "FILESAME.SK8") {
-      checkCase(name, () => {
-        const inputFile = readCpm22File(machine.export_drive(0), "INPUT.TXT");
-        assert.deepEqual(
-          [...inputFile.slice(0, 4)],
-          [0x41, 0x42, 0x0d, 0x0a],
-          "FILESAME.SK8: the open input file was replaced",
-        );
-      });
-    }
-    command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
-    command(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
+  const nativeLowSp = readWord(lowStackAddress);
+  const observedLowSp = observedStackLow();
+  if (name === "LONGLST.SK8") {
+    checkCase(name, () =>
+      assert.ok(
+        observedLowSp >= 0xd500,
+        `LONGLST.SK8: printing used stack down to ${
+          observedLowSp.toString(16)
+        }`,
+      ));
   }
-  if (failures.length > 0) {
-    console.log(JSON.stringify({ status: "failed", failures }, null, 2));
-    Deno.exit(1);
-  }
-  console.log(JSON.stringify(
-    {
-      status: "passed",
-      compilerBytes: compiler.image.bytes.length - 0x100,
-      runtimeBytes: provider.image.bytes.length - 0x100,
-      cases: cases.map(([name]) => name),
-      largestComBytes: Math.max(
-        ...measurements.map(({ comBytes }) => comBytes),
-      ),
-      largestAsoBytes: Math.max(
-        ...measurements.map(({ asoBytes }) => asoBytes),
-      ),
-      measurements,
-    },
-    null,
-    2,
-  ));
-} finally {
-  machine.free();
+  const heapEnd = readWord(heapPointerAddress);
+  assert.ok(nativeLowSp >= 0xd400, `${name}: native stack crossed its guard`);
+  assert.ok(
+    observedLowSp < stackTop,
+    `${name}: no stack writes were observed`,
+  );
+  assert.ok(heapEnd < nativeLowSp, `${name}: heap and stack collided`);
+  measurements[measurements.length - 1].lowSp = nativeLowSp;
+  measurements[measurements.length - 1].observedLowSp = observedLowSp;
+  measurements[measurements.length - 1].heapEnd = heapEnd;
+  measurements[measurements.length - 1].bindingAllocations = readWord(
+    bindingAllocationAddress,
+  );
+  measurements[measurements.length - 1].closureAllocations = readWord(
+    closureAllocationAddress,
+  );
+  measurements[measurements.length - 1].pairAllocations = readWord(
+    pairAllocationAddress,
+  );
+  measurements[measurements.length - 1].collections = readWord(
+    collectionCountAddress,
+  );
+  measurements[measurements.length - 1].activations = readWord(
+    frameCountAddress,
+  );
+  command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
+  command(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
 }
+
+function runErrorCase([name]) {
+  command(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
+  checkCase(name, () => runProgram(name, "", "RUNTIME ERROR\r\n"));
+  if (name === "FILESAME.SK8") {
+    checkCase(name, () => {
+      const inputFile = readCpm22File(machine.export_drive(0), "INPUT.TXT");
+      assert.deepEqual(
+        [...inputFile.slice(0, 4)],
+        [0x41, 0x42, 0x0d, 0x0a],
+        "FILESAME.SK8: the open input file was replaced",
+      );
+    });
+  }
+  command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
+  command(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
+}
+
+const measurements = [];
+const programs = [
+  ...cases.map((entry) => ({ error: false, entry })),
+  ...errorCases.map((entry) => ({ error: true, entry })),
+];
+const sessionSize = 36;
+for (let first = 0; first < programs.length; first += sessionSize) {
+  const session = programs.slice(first, first + sessionSize);
+  let sessionDisk = baseDisk;
+  for (const { entry: [name, source] } of session) {
+    sessionDisk = installCpm22File(sessionDisk, {
+      name,
+      bytes: new TextEncoder().encode(source + "\x1a"),
+      padByte: 0x1a,
+    });
+  }
+  machine = new TriptychCpu(firmware.bootRom);
+  transcript = "";
+  try {
+    machine.install_drive(0, sessionDisk, true);
+    runUntilPrompt(0, "the boot prompt");
+    for (const { error, entry } of session) {
+      if (error) runErrorCase(entry);
+      else runCase(entry, measurements);
+    }
+  } finally {
+    machine.free();
+  }
+}
+if (failures.length > 0) {
+  console.log(JSON.stringify({ status: "failed", failures }, null, 2));
+  Deno.exit(1);
+}
+console.log(JSON.stringify(
+  {
+    status: "passed",
+    compilerBytes: compiler.image.bytes.length - 0x100,
+    runtimeBytes: provider.image.bytes.length - 0x100,
+    cases: cases.map(([name]) => name),
+    largestComBytes: Math.max(
+      ...measurements.map(({ comBytes }) => comBytes),
+    ),
+    largestAsoBytes: Math.max(
+      ...measurements.map(({ asoBytes }) => asoBytes),
+    ),
+    measurements,
+  },
+  null,
+  2,
+));
