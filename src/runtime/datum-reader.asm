@@ -112,23 +112,87 @@ SRTDRF:
         LD HL,0FE00H                ; FE00 is canonical #f.
         RET
 
-; Read one byte after #\\.  Named characters are added with the string reader.
+; Read a character spelling after #\: one printable byte, xHH, space or
+; newline.  The spelling is collected in the symbol buffer until a delimiter.
 SRTDRCH:
-        CALL SRTDRTK              ; The first byte is the character payload.
+        XOR A                       ; Start an empty spelling in the symbol buffer.
+        LD (SRTDRLEN),A
+        CALL SRTDRTK              ; The first byte may itself be a delimiter.
         JP C,SRTERROR               ; A missing character is malformed.
-        CP 32                       ; Control bytes cannot be unnamed characters.
+        CP 33                       ; Control bytes and space need a name.
         JP C,SRTERROR
-        JP Z,SRTERROR               ; A raw space is not a character spelling.
-        CP 127                      ; DEL and high bytes are not source characters.
+        CP 127                      ; DEL and high bytes need the hex spelling.
         JP NC,SRTERROR
-        LD (SRTDRDIG),A             ; Keep the byte while validating its delimiter.
-        CALL SRTDCKDL          ; A single-byte character must end here.
-        JP NZ,SRTERROR
-        LD A,(SRTDRDIG)             ; Restore the byte after the delimiter check.
+SRTDCHLP:
+        CALL SRTSYPUT               ; Append the byte; carry after 31 bytes.
+        JP C,SRTERROR               ; No accepted spelling is that long.
+        CALL SRTDCKDL               ; Z means a delimiter or EOF ends the spelling.
+        JR Z,SRTDCHND
+        CALL SRTDRTK                ; Consume the next spelling byte.
+        JP C,SRTERROR               ; A peeked byte cannot turn into provider EOF.
+        JR SRTDCHLP
+SRTDCHND:
+        LD HL,SRTDRSB               ; HL addresses the first spelling byte.
+        LD A,(SRTDRLEN)             ; Select the spelling form by its length.
+        DEC A                       ; A single byte denotes itself.
+        JR Z,SRTDCHV1
+        CP 2                        ; Three bytes may be the xHH spelling.
+        JR NZ,SRTDCHNM
+        LD A,(HL)                   ; The hex form starts with lowercase x.
+        CP 'x'
+        JR NZ,SRTDCHNM
+        INC HL                      ; Decode the high hexadecimal digit.
+        LD A,(HL)
+        CALL SRTDSHX
+        JP C,SRTERROR               ; Reject a malformed hexadecimal digit.
+        RLCA                        ; Move the nibble into bits 7..4.
+        RLCA
+        RLCA
+        RLCA
+        LD B,A                      ; Keep the high nibble while decoding the low.
+        INC HL                      ; Decode the low hexadecimal digit.
+        LD A,(HL)
+        CALL SRTDSHX
+        JP C,SRTERROR               ; Reject a malformed hexadecimal digit.
+        OR B                        ; Join both nibbles into the character byte.
+        JR SRTDCHVL
+SRTDCHNM:
+        LD HL,SRTDCSPN              ; Try the exact space name.
+        CALL SRTDCMAT
+        JR Z,SRTDCHVL               ; A holds byte 32 after a match.
+        LD HL,SRTDCNLN              ; Newline is the only other accepted name.
+        CALL SRTDCMAT
+        JP NZ,SRTERROR              ; Unknown names are malformed.
+        JR SRTDCHVL                 ; A holds byte 10 after a match.
+SRTDCHV1:
+        LD A,(HL)                   ; Return the single spelling byte.
+SRTDCHVL:
         LD L,A                      ; Characters use the low payload byte.
         LD H,0FFH                   ; FFxx is the reserved character range.
         XOR A                       ; Characters use the scalar logical tag.
         RET
+
+; Compare the collected spelling with the length-prefixed name at HL.  Z
+; reports an exact match and returns the byte stored after the name in A.
+SRTDCMAT:
+        LD A,(SRTDRLEN)             ; Names must match the full spelling length.
+        CP (HL)
+        RET NZ
+        LD B,A                      ; B counts the bytes left to compare.
+        LD DE,SRTDRSB               ; DE walks the collected spelling.
+SRTDCMLP:
+        INC HL                      ; Advance to the next name byte.
+        LD A,(DE)                   ; Compare one spelling byte.
+        CP (HL)
+        RET NZ                      ; A mismatch leaves NZ for the caller.
+        INC DE
+        DJNZ SRTDCMLP
+        INC HL                      ; The character value follows the name.
+        LD A,(HL)                   ; Loading it keeps the final Z result.
+        RET
+
+SRTDCSPN: DB 5,"space",32           ; #\space denotes byte 32.
+SRTDCNLN: DB 7,"newline",10         ; #\newline denotes byte 10.
 
 ; Skip spaces and semicolon comments.  A delimiter remains in lookahead.
 SRTDRSK:

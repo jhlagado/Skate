@@ -70,6 +70,13 @@ disk = installCpm22File(disk, {
   bytes: Uint8Array.from([0x00, 0x1a, 0x0d, 0x0a]),
   padByte: 0x1a,
 });
+disk = installCpm22File(disk, {
+  name: "CHARS.TXT",
+  bytes: new TextEncoder().encode(
+    String.raw`#\x41 #\space #\newline #\( #\x` + "\r\n",
+  ),
+  padByte: 0x1a,
+});
 const vector64Input = `#(${Array(64).fill("1").join(" ")})\r`;
 const vector65Input = `#(${Array(65).fill("1").join(" ")})\r`;
 
@@ -341,6 +348,17 @@ const cases = [
     "DISPLIST.SK8",
     '(begin (display (list #\\a "b c" \'d #\\space)) (write (list #\\a "b c" \'d #\\space)) (newline))',
     '(a b c d  )(#\\a "b c" d #\\space)\r\n',
+  ],
+  [
+    "RDCHARS.SK8",
+    '(let ((p (open-input-file "CHARS.TXT"))) (write (read p)) (write (read p)) (write (read p)) (write (read p)) (write (read p)) (write (read p)) (close-port p) (newline))',
+    String.raw`#\A#\space#\newline#\(#\x#<eof>` + "\r\n",
+  ],
+  [
+    "RNDTRIP.SK8",
+    String
+      .raw`(begin (let ((o (open-output-file "RT.TXT"))) (write (list "a\"\\\n" #\space #\x01 #\a 'sym -12 (vector 1 #\b "c")) o) (close-port o)) (let ((i (open-input-file "RT.TXT"))) (write (read i)) (close-port i) (newline)))`,
+    String.raw`("a\"\\\n" #\space #\x01 #\a sym -12 #(1 #\b "c"))` + "\r\n",
   ],
   [
     "ADVENTUR.SK8",
