@@ -1,5 +1,5 @@
 ; Runtime addresses used by the scope-control compiler.
-SRTLEN EQU 22397
+SRTLEN EQU 22392
 SRTCLP EQU 251
 SRTLDA EQU 517
 SRTQGET EQU 537

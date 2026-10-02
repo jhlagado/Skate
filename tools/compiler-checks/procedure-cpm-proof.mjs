@@ -404,6 +404,11 @@ const cases = [
     "0",
   ],
   [
+    "ECMANY.SK8",
+    "(define loop (lambda (n) (if (zero? n) 0 (begin (call/ec (lambda (escape) (escape 1))) (loop (- n 1)))))) (loop 20000)",
+    "0",
+  ],
+  [
     "GCLOCAL.SK8",
     "(define churn (lambda (n) (if (zero? n) 0 (begin (cons n 0) (churn (- n 1)))))) (let ((root (cons 41 42))) (begin (churn 5000) (car root)))",
     "41",

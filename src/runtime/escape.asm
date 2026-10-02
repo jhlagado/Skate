@@ -1,10 +1,25 @@
 ; Bounded one-shot escape continuations.
 ;
-; A call/ec value is a tagged scalar with tag eight and a generation token.
+; A call/ec value is a tagged scalar with tag eight and a token payload.
 ; The token is valid only while its matching dynamic record is active. The
 ; record saves the caller state before the target procedure is entered, so an
 ; escape can discard the target and any nested calls by restoring the saved
 ; native stack pointer.
+;
+; Token layout, within E000H-EFFFH (F000H and above belong to ports):
+;
+;   1110 gggg gggg gsss    sss = record slot 0..7, g = slot generation 0..511
+;
+; Each record keeps the last token issued for its slot in bytes 0..1. Opening
+; the slot again advances that slot's generation by one, wrapping from 511 back
+; to 0, so there is no global token budget and a program may perform any number
+; of sequential call/ec operations. An escape reads the slot directly from the
+; token, requires that slot to be active and requires the record's stored token
+; to match exactly; a token whose slot has since been reopened therefore fails
+; as stale. The remaining reuse window is per slot: a token saved beyond its
+; extent becomes indistinguishable from a live one only after that same slot
+; has been reopened exactly 512 times and is active again, a limit inherent in
+; the twelve bits available below the port namespace.
 
 SRTCECAL:
         POP IX                     ; Save the generated continuation after call/ec.
@@ -58,14 +73,26 @@ SRTCEOPN:
         LD (SRTCEIX),A             ; Retain the record index across address work.
         CALL SRTCEADR              ; HL now names the selected record.
         LD (SRTCEPTR),HL           ; Keep the record base for its fields.
-        LD HL,(SRTCEGEN)           ; Generation zero is reserved for no token.
-        LD DE,0EFFFH               ; Stop before the F000H port namespace.
-        OR A
-        SBC HL,DE
-        JP Z,SRTERROR              ; Exhaustion is safer than entering port values.
-        LD HL,(SRTCEGEN)
+        LD E,(HL)                  ; Read the slot's previous token low byte.
         INC HL
-        LD (SRTCEGEN),HL           ; Every new record receives a distinct token.
+        LD D,(HL)                  ; Read the previous token high byte.
+        EX DE,HL                   ; HL is the last token issued for this slot.
+        LD DE,8                    ; One generation step lies above the slot bits.
+        ADD HL,DE                  ; Advance the generation; slot bits are unchanged.
+        LD A,(SRTCEIX)             ; The low three bits must still name this slot.
+        LD B,A                     ; Keep the slot number for the comparisons.
+        LD A,L
+        AND 7                      ; Isolate the slot bits of the candidate token.
+        CP B
+        JR NZ,SRTCEG0              ; An uninitialised record starts at generation zero.
+        LD A,H
+        AND 0F0H                   ; Tokens must stay below the F000H port namespace.
+        CP 0E0H
+        JR Z,SRTCEGOK              ; The advanced token is still in E000H-EFFFH.
+SRTCEG0:
+        LD L,B                     ; Generation 511 wraps to zero for this slot.
+        LD H,SRTETOK/256           ; Generation zero has only the slot bits set.
+SRTCEGOK:
         LD (SRTCETK),HL            ; SRTCECAL reads this value after the save.
         LD DE,(SRTCEPTR)
         LD A,L                     ; Store the token low byte.
@@ -179,35 +206,29 @@ SRTCEPRE:
         LD IX,(SRTCEJMP)
         JP (IX)                    ; Continue after call/ec with the target result.
 
-; Invoke an escape token. Search from the newest record so an outer escape
-; may intentionally discard one or more nested dynamic extents.
+; Invoke an escape token. Its slot bits select the record directly, so an
+; outer escape may intentionally discard one or more nested dynamic extents.
 SRTCEESC:
         LD A,(SRTARGC)             ; An escape procedure accepts one result value.
         CP 1
         JP NZ,SRTERROR
-        LD HL,(SRTVAL)             ; The callee payload is the generation token.
+        LD HL,(SRTVAL)             ; The callee payload is the slot and generation.
         LD (SRTCEKEY),HL
-        LD A,(SRTCEDEP)            ; No active record makes every token invalid.
-        OR A
-        JP Z,SRTERROR
-        LD (SRTCEIX),A             ; The search cursor starts above the top record.
-SRTCESR:
-        LD A,(SRTCEIX)
-        DEC A
-        LD (SRTCEIX),A             ; Bounded search never reads below record zero.
+        LD A,L
+        AND 7                      ; The low three bits name the token's record slot.
+        LD (SRTCEIX),A             ; Retain the slot for the record address and hit.
+        LD HL,SRTCEDEP             ; Only slots below the current depth are active.
+        CP (HL)
+        JP NC,SRTERROR             ; A retired slot cannot escape another computation.
         CALL SRTCEADR
-        LD (SRTCEPTR),HL           ; Retain the candidate record across comparison.
-        LD E,(HL)                  ; Read the candidate token low byte.
+        LD (SRTCEPTR),HL           ; Retain the selected record for the hit path.
+        LD E,(HL)                  ; Read the slot's current token low byte.
         INC HL
-        LD D,(HL)
+        LD D,(HL)                  ; Read its high byte; DE holds slot and generation.
         LD HL,(SRTCEKEY)
-        OR A
+        OR A                       ; Clear carry before the exact comparison.
         SBC HL,DE
-        JR Z,SRTCEHIT              ; Matching generation selects the escape target.
-        LD A,(SRTCEIX)
-        OR A
-        JR NZ,SRTCESR              ; Continue toward the oldest active record.
-        JP SRTERROR                ; A stale token cannot escape another computation.
+        JP NZ,SRTERROR             ; An older generation of this slot is stale.
 
 SRTCEHIT:
         LD A,(SRTCEIX)
@@ -337,7 +358,6 @@ SRTCERL:
 
 ; Dynamic escape state and the bounded record table.
 SRTCEDEP:  DB 0                    ; Number of active call/ec records.
-SRTCEGEN:  DW SRTETOK-1            ; Tokens live above every managed vector address.
 SRTCECT:   DW 0                    ; Generated continuation during record setup.
 SRTCEBS:   DW 0                    ; Native stack boundary during record setup.
 SRTCEFV:   DW 0                    ; Target procedure payload during setup.

@@ -32,6 +32,11 @@ export const runtimeErrorCases = [
     "RUNTIME ERROR\r\n",
   ],
   [
+    "ECREUSE.SK8",
+    "(define saved #f) (call/ec (lambda (escape) (set! saved escape) 7)) (call/ec (lambda (k) (saved 1)))",
+    "RUNTIME ERROR\r\n",
+  ],
+  [
     "ECARITY.SK8",
     "(call/ec (lambda (escape) (escape)))",
     "RUNTIME ERROR\r\n",
