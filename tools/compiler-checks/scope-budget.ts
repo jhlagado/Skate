@@ -65,6 +65,11 @@ export function measureScopeControlBudget(
   }
   const allocationBytes = imageBytes + stagedOutputLimit + fixedTableBytes +
     SCOPE_STACK_RESERVE;
+  if (allocationBytes > SCOPE_ALLOCATION_LIMIT) {
+    throw new RangeError(
+      `scope compiler allocation ${allocationBytes} B exceeds ${SCOPE_ALLOCATION_LIMIT} B`,
+    );
+  }
   return {
     imageEnd: image.end,
     imageBytes,

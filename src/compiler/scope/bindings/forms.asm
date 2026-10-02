@@ -154,7 +154,6 @@ SCRECBD:
 SCLETINI:
         POP AF
         LD (SCSLOT),A
-        JP SCRECFL
 
 ; A letrec failure must release its replay frame before the normal scope unwind.
 SCRECFL:

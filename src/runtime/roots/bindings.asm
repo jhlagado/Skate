@@ -54,16 +54,18 @@ SRTBSTA:
         AND C
         RET
 
-; Record the binding start most recently allocated by SRTCELL.
+; Record the binding start most recently allocated by SRTCELL.  HL returns
+; the cell address in both cases; carry set means it has no start-map bit.
 SRTBNEW:
         LD HL,(SRTCELLP)
         LD (SRTBADDR),HL
         CALL SRTBPOS
-        RET C
+        JR C,SRTBNEWX              ; An unmapped cell cannot be published.
         LD A,(HL)
         OR C
         LD (HL),A
-        LD HL,(SRTCELLP)
+SRTBNEWX:
+        LD HL,(SRTCELLP)           ; Restore the cell address; LD keeps carry.
         RET
 
 ; Clear one allocation-start bit in the closure-start map.

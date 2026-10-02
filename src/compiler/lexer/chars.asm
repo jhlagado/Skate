@@ -30,6 +30,7 @@ LCHARLOP:
         CP 7             ; The longest supported name is newline, seven bytes.
         JP Z,LSYNTAX     ; No valid character name has an eighth byte.
         CALL LEXTAKE       ; Consume one additional name byte.
+        CALL LEXCTRL     ; Control bytes cannot appear in a character name.
         CALL LAPPEND     ; Retain it for exact name or hex matching.
         JR LCHARLOP      ; Continue until delimiter or EOF.
 ; A character is one byte, xHH, or an exact supported name.

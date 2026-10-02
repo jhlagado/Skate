@@ -14,7 +14,6 @@ SCPTR:    DW 0                   ; Stream input cursor.
 SCLEFT:   DW 0                   ; Remaining stream byte count.
 SCAIMG:   DW 0                   ; Staged source cursor for ASO IMAGE data.
 SCAADDR:  DW 0                   ; Absolute address of the next ASO IMAGE.
-SCASLEFT: DW 0                   ; Remaining COM bytes for ASO IMAGE records.
 SCACHUNK:  DW 0                  ; Current IMAGE payload length.
 SCAENDP:  DW 0                   ; ASO high-water and final-cursor word.
 SCAETOP:  DB 0                  ; ASO high-water top byte, one only at $10000.

@@ -61,41 +61,57 @@ SRTPORTE:
 ; Read one input port argument, or use the permanent current input port.
 SRTINSET:
         LD A,(SRTARGC)
-        OR A
-        JR NZ,SRTINEXP             ; An argument selects a specific input port.
-        XOR A
-        LD (SRTINSEL),A             ; The compatibility form uses console input.
-        RET
-SRTINEXP:
-        CP 1
+        OR A                       ; A zero count selects console input.
+        JR Z,SRTINUSE              ; A is zero: the default form uses console input.
+        CP 1                       ; One argument names a specific input port.
         JP NZ,SRTERROR
         LD HL,SRTARGPK
         CALL SRTPVAL
         CALL SRTVPORT
         JP C,SRTERROR
-        LD (SRTVAL),HL
-        LD DE,SRTINPT
-        OR A
-        SBC HL,DE
-        JR Z,SRTINCON               ; The standard input port uses the console hook.
-        LD HL,(SRTVAL)
-        LD DE,SRTFIPT
-        OR A
-        SBC HL,DE
-        JP NZ,SRTERROR              ; Output and error ports cannot be read.
-        LD A,(SRTFIACT)
-        OR A
-        JP Z,SRTERROR               ; A closed file token cannot be read.
-        LD A,1
-        LD (SRTINSEL),A             ; Select the native file adapter.
-        XOR A
-        LD (SRTARGC),A
-        RET
-SRTINCON:
-        XOR A
-        LD (SRTINSEL),A             ; Select the direct console adapter.
         XOR A                      ; Normalize the explicit form to no arguments.
         LD (SRTARGC),A
+        LD A,L                     ; SRTVPORT left a token in F008H..F00CH.
+        CP 8                       ; The standard input port uses the console hook.
+        JR Z,SRTINCON
+        CP 0BH                     ; Output and error ports cannot be read.
+        JP NZ,SRTERROR
+        LD A,(SRTFIACT)            ; An open file is flagged with exactly one.
+        OR A
+        JP Z,SRTERROR               ; A closed file token cannot be read.
+        JR SRTINUSE                ; A is one: select the native file adapter.
+SRTINCON:
+        XOR A                      ; Zero selects the console adapter.
+
+; Make input source A live (zero console, one file).  Each source owns its
+; lookahead state, pending byte and pending CR; the inactive source's copy is
+; parked so file lookahead or EOF never leaks into console reads.
+SRTINUSE:
+        LD HL,SRTINSEL             ; Compare the request with the live source.
+        CP (HL)
+        RET Z                      ; The requested source already owns live state.
+        LD (HL),A                  ; Publish the new live source.
+        LD HL,(SRTINST)            ; The live state and pending byte form one word.
+        LD DE,(SRTINPKS)           ; Load the other source's parked word.
+        LD (SRTINST),DE            ; The parked source becomes live.
+        LD (SRTINPKS),HL           ; The previous live source is parked.
+        LD A,(SRTINCR)             ; Exchange the pending-CR flags as well.
+        LD B,A
+        LD A,(SRTINPKC)
+        LD (SRTINCR),A
+        LD A,B
+        LD (SRTINPKC),A
+        RET
+
+; Return to console input and forget the file's input state.  File open and
+; close use this so a new or closed file starts with no lookahead or EOF.
+SRTINRST:
+        XOR A                      ; Console input becomes the live source.
+        CALL SRTINUSE
+        LD HL,0                    ; Empty state and no pending byte for the file.
+        LD (SRTINPKS),HL
+        XOR A                      ; No CR is pending for the file either.
+        LD (SRTINPKC),A
         RET
 
 ; Select output or error for a one-value operation.  The value remains in the
@@ -103,92 +119,52 @@ SRTINCON:
 SRTOUT1:
         LD A,(SRTARGC)
         CP 1
-        JR Z,SRTO1DEF
+        JR Z,SRTODEF
         CP 2
         JP NZ,SRTERROR
-        LD HL,SRTARGPK+4
-        CALL SRTPVAL
-        CALL SRTVPORT
-        JP C,SRTERROR
-        LD (SRTVAL),HL             ; Keep the selected token across comparisons.
-        LD DE,SRTPOUT
-        OR A
-        SBC HL,DE
-        JR Z,SRTO1CON
-        LD HL,(SRTVAL)
-        LD DE,SRTPERR
-        OR A
-        SBC HL,DE
-        JR Z,SRTO1CON
-        LD HL,(SRTVAL)
-        LD DE,SRTFOPT
-        OR A
-        SBC HL,DE
-        JP NZ,SRTERROR
-        LD A,(SRTFOACT)
-        OR A
-        JP Z,SRTERROR              ; A closed file token cannot be written.
-        LD A,1
-        LD (SRTOUTS),A
+        LD HL,SRTARGPK+4           ; The port follows the value record.
+        CALL SRTOSEL               ; Validate it and select its adapter.
         LD A,1                     ; Hide the optional port from the operation.
         LD (SRTARGC),A
-        RET
-SRTO1CON:
-        XOR A
-        LD (SRTOUTS),A           ; Standard output and error share the byte hook.
-        LD A,1
-        LD (SRTARGC),A
-        RET
-SRTO1DEF:
-        XOR A
-        LD (SRTOUTS),A
-        LD HL,SRTPOUT               ; Compatibility output uses current output.
         RET
 
 ; Select output or error for a zero-value operation such as newline.
 SRTOUT0:
         LD A,(SRTARGC)
         OR A
-        JR Z,SRTO0DEF
+        JR Z,SRTODEF
         CP 1
         JP NZ,SRTERROR
-        LD HL,SRTARGPK
+        LD HL,SRTARGPK             ; The port is the only packet record.
+        CALL SRTOSEL               ; Validate it and select its adapter.
+        XOR A                      ; Remove the optional port packet record.
+        LD (SRTARGC),A
+        RET
+SRTODEF:
+        XOR A                      ; The default form uses current output.
+        LD (SRTOUTS),A
+        LD HL,SRTPOUT
+        RET
+
+; Select the output adapter for the port in the packet record at HL.
+SRTOSEL:
         CALL SRTPVAL
         CALL SRTVPORT
         JP C,SRTERROR
-        LD (SRTVAL),HL
-        LD DE,SRTPOUT
-        OR A
-        SBC HL,DE
-        JR Z,SRTO0CON
-        LD HL,(SRTVAL)
-        LD DE,SRTPERR
-        OR A
-        SBC HL,DE
-        JR Z,SRTO0CON
-        LD HL,(SRTVAL)
-        LD DE,SRTFOPT
-        OR A
-        SBC HL,DE
-        JP NZ,SRTERROR
-        LD A,(SRTFOACT)
-        OR A
-        JP Z,SRTERROR
-        LD A,1
+        LD A,L                     ; SRTVPORT left a token in F008H..F00CH.
+        CP 0CH                     ; File output uses the CP/M file adapter.
+        JR Z,SRTOSFIL
+        SUB 9                      ; Output F009H and error F00AH share the hook.
+        CP 2
+        JP NC,SRTERROR             ; Input ports cannot be written.
+        XOR A                      ; Select the console byte hook.
         LD (SRTOUTS),A
-        XOR A                      ; Remove the optional port packet record.
-        LD (SRTARGC),A
         RET
-SRTO0CON:
-        XOR A
-        LD (SRTOUTS),A
-        XOR A                      ; Remove the optional port packet record.
-        LD (SRTARGC),A
-        RET
-SRTO0DEF:
-        XOR A
-        LD (SRTOUTS),A
-        LD HL,SRTPOUT
+SRTOSFIL:
+        LD A,(SRTFOACT)            ; An open file is flagged with exactly one.
+        OR A
+        JP Z,SRTERROR              ; A closed file token cannot be written.
+        LD (SRTOUTS),A             ; One selects the file adapter.
         RET
 
 ; The three predicates validate without contacting CP/M.
@@ -201,30 +177,22 @@ SRTINPQ:
         CALL SRTONE
         CALL SRTVPORT
         JP C,SRTBNO
-        LD (SRTVAL),HL
-        LD DE,SRTINPT
-        OR A
-        SBC HL,DE
+        LD A,L                     ; SRTVPORT left a token in F008H..F00CH.
+        CP 8                       ; Standard input is an input port.
         JP Z,SRTBYES
-        LD HL,(SRTVAL)
-        LD DE,SRTFIPT
-        OR A
-        SBC HL,DE
+        CP 0BH                     ; So is the file input token.
         JP Z,SRTBYES
         JP SRTBNO
 SRTOUTPQ:
         CALL SRTONE
         CALL SRTVPORT
         JP C,SRTBNO
-        LD A,H
-        CP 0F0H
-        JP NZ,SRTBNO
-        LD A,L
-        CP 9
-        JP C,SRTBNO
-        CP 0DH
-        JP NC,SRTBNO
-        JP SRTBYES
+        LD A,L                     ; SRTVPORT left a token in F008H..F00CH.
+        CP 8                       ; Standard input is not an output port.
+        JP Z,SRTBNO
+        CP 0BH                     ; Neither is the file input token.
+        JP Z,SRTBNO
+        JP SRTBYES                 ; Output, error and file output remain.
 
 ; Standard records are owned by the runtime and cannot be closed. File records
 ; call the matching CP/M adapter and then become unavailable.
@@ -235,15 +203,10 @@ SRTCLOSP:
         CALL SRTONE
         CALL SRTVPORT
         JP C,SRTERROR
-        LD (SRTVAL),HL
-        LD DE,SRTFIPT
-        OR A
-        SBC HL,DE
+        LD A,L                     ; SRTVPORT left a token in F008H..F00CH.
+        CP 0BH                     ; Close the file input stream.
         JR Z,SRTCLWIN
-        LD HL,(SRTVAL)
-        LD DE,SRTFOPT
-        OR A
-        SBC HL,DE
+        CP 0CH                     ; Standard ports cannot be closed.
         JP NZ,SRTERROR
 SRTCLWOU:
         CALL SRTFCLW
@@ -306,10 +269,11 @@ SRTINPOL:
         LD A,(SRTFIMOD)
         OR A
         JR NZ,SRTINBIN                ; Binary files preserve CR, LF and Control-Z.
-        JR SRTCRNXT                   ; Text files use the normal CR/LF policy.
+        JR SRTINCRK                   ; Text files share the console CR/LF folding.
 SRTINC2:
         CALL SRTIN                    ; BDOS function one supplies the next raw byte.
         LD B,A                        ; Keep it while checking the pending CR state.
+SRTINCRK:
         LD A,(SRTINCR)
         OR A
         JR Z,SRTCRNXT                 ; No earlier CR needs an LF decision.
@@ -356,4 +320,6 @@ SRTINBIN:
 SRTINST:  DB 0                     ; Empty, pending byte or sticky EOF.
 SRTINPBY:  DB 0                     ; Logical byte retained by datum lookahead.
 SRTINSEL:  DB 0                     ; Zero selects console input; one selects a file.
+SRTINPKS:  DW 0                     ; Parked state and pending byte of the idle source.
+SRTINPKC:  DB 0                     ; Parked pending-CR flag of the idle source.
 SRTOUTS: DB 0                     ; Zero selects console output; one selects a file.

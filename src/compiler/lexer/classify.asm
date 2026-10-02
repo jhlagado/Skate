@@ -6,6 +6,9 @@ LEXMATCH: LD DE,LBUFFER
         LD B,A           ; Count precisely the nonempty buffered spelling.
 ; Compare one buffered byte, then require the constant to end too.
 LMATLOP:
+        LD A,(HL)        ; Stop at the constant's terminator: a longer token
+        OR A             ; cannot match, and bytes past it belong to another name.
+        JR Z,LMATLONG
         LD A,(DE)        ; Read the current byte from the candidate token.
         CP (HL)          ; Compare it against this byte of the constant spelling.
         RET NZ           ; A differing byte rejects this constant immediately.
@@ -15,6 +18,8 @@ LMATLOP:
         LD A,(HL)        ; Inspect the constant immediately after the matched prefix.
         OR A             ; Only its zero terminator proves equal lengths.
         RET              ; Return Z for exact equality, NZ for a longer constant.
+LMATLONG: INC A          ; A=1: return NZ for a token longer than the constant.
+        RET
 LCSPACE: DB "space",0
 LCNEWLN: DB "newline",0
 LEXCINF:  DB "+inf.0",0

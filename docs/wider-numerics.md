@@ -1,5 +1,9 @@
 # Wider numeric payloads
 
+> **Status: design note and plan.** Nothing in this document is implemented.
+> Skate's exact integers and binary16 values are still sixteen-bit payloads;
+> the four-byte cell only reserves the extension byte described here.
+
 The four-byte cell leaves a byte beside the current sixteen-bit payload. That
 byte can hold the high part of a future numeric value, but storage alone does
 not make the language twenty-four-bit. Values still travel through the current

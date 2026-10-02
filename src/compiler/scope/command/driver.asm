@@ -44,6 +44,7 @@ SCMASKB  EQU 16                  ; One mask covers the 128 local slots.
 SCLOCEV  EQU 0C600H              ; One escape flag belongs to each local slot.
 SCBFRAME EQU 0C700H              ; Nested body lookahead records use this area.
 SCBFSZ   EQU 9                   ; Cursors, owner and procedure patch state.
+SCBFMAX  EQU 28                  ; 28 records of SCBFSZ bytes end below SCGPRIM.
 SCGPRIM  EQU 0C800H              ; One predefined-primitive kind per global slot.
 SCBRANCH EQU 0C900H              ; Generic short-circuit branch patch stack.
 SCIFALSE EQU 0CA00H              ; False-branch patch words for nested if forms.
@@ -88,12 +89,10 @@ SCREFAIL:
         LD A,1                     ; Recovery failure has no source location.
         LD (SCPHASE),A             ; Force the plain output diagnostic path.
         CALL SCPRECER               ; Select OUTPUT ERROR and close any stream.
-        JP SCFAIL                   ; Do not start a new transaction after uncertainty.
 SCFAIL:
         JP SCDIAG                  ; Close input and print the selected diagnostic.
 SCMEM:
         LD DE,SCMEMTXT             ; Memory guard failure is distinct to the user.
-        JP SCPRINT                ; Print the diagnostic and return to CP/M.
 
 SCPRINT:
         LD C,9                     ; CP/M function 9 prints a dollar-terminated string.
@@ -102,7 +101,6 @@ SCPRINT:
 
 ; Initialise reader contexts, compiler tables and the staged runtime image.
 SCSETUP:
-        LD A,0FFH                 ; Unknown global names carry the FF marker.
         XOR A                     ; Reset global and local allocation cursors.
         LD (SCGCOUNT),A           ; Low byte of the 16-bit global count.
         LD (SCGCOUNT+1),A         ; High byte remains zero until all 256 slots exist.
@@ -123,7 +121,6 @@ SCSETUP:
         LD (SCROLLF),A            ; No publication rollback is active at setup.
         LD (SCTCTX),A             ; Top-level expressions are not tail calls.
         LD (SCMUT),A          ; Stores initialize bindings until set! selects checks.
-        LD (SCIFTAIL),A           ; No branch context is active at package entry.
         LD (SCTTOP),A             ; No pending tail-call target words exist.
         LD (SCLITN),A             ; No copied symbol or string literals exist yet.
         LD (SCLITUSE),A           ; The literal byte pool starts empty.
@@ -222,6 +219,8 @@ SCEVGOOD:
 
 ; Finish a nonempty package with the return instruction used by SRTCALL.
 SCENDPK:
+        CALL CSCLOSE               ; A missing, unreadable or bad part is an error.
+        RET C                      ; SCDIAG selects the source diagnostic.
         LD HL,(SCFORMN)            ; Reject an empty source before publication.
         LD A,H                     ; Test both bytes of the form count.
         OR L                       ; A zero count has no result for SRTPRINT.
@@ -278,15 +277,16 @@ SCREF:
         JR C,SCRGLOB                ; Existing globals use the ordinary slot path.
         CALL SCPLOOK                ; Unbound primitive names can stay immediate.
         OR A
-        JR NZ,SCRPRIM               ; Emit the predefined value without a slot.
-        JP SCRRFWD                  ; Reserve recursive forward names or use globals.
-SCRRFWD:
+        JP NZ,SCPRIM                ; Emit the predefined value without a slot.
         LD A,(SCRECMOD)             ; Only a recursive initializer may reserve a cell.
         OR A
         JR Z,SCGGETP                ; Ordinary unresolved names become globals.
         LD A,(SCRECPHS)
         OR A
         JR Z,SCGGETP                ; The recursive body has a closed binding range.
+        LD A,(SCCURPR)              ; Inside a procedure body the name cannot be a
+        INC A                       ; later binding of this scope: every recursive
+        JR NZ,SCGGETP               ; name is predeclared, so it is a global.
         CALL SCRECREF                ; Reserve a bounded forward local cell.
         RET C
         LD L,A
@@ -302,8 +302,6 @@ SCRGLOB:
         LD L,A                     ; SCGHAS returns the existing global slot in A.
         XOR A                      ; Kind zero denotes a package-global slot.
         JP SCLOAD                  ; Emit the checked runtime load and its fixup.
-SCRPRIM:
-        JP SCPRIM                  ; Emit a reserved primitive value directly.
 SCRLOCAL:
         LD L,A                     ; SCLOCF returns the matching local slot number.
         LD A,1                     ; Kind one denotes a local slot.

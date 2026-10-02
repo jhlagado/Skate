@@ -185,7 +185,6 @@ SCNMBERR:
         LD (SCBISOL),A
 SCNAMUNW:
         CALL SCUNWIND
-        JP SCNAMERR
 
 ; Named dispatch bypasses SCLETSET's normal return, so remove that return
 ; before using the ordinary saved-scope cleanup paths.

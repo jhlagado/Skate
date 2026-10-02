@@ -1,14 +1,19 @@
 ; -----------------------------------------------------------------------------
-; CIPARSE -- recognise leading `(include "...")` forms in the root
+; CIPARSE -- scan the open part's leading `(include "...")` forms
+;
+; Out: carry set for a malformed form, a bad or excess name, a cycle or a read
+; error.  Otherwise A = the index of the first name not yet in the source
+; table (just added), or FFH when every name is already ordered; then CIEND
+; holds the length of the include region.
 ; -----------------------------------------------------------------------------
 CIPARSE:
+        LD HL,0
+        LD (CIPOS),HL                  ; Count bytes from the start of the part.
+        LD (CIEND),HL                  ; No include region has been seen yet.
 .FORM:  CALL CISKIPV                   ; Leading comments and whitespace are free.
         JR C,.EMPTY                    ; An all-directive file has no body.
         CP '('
         JR NZ,.ORDINARY                ; Any other datum starts ordinary source.
-        LD HL,(CIPOS)                  ; Save the opening parenthesis position.
-        DEC HL
-        LD (CIFORM),HL                 ; It is the root skip point if not include.
         CALL CISKIPV                   ; Skip trivia before the directive name.
         JR C,.PSBAD
         CALL CIHEAD                    ; Match the seven-byte word `include`.
@@ -18,8 +23,6 @@ CIPARSE:
         JR .ORDINARY                   ; A different list is ordinary source.
 .HEADOK:
         LD (CIARG),A                   ; One means CIHEAD consumed an opening quote.
-        LD A,1                         ; Remember that the root has an include.
-        LD (CSINDEX+5),A
 .ARGS:  LD A,(CIARG)
         CP 1
         JR Z,.INLINE                   ; CIHEAD already consumed the opening quote.
@@ -33,8 +36,15 @@ CIPARSE:
         LD (CIARG),A                   ; Clear the pending-quote state.
         CALL CISTRING                   ; Copy one bounded filename to CSPART.
         JR C,.PSBAD
-        CALL CIADD                      ; Validate, de-duplicate and retain its FCB.
+        CALL CIADD                      ; Validate the name and find or add its entry.
         JR C,.PSBAD
+        RET NZ                          ; A new dependency is visited before this part.
+        CALL CIHEADP                    ; An ordered part has its header length;
+        LD A,(HL)                       ; a part still on the path holds FFFFH.
+        INC HL
+        AND (HL)
+        INC A
+        JR Z,.PSBAD                     ; Including a part on the path is a cycle.
         LD A,2
         LD (CIARG),A                   ; Two means at least one name is complete.
         JR .ARGS                       ; More filenames may follow in this form.
@@ -45,36 +55,14 @@ CIPARSE:
         OR A
         JR Z,.PSBAD                    ; Empty include forms are not accepted.
         LD HL,(CIPOS)
-        LD (CSINDEX+16),HL             ; Omit this form from the root stream.
+        LD (CIEND),HL                  ; Blank this form when the part is streamed.
         JP .FORM
-.ORDINARY:
-        LD A,(CSINDEX+5)
-        OR A
-        JR NZ,.HASINC                  ; Keep the skip after the last include.
-        XOR A
-        LD (CSINDEX+16),A              ; No include means no bytes are masked.
-        LD (CSINDEX+17),A
-.HASINC:
-        OR A
-        RET
 .EMPTY: LD A,(CSERROR)                ; A read error is not a clean empty source.
         OR A
-        JR NZ,.EMPERR
-        LD A,(CSINDEX+5)               ; EOF after includes has no root body.
-        OR A
-        JR NZ,.EMPTYINC
-        XOR A
-        LD (CSINDEX+16),A              ; A source without includes streams intact.
-        LD (CSINDEX+17),A
-        OR A
-        RET
-.EMPTYINC:
-        LD HL,(CIPOS)
-        LD (CSINDEX+16),HL             ; Skip the complete directive region.
-        OR A
-        RET
-.EMPERR:
-        SCF
+        JR NZ,.PSBAD
+.ORDINARY:
+        LD A,0FFH                      ; Every leading include is already ordered.
+        OR A                           ; Carry clear with the complete marker.
         RET
 .PSBAD: SCF                            ; The caller assigns the source error code.
         RET
@@ -205,21 +193,12 @@ CISTRING:
 .STRBAD: SCF
         RET
 
-; Add CSPART as a normalised CP/M FCB prefix to CSSEEN.  The drive comes from
-; the root; base and extension are upper-cased and padded with spaces.
-CIADD:  LD A,(CSINDEX+6)
-        CP 32
-        JP NC,.ADDBAD                  ; Root plus 31 direct includes maximum.
-        LD L,A
-        LD H,0
-        ADD HL,HL                      ; Two times the table index.
-        ADD HL,HL                      ; Four times the table index.
-        PUSH HL
-        ADD HL,HL                      ; Eight times the table index.
-        POP DE                         ; Add the four-times component.
-        ADD HL,DE
-        LD DE,CSSEEN
-        ADD HL,DE                       ; HL points at the new 12-byte slot.
+; Find or add CSPART as a normalised CP/M FCB prefix in CSSEEN.  The drive
+; comes from the root; base and extension are upper-cased and space padded.
+; Out: carry for a bad name or a full table; otherwise A = entry index with Z
+; for a known name and NZ for a new one (a new index is never zero).
+CIADD:  LD A,(CSCOUNT)                 ; Build the candidate in the next slot;
+        CALL CSENTRY                    ; CSSEEN has one spare slot past the limit.
         LD (CITGT),HL                   ; Retain the destination for component writes.
         LD A,(CSSEEN)                   ; Copy the root drive byte.
         LD (HL),A
@@ -295,7 +274,7 @@ CIADD:  LD A,(CSINDEX+6)
         LD A,(CIBASE)
         OR A
         JP Z,.ADDBAD
-        LD A,(CSINDEX+6)
+        LD A,(CSCOUNT)
         LD B,A                          ; Compare against all prior prefixes.
         LD HL,CSSEEN                    ; HL walks prior slots.
 .COMPARE:
@@ -312,16 +291,23 @@ CIADD:  LD A,(CSINDEX+6)
         JR NZ,.CBYTE
         POP HL
         POP BC
-        JP .ADDBAD                      ; Duplicate root or include name.
+        LD A,(CSCOUNT)                  ; B counted down from the table size.
+        SUB B                           ; A = index of the existing entry.
+        LD C,A
+        XOR A                           ; Z and no carry: the name is known.
+        LD A,C
+        RET
 .CMISS: POP HL
         POP BC
         LD DE,12
         ADD HL,DE
         DJNZ .COMPARE
-        LD A,(CSINDEX+6)
-        INC A
-        LD (CSINDEX+6),A
-        OR A
+        LD HL,CSCOUNT                   ; Keep the candidate as a new entry.
+        LD A,(HL)
+        CP CSMAXP
+        JR NC,.ADDBAD                   ; Root plus 31 included parts maximum.
+        INC (HL)
+        OR A                            ; NZ and no carry: A is the new index.
         RET
 .ADDBAD: SCF
         RET
@@ -353,8 +339,8 @@ CIUPPER:
 .UPBAD: SCF
         RET
 
-; CINRAW reads a byte while the root is being scanned and advances CIPOS.
-CINRAW: CALL CIPARTB
+; CINRAW reads a byte while a part is being scanned and advances CIPOS.
+CINRAW: CALL CSRAW
         RET C
         PUSH AF
         LD HL,CIPOS

@@ -70,6 +70,23 @@ disk = installCpm22File(disk, {
   bytes: Uint8Array.from([0x00, 0x1a, 0x0d, 0x0a]),
   padByte: 0x1a,
 });
+disk = installCpm22File(disk, {
+  name: "CHARS.TXT",
+  bytes: new TextEncoder().encode(
+    String.raw`#\x41 #\space #\newline #\( #\x` + "\r\n",
+  ),
+  padByte: 0x1a,
+});
+disk = installCpm22File(disk, {
+  name: "CRLF.TXT",
+  bytes: Uint8Array.from([0x41, 0x0d, 0x0a, 0x42, 0x0d, 0x0a]),
+  padByte: 0x1a,
+});
+disk = installCpm22File(disk, {
+  name: "DATUM.TXT",
+  bytes: new TextEncoder().encode("(1 2) foo\r\n"),
+  padByte: 0x1a,
+});
 const vector64Input = `#(${Array(64).fill("1").join(" ")})\r`;
 const vector65Input = `#(${Array(65).fill("1").join(" ")})\r`;
 
@@ -82,17 +99,17 @@ const cases = [
   [
     "CHARPRNT.SK8",
     "(begin (write #\\A) (display #\\B) (newline))",
-    "#\\x41B\r\n",
+    "#\\AB\r\n",
   ],
   [
     "CHARCTL.SK8",
     "(begin (write #\\newline) (write #\\x00) (write #\\x7f) (newline))",
-    "#\\x0a#\\x00#\\x7f\r\n",
+    "#\\newline#\\x00#\\x7f\r\n",
   ],
   [
     "DISPLAYP.SK8",
     "(display (list #\\A #\\B))",
-    "(#\\x41 #\\x42)",
+    "(A B)",
   ],
   [
     "DISPZERO.SK8",
@@ -132,7 +149,7 @@ const cases = [
   [
     "BININ.SK8",
     '(let ((p (open-input-binary-file "INPUT.BIN"))) (write (read-char p)) (write (read-char p)) (write (read-char p)) (write (read-char p)) (newline))',
-    "#\\x00#\\x1a#\\x0d#\\x0a\r\n",
+    "#\\x00#\\x1a#\\x0d#\\newline\r\n",
   ],
   [
     "BINOUT.SK8",
@@ -235,13 +252,13 @@ const cases = [
   [
     "CRONLY.SK8",
     "(begin (write (read-char)) (newline))",
-    "\r#\\x0a\r\n",
+    "\r#\\newline\r\n",
     "\r",
   ],
   [
     "CRPORT.SK8",
     "(begin (write (read-char (current-input-port))) (newline))",
-    "\r#\\x0a\r\n",
+    "\r#\\newline\r\n",
     "\r",
   ],
   [
@@ -312,6 +329,115 @@ const cases = [
     "\x1a",
   ],
   [
+    "PRINTPRC.SK8",
+    "(begin (display car) (write car) (display (lambda (x) x)) (newline))",
+    "#<procedure>#<procedure>#<procedure>\r\n",
+  ],
+  [
+    "PRINTVEC.SK8",
+    "(begin (write (vector 1 (vector 2 3) '(4))) (display (vector)) (newline))",
+    "#(1 #(2 3) (4))#()\r\n",
+  ],
+  [
+    "PRINTPRT.SK8",
+    "(begin (display (current-output-port)) (write (list (current-input-port))) (newline))",
+    "#<port>(#<port>)\r\n",
+  ],
+  [
+    "PRINTESC.SK8",
+    "(begin (call/ec (lambda (k) (display k))) (newline))",
+    "#<procedure>\r\n",
+  ],
+  [
+    "WRITESTR.SK8",
+    String
+      .raw`(begin (write "q\"b\\n\nt\tr\r") (write (string #\x01 #\x7f)) (display "q\"b") (newline))`,
+    String.raw`"q\"b\\n\nt\tr\r""\x01;\x7f;"q"b` + "\r\n",
+  ],
+  [
+    "DISPLIST.SK8",
+    '(begin (display (list #\\a "b c" \'d #\\space)) (write (list #\\a "b c" \'d #\\space)) (newline))',
+    '(a b c d  )(#\\a "b c" d #\\space)\r\n',
+  ],
+  [
+    "RDCHARS.SK8",
+    '(let ((p (open-input-file "CHARS.TXT"))) (write (read p)) (write (read p)) (write (read p)) (write (read p)) (write (read p)) (write (read p)) (close-port p) (newline))',
+    String.raw`#\A#\space#\newline#\(#\x#<eof>` + "\r\n",
+  ],
+  [
+    "RNDTRIP.SK8",
+    String
+      .raw`(begin (let ((o (open-output-file "RT.TXT"))) (write (list "a\"\\\n" #\space #\x01 #\a 'sym -12 (vector 1 #\b "c")) o) (close-port o)) (let ((i (open-input-file "RT.TXT"))) (write (read i)) (close-port i) (newline)))`,
+    String.raw`("a\"\\\n" #\space #\x01 #\a sym -12 #(1 #\b "c"))` + "\r\n",
+  ],
+  [
+    "LONGLST.SK8",
+    "(define (build n acc) (if (zero? n) acc (build (- n 1) (cons 0 acc)))) (display (build 1200 '()))",
+    `(${Array(1200).fill("0").join(" ")})`,
+  ],
+  [
+    "DEEPNEST.SK8",
+    "(define (nest n acc) (if (zero? n) acc (nest (- n 1) (cons acc '())))) (write (nest 1200 '()))",
+    "RUNTIME ERROR\r\n",
+    "",
+    false,
+  ],
+  [
+    "FILECRLF.SK8",
+    '(let ((p (open-input-file "CRLF.TXT"))) (write (read-char p)) (write (read-char p)) (write (read-char p)) (write (read-char p)) (write (read-char p)) (close-port p) (newline))',
+    String.raw`#\A#\newline#\B#\newline#<eof>` + "\r\n",
+  ],
+  [
+    "FILELINE.SK8",
+    '(include "IO.SK8") (let ((p (open-input-file "CRLF.TXT"))) (write (read-line-from p)) (write (read-line-from p)) (write (read-line-from p)) (close-port p) (newline))',
+    '"A""B"#<eof>\r\n',
+  ],
+  [
+    "FILECOPY.SK8",
+    '(include "IO.SK8") (let ((p (open-input-file "CRLF.TXT"))) (write (copy-stream-from-to p (current-output-port))) (close-port p) (newline))',
+    "A\r\nB\r\n4\r\n",
+  ],
+  [
+    "READDFLT.SK8",
+    '(let ((p (open-input-file "DATUM.TXT"))) (write (read p)) (write (read)) (close-port p) (newline))',
+    "(1 2)42\r42\r\n",
+    "42\r",
+  ],
+  [
+    "MIXCLOSE.SK8",
+    '(let ((p (open-input-file "INPUT.TXT"))) (write (read p)) (write (read p)) (close-port p) (write (read-char)) (newline))',
+    String.raw`AB#<eof>Q#\Q` + "\r\n",
+    "Q",
+  ],
+  [
+    "MIXOPEN.SK8",
+    '(let ((p (open-input-file "INPUT.TXT"))) (write (read p)) (write (read-char)) (write (read-char p)) (close-port p) (newline))',
+    String.raw`ABQ#\Q#\newline` + "\r\n",
+    "Q",
+  ],
+  [
+    "FILEPRED.SK8",
+    '(let ((p (open-input-file "INPUT.TXT")) (q (open-output-file "PRED.TXT"))) (write (output-port? p)) (write (input-port? p)) (write (output-port? q)) (write (input-port? q)) (close-port p) (close-port q) (newline))',
+    "#f#t#t#f\r\n",
+  ],
+  [
+    "FILEERR.SK8",
+    `(let ((p (open-output-file "PART.TXT"))) (display "${
+      "0123456789".repeat(13)
+    }" p) (car 1))`,
+    "RUNTIME ERROR\r\n",
+  ],
+  [
+    "FILEEXIT.SK8",
+    '(let ((p (open-output-file "EXIT.TXT"))) (display "kept" p) (display "ok"))',
+    "ok",
+  ],
+  [
+    "CLOSE2.SK8",
+    '(let ((p (open-output-file "TWICE.TXT")) (q (open-input-file "INPUT.TXT"))) (close-port p) (close-port p) (close-port q) (close-port q) (display "ok"))',
+    "ok",
+  ],
+  [
     "ADVENTUR.SK8",
     await Deno.readTextFile("examples/applications/advent.sk8"),
     "You are at a fork. Choose left or right: l\r\nYou take the left path.",
@@ -328,16 +454,34 @@ const errorCases = [
   ["FILEMISS.SK8", '(open-input-file "MISSING.TXT")'],
   ["FILEPATH.SK8", '(open-input-file "A/B.TXT")'],
   ["FILELONG.SK8", '(open-input-file "ABCDEFGHI.TXT")'],
+  ["FILESPC.SK8", '(open-output-file "A B.TXT")'],
+  ["FILEDLM.SK8", '(open-output-file "A<B.TXT")'],
+  ["FILECOMA.SK8", '(open-output-file "A,B")'],
+  [
+    "FILESAME.SK8",
+    '(let ((p (open-input-file "INPUT.TXT"))) (open-output-file "input.txt"))',
+  ],
 ];
-for (const [name, source] of [...cases, ...errorCases]) {
-  disk = installCpm22File(disk, {
-    name,
-    bytes: new TextEncoder().encode(source + "\x1a"),
-    padByte: 0x1a,
-  });
+// `--only=NAME,NAME` limits a development run to the named programs.
+const onlyArgument = Deno.args.find((argument) =>
+  argument.startsWith("--only=")
+);
+if (onlyArgument) {
+  const selected = new Set(
+    onlyArgument.slice("--only=".length).split(",").map((name) =>
+      name.endsWith(".SK8") ? name : `${name}.SK8`
+    ),
+  );
+  for (const list of [cases, errorCases]) {
+    for (let index = list.length - 1; index >= 0; index -= 1) {
+      if (!selected.has(list[index][0])) list.splice(index, 1);
+    }
+  }
 }
-
-const machine = new TriptychCpu(firmware.bootRom);
+// Sources are installed per CP/M session so the 64-entry directory has room
+// for every case and the files each program creates.
+const baseDisk = disk;
+let machine;
 const decoder = new TextDecoder("ascii");
 let transcript = "";
 function readWord(address) {
@@ -450,91 +594,170 @@ function runProgram(name, input, expected, exact = true) {
   return output;
 }
 
-try {
-  machine.install_drive(0, disk, true);
-  runUntilPrompt(0, "the boot prompt");
-  const measurements = [];
-  for (const [name, , expected, input = "", exact = true] of cases) {
-    command(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
-    const image = machine.export_drive(0);
-    const generated = readCpm22File(image, name.replace(".SK8", ".COM"));
-    const aso = readCpm22File(image, name.replace(".SK8", ".ASO"));
-    const { asoBytes } = validateAso(aso, generated, name);
-    measurements.push({
-      name,
-      comBytes: generated.length,
-      asoBytes,
-    });
-    runProgram(name, input, expected, exact);
-    if (name === "FILEOUT.SK8") {
-      const outputFile = readCpm22File(machine.export_drive(0), "OUTPUT.TXT");
-      assert.deepEqual(
-        [...outputFile.slice(0, 3)],
-        [0x41, 0x0d, 0x0a],
-        "FILEOUT.SK8: CP/M text file bytes",
-      );
-    }
-    if (name === "BINOUT.SK8") {
-      const outputFile = readCpm22File(machine.export_drive(0), "OUTPUT.BIN");
-      assert.deepEqual(
-        [...outputFile.slice(0, 4)],
-        [0x00, 0x1a, 0x0d, 0x0a],
-        "BINOUT.SK8: binary file bytes",
-      );
-    }
-    const nativeLowSp = readWord(lowStackAddress);
-    const observedLowSp = observedStackLow();
-    const heapEnd = readWord(heapPointerAddress);
-    assert.ok(nativeLowSp >= 0xd400, `${name}: native stack crossed its guard`);
-    assert.ok(
-      observedLowSp < stackTop,
-      `${name}: no stack writes were observed`,
-    );
-    assert.ok(heapEnd < nativeLowSp, `${name}: heap and stack collided`);
-    measurements[measurements.length - 1].lowSp = nativeLowSp;
-    measurements[measurements.length - 1].observedLowSp = observedLowSp;
-    measurements[measurements.length - 1].heapEnd = heapEnd;
-    measurements[measurements.length - 1].bindingAllocations = readWord(
-      bindingAllocationAddress,
-    );
-    measurements[measurements.length - 1].closureAllocations = readWord(
-      closureAllocationAddress,
-    );
-    measurements[measurements.length - 1].pairAllocations = readWord(
-      pairAllocationAddress,
-    );
-    measurements[measurements.length - 1].collections = readWord(
-      collectionCountAddress,
-    );
-    measurements[measurements.length - 1].activations = readWord(
-      frameCountAddress,
-    );
-    command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
-    command(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
+// `--keep-going` records program-output failures and reports them together.
+const keepGoing = Deno.args.includes("--keep-going");
+const failures = [];
+function checkCase(name, check) {
+  if (!keepGoing) return check();
+  try {
+    return check();
+  } catch (error) {
+    failures.push(`${name}: ${String(error.message).slice(0, 400)}`);
   }
-  for (const [name] of errorCases) {
-    command(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
-    runProgram(name, "", "RUNTIME ERROR\r\n");
-    command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
-    command(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
-  }
-  console.log(JSON.stringify(
-    {
-      status: "passed",
-      compilerBytes: compiler.image.bytes.length - 0x100,
-      runtimeBytes: provider.image.bytes.length - 0x100,
-      cases: cases.map(([name]) => name),
-      largestComBytes: Math.max(
-        ...measurements.map(({ comBytes }) => comBytes),
-      ),
-      largestAsoBytes: Math.max(
-        ...measurements.map(({ asoBytes }) => asoBytes),
-      ),
-      measurements,
-    },
-    null,
-    2,
-  ));
-} finally {
-  machine.free();
 }
+
+function runCase([name, , expected, input = "", exact = true], measurements) {
+  command(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
+  const image = machine.export_drive(0);
+  const generated = readCpm22File(image, name.replace(".SK8", ".COM"));
+  const aso = readCpm22File(image, name.replace(".SK8", ".ASO"));
+  const { asoBytes } = validateAso(aso, generated, name);
+  measurements.push({
+    name,
+    comBytes: generated.length,
+    asoBytes,
+  });
+  checkCase(name, () => runProgram(name, input, expected, exact));
+  if (name === "FILEOUT.SK8") {
+    const outputFile = readCpm22File(machine.export_drive(0), "OUTPUT.TXT");
+    assert.deepEqual(
+      [...outputFile.slice(0, 3)],
+      [0x41, 0x0d, 0x0a],
+      "FILEOUT.SK8: CP/M text file bytes",
+    );
+  }
+  if (name === "BINOUT.SK8") {
+    const outputFile = readCpm22File(machine.export_drive(0), "OUTPUT.BIN");
+    assert.deepEqual(
+      [...outputFile.slice(0, 4)],
+      [0x00, 0x1a, 0x0d, 0x0a],
+      "BINOUT.SK8: binary file bytes",
+    );
+  }
+  if (name === "FILEERR.SK8") {
+    checkCase(name, () => {
+      const outputFile = readCpm22File(machine.export_drive(0), "PART.TXT");
+      assert.equal(
+        decoder.decode(outputFile.slice(0, 131)),
+        "0123456789".repeat(13) + "\x1a",
+        "FILEERR.SK8: bytes written before the error",
+      );
+    });
+  }
+  if (name === "FILEEXIT.SK8") {
+    checkCase(name, () => {
+      const outputFile = readCpm22File(machine.export_drive(0), "EXIT.TXT");
+      assert.equal(
+        decoder.decode(outputFile.slice(0, 5)),
+        "kept\x1a",
+        "FILEEXIT.SK8: bytes written before normal exit",
+      );
+    });
+  }
+  const nativeLowSp = readWord(lowStackAddress);
+  const observedLowSp = observedStackLow();
+  if (name === "LONGLST.SK8") {
+    checkCase(name, () =>
+      assert.ok(
+        observedLowSp >= 0xd500,
+        `LONGLST.SK8: printing used stack down to ${
+          observedLowSp.toString(16)
+        }`,
+      ));
+  }
+  const heapEnd = readWord(heapPointerAddress);
+  assert.ok(nativeLowSp >= 0xd400, `${name}: native stack crossed its guard`);
+  assert.ok(
+    observedLowSp < stackTop,
+    `${name}: no stack writes were observed`,
+  );
+  assert.ok(heapEnd < nativeLowSp, `${name}: heap and stack collided`);
+  measurements[measurements.length - 1].lowSp = nativeLowSp;
+  measurements[measurements.length - 1].observedLowSp = observedLowSp;
+  measurements[measurements.length - 1].heapEnd = heapEnd;
+  measurements[measurements.length - 1].bindingAllocations = readWord(
+    bindingAllocationAddress,
+  );
+  measurements[measurements.length - 1].closureAllocations = readWord(
+    closureAllocationAddress,
+  );
+  measurements[measurements.length - 1].pairAllocations = readWord(
+    pairAllocationAddress,
+  );
+  measurements[measurements.length - 1].collections = readWord(
+    collectionCountAddress,
+  );
+  measurements[measurements.length - 1].activations = readWord(
+    frameCountAddress,
+  );
+  command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
+  command(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
+}
+
+function runErrorCase([name]) {
+  command(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
+  checkCase(name, () => runProgram(name, "", "RUNTIME ERROR\r\n"));
+  if (name === "FILESAME.SK8") {
+    checkCase(name, () => {
+      const inputFile = readCpm22File(machine.export_drive(0), "INPUT.TXT");
+      assert.deepEqual(
+        [...inputFile.slice(0, 4)],
+        [0x41, 0x42, 0x0d, 0x0a],
+        "FILESAME.SK8: the open input file was replaced",
+      );
+    });
+  }
+  command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
+  command(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
+}
+
+const measurements = [];
+const programs = [
+  ...cases.map((entry) => ({ error: false, entry })),
+  ...errorCases.map((entry) => ({ error: true, entry })),
+];
+const sessionSize = 36;
+for (let first = 0; first < programs.length; first += sessionSize) {
+  const session = programs.slice(first, first + sessionSize);
+  let sessionDisk = baseDisk;
+  for (const { entry: [name, source] } of session) {
+    sessionDisk = installCpm22File(sessionDisk, {
+      name,
+      bytes: new TextEncoder().encode(source + "\x1a"),
+      padByte: 0x1a,
+    });
+  }
+  machine = new TriptychCpu(firmware.bootRom);
+  transcript = "";
+  try {
+    machine.install_drive(0, sessionDisk, true);
+    runUntilPrompt(0, "the boot prompt");
+    for (const { error, entry } of session) {
+      if (error) runErrorCase(entry);
+      else runCase(entry, measurements);
+    }
+  } finally {
+    machine.free();
+  }
+}
+if (failures.length > 0) {
+  console.log(JSON.stringify({ status: "failed", failures }, null, 2));
+  Deno.exit(1);
+}
+console.log(JSON.stringify(
+  {
+    status: "passed",
+    compilerBytes: compiler.image.bytes.length - 0x100,
+    runtimeBytes: provider.image.bytes.length - 0x100,
+    cases: cases.map(([name]) => name),
+    largestComBytes: Math.max(
+      ...measurements.map(({ comBytes }) => comBytes),
+    ),
+    largestAsoBytes: Math.max(
+      ...measurements.map(({ asoBytes }) => asoBytes),
+    ),
+    measurements,
+  },
+  null,
+  2,
+));

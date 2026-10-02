@@ -85,11 +85,11 @@ SRTVMKA:
         LD HL,(SRTVOBJ)             ; Return the managed object address.
         PUSH IX                    ; Retire the packet through the common cleanup.
         RET                        ; Deliver the new vector value.
-; Construct a vector from the current packet, limited by the call packet size.
+; Construct a vector from the current packet, limited by its eight records.
 SRTVMAKE:
-        LD A,(SRTARGC)             ; The short constructor accepts zero through seven.
-        CP 8
-        JP NC,SRTERROR
+        LD A,(SRTARGC)             ; The short constructor accepts zero through eight.
+        CP 9                       ; Eight values fill the packet exactly.
+        JP NC,SRTERROR             ; Only a malformed caller can exceed the packet.
         LD (SRTVREQ),A             ; Preserve the request across a collection retry.
         CALL SRTVACL                ; Packet values remain roots across a retry.
         JP C,SRTERROR

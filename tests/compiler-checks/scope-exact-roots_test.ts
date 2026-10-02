@@ -338,11 +338,12 @@ Deno.test("closure roots drain a full worklist without reporting an error", asyn
   memory[assembled.address("SRTGBASE")] = roots & 255;
   memory[assembled.address("SRTGBASE") + 1] = roots >>> 8;
   writeWord(memory, assembled.address("SRTGEND"), roots + count * 4);
-  writeWord(memory, assembled.address("SRTHEAPP"), closureBase + count * 2);
+  // Closure starts are four-byte aligned; odd map units are object markers.
+  writeWord(memory, assembled.address("SRTHEAPP"), closureBase + count * 4);
   for (let index = 0; index < count; index++) {
-    const closure = closureBase + index * 2;
+    const closure = closureBase + index * 4;
     writeWord(memory, closure, descriptor);
-    const unit = ((closureBase - heapBase) >> 1) + index;
+    const unit = ((closureBase - heapBase) >> 1) + index * 2;
     const bit = assembled.address("SRTCLBM") + (unit >> 3);
     memory[bit] |= 1 << (unit & 7);
     const root = roots + index * 4;
@@ -352,7 +353,7 @@ Deno.test("closure roots drain a full worklist without reporting an error", asyn
   }
   call("SRTGC");
   for (let index = 0; index < count; index++) {
-    const unit = ((closureBase - heapBase) >> 1) + index;
+    const unit = ((closureBase - heapBase) >> 1) + index * 2;
     const mark = assembled.address("SRTCLBM") + (unit >> 3);
     assert.ok(
       memory[mark] & (1 << (unit & 7)),
@@ -386,8 +387,10 @@ Deno.test("closure overflow fallback stays within the native stack", async () =>
   memory[branchDescriptor + 28] = 3;
   writeWord(memory, emptyDescriptor, 0x4000);
   memory[emptyDescriptor + 3] = 0;
+  // Closure starts are four-byte aligned, so six-byte closures use eight-byte
+  // slots and two-byte closures use four-byte slots.
   for (let index = 0; index < chainCount; index++) {
-    const closure = chainBase + index * 6;
+    const closure = chainBase + index * 8;
     const firstBinding = bindingBase + index * 8;
     const secondBinding = firstBinding + 4;
     closureStart(closure);
@@ -397,10 +400,10 @@ Deno.test("closure overflow fallback stays within the native stack", async () =>
     bindingStart(firstBinding);
     bindingStart(secondBinding);
     const firstChild = index + 1 < chainCount
-      ? chainBase + (index + 1) * 6
+      ? chainBase + (index + 1) * 8
       : 0xfe02;
     const secondChild = index + 2 < chainCount
-      ? chainBase + (index + 2) * 6
+      ? chainBase + (index + 2) * 8
       : 0xfe02;
     writeWord(memory, firstBinding, firstChild);
     memory[firstBinding + 3] = (index + 1 < chainCount ? 2 : 0) | 0x28;
@@ -409,13 +412,13 @@ Deno.test("closure overflow fallback stays within the native stack", async () =>
   }
   bindingPages(0x60, 0x61, 0x62, 0x63, 0x64);
   for (let index = 0; index < emptyCount; index++) {
-    const closure = emptyBase + index * 2;
+    const closure = emptyBase + index * 4;
     closureStart(closure);
     writeWord(memory, closure, emptyDescriptor);
   }
   for (let index = 0; index < emptyCount; index++) {
     const root = roots + index * 4;
-    writeWord(memory, root, emptyBase + index * 2);
+    writeWord(memory, root, emptyBase + index * 4);
     memory[root + 2] = 2;
     memory[root + 3] = 1;
   }
@@ -430,7 +433,7 @@ Deno.test("closure overflow fallback stays within the native stack", async () =>
   assert.equal(result.carry, 0);
   assert.equal(memory[assembled.address("SRTCLER")], 1);
   for (let index = 0; index < chainCount; index++) {
-    const unit = ((chainBase - heapBase) >> 1) + index * 3;
+    const unit = ((chainBase - heapBase) >> 1) + index * 4;
     const mark = assembled.address("SRTCLBM") + (unit >> 3);
     assert.ok(memory[mark] & (1 << (unit & 7)), `chain closure ${index}`);
   }

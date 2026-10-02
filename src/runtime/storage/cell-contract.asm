@@ -1,8 +1,8 @@
-; Experimental four-byte value-cell contract.
+; Four-byte value-cell contract used by heap bindings, pairs and vector elements.
 ;
 ; This file contains constants only.  It emits no bytes and is included before
-; runtime code so future storage helpers can share one layout vocabulary without
-; changing the current value ABI or argument-packet format.
+; runtime code so the storage modules share one layout vocabulary.  The value
+; ABI and argument-packet format are unchanged; see docs/four-byte-cells.md.
 
 SRTCELW        EQU 4                ; One value cell occupies four bytes.
 SRTPAIRW       EQU 8                ; A pair is two adjacent cells.

@@ -5,10 +5,22 @@ import { createZ80Runtime } from "@jhlagado/z80-runtime";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 
-export async function loadAssembly(
+type AssemblyLimits = { maxInstructions?: number; maxCycles?: number };
+type AssembledEntry = {
+  image: NonNullable<ReturnType<typeof materializeAtomGeneration>>;
+  symbols: ReadonlyArray<readonly [string, number]>;
+};
+
+// Assembling the compiler or runtime image takes seconds, and the unit tests
+// ask for the same entry many times.  Assemble each entry once per process and
+// hand every caller its own memory, runtime and symbol map so tests stay
+// isolated from one another.
+const assemblyCache = new Map<string, Promise<AssembledEntry>>();
+
+async function assembleEntry(
   entry: string,
-  limits: { maxInstructions?: number; maxCycles?: number } = {},
-) {
+  limits: AssemblyLimits,
+): Promise<AssembledEntry> {
   const root = fileURLToPath(new URL("../", import.meta.url));
   const result = await assembleAtomProject({
     root,
@@ -24,11 +36,35 @@ export async function loadAssembly(
   });
   const image = materializeAtomGeneration(result.generation);
   if (!image) throw new Error("ATOM produced no image");
+  const symbols = result.generation.symbols.map(
+    (s: { name: string; value: number }) =>
+      [s.name.toLowerCase(), s.value] as const,
+  );
+  return { image, symbols };
+}
+
+function cachedAssembly(entry: string, limits: AssemblyLimits) {
+  const key = `${entry}\0${limits.maxInstructions ?? ""}\0${
+    limits.maxCycles ?? ""
+  }`;
+  let pending = assemblyCache.get(key);
+  if (!pending) {
+    pending = assembleEntry(entry, limits);
+    assemblyCache.set(key, pending);
+    pending.catch(() => assemblyCache.delete(key));
+  }
+  return pending;
+}
+
+export async function loadAssembly(
+  entry: string,
+  limits: AssemblyLimits = {},
+) {
+  const cached = await cachedAssembly(entry, limits);
+  const image = { ...cached.image, bytes: Uint8Array.from(cached.image.bytes) };
   const memory = new Uint8Array(65536);
   memory.set(image.bytes, image.base);
-  const symbols = new Map<string, number>(result.generation.symbols.map(
-    (s: { name: string; value: number }) => [s.name.toLowerCase(), s.value],
-  ));
+  const symbols = new Map<string, number>(cached.symbols);
   const runtime = createZ80Runtime({ memory, startAddress: image.base });
   function address(name: string): number {
     const found = symbols.get(name.toLowerCase());

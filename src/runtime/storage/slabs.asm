@@ -186,34 +186,48 @@ SRTCLPUE:
         LD (SRTCLCUR),HL
         RET
 
-; Find the logical page entry containing the current closure address.
+; Find the owned logical page entry containing the current closure address.
+; Carry clear returns its index in SRTCLPGI.  Carry set reports a miss and
+; leaves SRTCLPGI at 80H, which the vector and string validators also reject.
 SRTCLFND:
-        LD HL,(SRTCLBAS)
+        LD HL,(SRTCLBAS)           ; The page high byte identifies the slab.
         LD A,H
-        LD (SRTCLPGH),A
+        LD (SRTCLPGH),A            ; Keep it while the directory is scanned.
         XOR A
-        LD (SRTCLPGI),A
+        LD (SRTCLPGI),A            ; Start with the first logical entry.
 SRTCLFNL:
         LD A,(SRTCLPGI)
-        CP 80H
-        RET NC
+        CP 80H                     ; Carry is set while entries remain.
+        CCF                        ; Carry now reports an exhausted directory.
+        RET C                      ; No owned page contains this address.
+        LD L,A
+        LD H,0
+        LD DE,SRTCLOWN
+        ADD HL,DE
+        LD A,(HL)                  ; Only an owned head entry has a live base.
+        OR A
+        JR Z,SRTCLFNX              ; A free entry's base byte is not authoritative.
+        INC A
+        JR Z,SRTCLFNX              ; FFH continues a two-page run and has no base.
+        LD A,(SRTCLPGI)            ; Address the same entry's physical base.
         LD L,A
         LD H,0
         LD DE,SRTCLPBA
         ADD HL,DE
-        LD A,(HL)
-        LD D,A
-        LD A,(SRTCLPGH)
-        CP D
-        RET Z
+        LD A,(SRTCLPGH)            ; Compare the page high bytes.
+        CP (HL)
+        RET Z                      ; Equal also leaves carry clear for a hit.
+SRTCLFNX:
         LD A,(SRTCLPGI)
         INC A
-        LD (SRTCLPGI),A
+        LD (SRTCLPGI),A            ; Continue with the next logical entry.
         JR SRTCLFNL
 
-; Count one live allocation in the page containing SRTCLBAS.
+; Count one live allocation in the page containing SRTCLBAS.  Carry set means
+; the address belongs to no owned page and no counter was changed.
 SRTCLINC:
         CALL SRTCLFND
+        RET C                      ; Never count a miss into a neighbouring table.
         LD A,(SRTCLPGI)
         LD L,A
         LD H,0
@@ -349,6 +363,13 @@ SRTCLPRE:
         LD A,(SRTCLPGI)
         LD L,A
         LD H,0
+        LD DE,SRTCLPBA
+        ADD HL,DE
+        XOR A
+        LD (HL),A                 ; A released entry keeps no physical base.
+        LD A,(SRTCLPGI)
+        LD L,A
+        LD H,0
         LD DE,SRTCLOWN
         ADD HL,DE
         XOR A
@@ -458,6 +479,15 @@ SRTCLRLS:
         LD (HL),A
         INC HL
         LD (HL),A                 ; Release both pages atomically.
+        LD A,(SRTCLPGI)
+        LD L,A
+        LD H,0
+        LD DE,SRTCLPBA
+        ADD HL,DE
+        XOR A
+        LD (HL),A                 ; The head entry keeps no physical base.
+        INC HL
+        LD (HL),A                 ; Nor does the FFH continuation entry.
         LD A,(SRTCLPGI)
         LD L,A
         LD H,0

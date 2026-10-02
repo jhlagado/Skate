@@ -5,48 +5,59 @@
 
 ; Compile if, placing a false-arm branch before the consequent and a jump over
 ; the alternative after it.  Nested forms use the separate IF patch stacks.
+; The enclosing tail context stays on the stack for the whole form, because a
+; nested if in the test, an arm or an argument reuses SCTCTX.
 SCIFORM:
         LD A,(SCTCTX)              ; Save the surrounding tail position for both arms.
-        LD (SCIFTAIL),A            ; The predicate itself is never a tail call.
+        PUSH AF                    ; Nested forms cannot overwrite a stacked copy.
         XOR A
         LD (SCTCTX),A              ; Test evaluation returns to the branch skeleton.
         CALL SCEXPR                ; Compile the test value.
-        RET C                      ; Preserve a test-expression diagnostic.
+        JR C,SCIFERR               ; Preserve a test-expression diagnostic.
         LD HL,SRTFAL               ; Runtime helper returns Z only for #f.
         CALL SCCALL                ; Check the test without changing its value.
+        JR C,SCIFERR               ; Staged output is exhausted.
         CALL SCJZ                  ; Emit JP Z,zero and return its patch address.
+        JR C,SCIFERR
         CALL SCIFPUSH              ; Save the false-arm patch for this depth.
-        LD A,(SCIFTAIL)            ; The consequent inherits the enclosing position.
-        LD (SCTCTX),A
+        JR C,SCIFERR               ; More than 32 nested ifs is a capacity error.
+        CALL SCCNCTX               ; The consequent inherits the enclosing position.
         CALL SCEXPR                ; Compile the consequent expression.
-        RET C                      ; A broken consequent aborts the whole form.
+        JR C,SCIFERR              ; A broken consequent aborts the whole form.
         CALL SCJP                  ; Skip the alternative after a true arm.
+        JR C,SCIFERR
         CALL SCIFENDP              ; Save the end-jump patch for this depth.
         LD HL,(SCPC)               ; The alternative starts at this code address.
-        CALL SCABS                 ; Convert its staged address to output address.
-        CALL SCIFPATF            ; Patch the false branch before reading the arm.
-        LD A,(SCIFTAIL)            ; The alternative inherits the enclosing position.
-        LD (SCTCTX),A
+        CALL SCIFPATF              ; Patch the false branch before reading the arm.
+        JR C,SCIFERR
+        CALL SCCNCTX               ; The alternative inherits the enclosing position.
         CALL SCNEXT                ; A close means the optional alternative is absent.
-        RET C                      ; Preserve a reader error after the consequent.
+        JR C,SCIFERR              ; Preserve a reader error after the consequent.
         CP 2                       ; Closing now selects the unspecified value.
         JR Z,SCIFNONE              ; Emit it and finish the branch skeleton.
         CALL SCEXPE                ; The already-read event is the alternative.
-        RET C                      ; Propagate an alternative expression failure.
+        JR C,SCIFERR              ; Propagate an alternative expression failure.
         CALL SCEXPECT              ; The alternative must close the original list.
         JR SCIFDONE                ; Patch the end jump after its last byte.
 SCIFNONE:
         CALL SCUNS                 ; An omitted alternative returns UNSPECIFIED.
 SCIFDONE:
+        JR C,SCIFERR
         LD HL,(SCPC)               ; Both arms now end at this generated address.
-        CALL SCABS                 ; Convert it to the output's absolute address.
-        CALL SCIFPATE            ; Patch the unconditional end jump.
+        CALL SCIFPATE              ; Patch the unconditional end jump.
+        JR C,SCIFERR
+        POP AF                     ; Restore the enclosing tail context.
+        LD (SCTCTX),A
         JP SCIFPOP                 ; Release this nested if patch record.
+SCIFERR:
+        POP AF                     ; Restore the enclosing tail context.
+        LD (SCTCTX),A
+        SCF                        ; Preserve the nested diagnostic.
+        RET
 
 ; Compile a begin body, preserving the value produced by its final expression.
 SCBEGINF:
-        CALL SCBODY                ; SCBODY consumes the matching close.
-        RET                        ; The last emitted value remains in registers.
+        JP SCBODY                  ; SCBODY consumes the matching close.
 
 ; Compile the two short-circuit operands of and.
 SCANDF:
@@ -60,8 +71,11 @@ SCANDF:
         LD (SCTCTX),A              ; Only the second operand can inherit it.
         LD HL,SRTFAL               ; Test the value while retaining its registers.
         CALL SCCALL                ; Z means the first operand is #f.
+        RET C                      ; Staged output is exhausted.
         CALL SCJZ                  ; Branch to the first operand's final-value path.
+        RET C
         CALL SCBRPUSH              ; Save the patch in the nested branch stack.
+        RET C                      ; More than 64 pending branches is a capacity error.
         CALL SCEXPR                ; Compile the second operand only when needed.
         RET C                      ; Preserve a nested syntax or capacity error.
         CALL SCEXPECT              ; And is exactly two operands in this increment.
@@ -86,8 +100,11 @@ SCORF:
         LD (SCTCTX),A              ; Only the second operand can inherit it.
         LD HL,SRTFAL               ; Test the value while retaining its registers.
         CALL SCCALL                ; Z means the first operand is false.
+        RET C                      ; Staged output is exhausted.
         CALL SCJNZ                 ; A true first operand skips the second.
+        RET C
         CALL SCBRPUSH              ; Save the patch in the nested branch stack.
+        RET C                      ; More than 64 pending branches is a capacity error.
         CALL SCEXPR                ; Compile the second operand only when needed.
         RET C                      ; Preserve a nested syntax or capacity error.
         CALL SCEXPECT              ; Or is exactly two operands in this increment.
@@ -138,6 +155,7 @@ SCCNTEST:
         JP C,SCCNERR
         LD HL,SRTFAL
         CALL SCCALL                ; Z means that the test value is #f.
+        JP C,SCCNERR
         CALL SCJZ                  ; Save the false path until this clause closes.
         JP C,SCCNERR
         CALL SCBRPUSH
@@ -291,23 +309,8 @@ SCCNPLP:
         CALL SINKPTCH
         JP SCCNPLP
 SCCNPDN:
-        LD A,(SCCNDEP)
-        DEC A
-        LD (SCCNDEP),A
-        LD L,A
-        LD H,0
-        LD DE,SCNBASE
-        ADD HL,DE
-        LD A,(HL)
-        LD (SCCNBASE),A
-        LD A,(SCCNDEP)
-        LD L,A
-        LD H,0
-        LD DE,SCNTOPS
-        ADD HL,DE
-        LD A,(HL)
-        LD (SCCDTOP),A
-        XOR A
+        CALL SCNABORT              ; Release this cond's patch frame.
+        XOR A                      ; Return carry clear after a complete cond.
         RET
 
 SCCNERR:

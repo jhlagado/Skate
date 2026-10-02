@@ -98,14 +98,23 @@ SRTPLOUT:
 
 SRTUNBD:
         LD DE,SRTUNBT        ; Explain the unbound reference.
-        JP SRTOUT             ; Share the CP/M error-output path.
+        JP SRTOUT             ; Share the provider error-output path.
 SRTERROR:
         CALL SRTDCLN              ; Clear active datum-reader roots before failure.
         LD DE,SRTERRTX          ; Explain an arithmetic or runtime failure.
 SRTOUT:
-        LD C,9                     ; Select CP/M's dollar-terminated output.
-        CALL 5                     ; Print the terminal diagnostic.
-        JP 0                       ; Do not return with a damaged value stack.
+        PUSH DE                    ; Keep the message while files are closed.
+        CALL SRTFCLW               ; Flush and close an open output file; ignore status.
+        POP DE                     ; Recover the diagnostic message.
+SRTOUTL:
+        LD A,(DE)                  ; Read the next diagnostic byte.
+        INC DE                     ; Advance before the service can clobber DE.
+        CP '$'                     ; Dollar terminates the internal text strings.
+        JP Z,0                     ; Do not return with a damaged value stack.
+        PUSH DE                    ; Keep the message cursor across the service.
+        CALL SRTIOPC               ; Use the patchable byte service, not BDOS 9;
+        POP DE                     ; a failing provider cannot report itself.
+        JR SRTOUTL                 ; Continue until the complete message is sent.
 
 ; Send a dollar-terminated runtime message through the selected byte service.
 ; Normal value output uses this path so a provider sees the same bytes as CP/M.

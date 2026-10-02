@@ -1,12 +1,9 @@
-%INCLUDE "cpm-source-includes.asm"
-%INCLUDE "cpm-source-include-parser.asm"
-
 ; CP/M source stream composition.
 ;
-; Include order preserves source opening, byte delivery, package streams,
-; closing and shared state from the original implementation.
+; CSOPEN resolves the root's leading include tree before any byte is read;
+; CSBYTE then streams the ordered parts and CSCLOSE reports the outcome.
 %INCLUDE "source/open.asm"
+%INCLUDE "cpm-source-include-parser.asm"
 %INCLUDE "source/read.asm"
-%INCLUDE "source/package.asm"
 %INCLUDE "source/close.asm"
 %INCLUDE "source/state.asm"

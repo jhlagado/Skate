@@ -18,25 +18,20 @@ output file open at a time. Text input treats Control-Z as EOF. Decimal points a
 binary16 values, and mixed arithmetic retains fractional results.
 
 The compiler and runtime are written in Z80 assembly using the ATOM assembler.
-The repository contains the Deno build commands, source-preparation tools and
-CP/M checks needed to assemble the compiler, publish a checked program and run
+The repository contains the Deno build commands and CP/M checks needed to assemble the compiler, publish a checked program and run
 it on the target.
 
 The optional provider tools carry terminal, input, video, sound and bounded
 file requests over a byte protocol. Ordinary console text remains ordinary
 console text; a host supplies the hardware-specific provider.
 
-The native compiler accepts leading `(include "LIB.SK8")` forms with up to
-31 direct includes on the current drive. For nested source trees, the host
-resolver prepares an ordered `.SKM` package accepted by the CP/M compiler:
-
-```sh
-deno task prepare:source path/to/sources MAIN.SK8 path/to/staged-sources
-```
-
-The output contains the included source parts and a manifest. Include forms
-must come before ordinary source, and the resolver rejects cycles, paths outside
-the source tree and names that cannot be represented on a CP/M disk.
+A source file may begin with `(include "LIB.SK8")` forms, each naming one or
+more CP/M 8.3 files on the current drive. Included files may begin with their
+own include forms. The compiler reads every file's dependencies before the
+file itself, includes a file only once however many files name it, and
+rejects cycles, missing files, more than 32 files in one program and
+include chains more than eight files deep. Include forms must come before
+ordinary source; diagnostics report the file, line and column of the error.
 
 ```scheme
 (define make-counter
@@ -46,18 +41,37 @@ the source tree and names that cannot be represented on a CP/M disk.
 
 (define counter (make-counter 0))
 (counter)
+(write (counter)) ; prints 2
+(newline)
 ```
 
-## Build
+## Building and testing
 
-Make the packages listed in `deno.runtime.json` available beside the checkout,
-then run:
+The build uses [Deno](https://deno.com/) and expects these checkouts beside
+this one (the paths in `deno.runtime.json` and the task permissions are
+relative to the Skate checkout):
 
-```sh
-deno task check
-deno task test:cpm
-deno task measure
-```
+| Sibling | Used for |
+| --- | --- |
+| `../atom` | The ATOM assembler, with `npm install` run so that `node_modules/@jhlagado/z80-runtime` and `node_modules/@jhlagado/z80-tool-services` resolve |
+| `../z80-runtime` | The Z80 emulator used by the unit tests (reached through ATOM's `node_modules` link) |
+| `../z80-tool-services` | Assembler services used by ATOM |
+| `../triptych` | The CP/M 2.2 machine for the `test:cpm` proofs; its WASM host must be built into `dist/wasm/` |
+
+The main tasks are:
+
+| Task | What it runs |
+| --- | --- |
+| `deno task check` | Formatting, lint, type checks and the compiler budget |
+| `deno task test` | `check` plus the host-side unit tests: effects, the CP/M byte bridge, ASO, ports and the runtime fixtures (`test:runtime`) |
+| `deno task test:cpm` | The CP/M proofs: each compiles programs with the native compiler on an emulated CP/M 2.2 machine and runs them |
+| `deno task test:cpm:stress` | Capacity, large-source and full 65,280-byte image proofs |
+| `deno task test:all` | `test`, `test:cpm` and `test:cpm:stress` |
+| `deno task measure` | Compiler and runtime size budget report |
+
+`test:cpm` and `test:cpm:stress` take tens of minutes; each `test:cpm:*` task
+can be run on its own. The [codebase guide](docs/codebase.md#tests-and-verification)
+lists every task.
 
 The compiler writes a checked `.COM` program for use from a CP/M prompt. Any
 intermediate publication data is an implementation detail of the build.
@@ -68,9 +82,11 @@ current-drive CP/M 8.3 spelling; append, seeking and multiple handles per
 direction are not implemented. `libraries/io.sk8` provides line input, line
 output, prompting and stream copying with explicit ports.
 
-See the [0.5.11 release notes](release/v0.5.11/README.md) for the checked image,
-measurements and limitations of that published image. The main branch includes
-subsequent compiler and I/O work; its source and tests are the development baseline.
+The [0.5.11 release notes](release/v0.5.11/README.md) describe the checked image
+and measurements of that published release. Their limitations apply to 0.5.11
+only: that image predates Scheme ports and file procedures. The main branch adds
+the standard ports, sequential CP/M file ports and later compiler work described
+above; its source and tests are the development baseline.
 
 For a guided tour of the source tree, compilation stages and recommended
 reading order, see the [codebase guide](docs/codebase.md).

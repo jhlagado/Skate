@@ -1,34 +1,19 @@
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
-import { join } from "node:path";
 
 import { loadAssembly } from "../../tests/z80.ts";
-import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 import {
   installCpm22File,
   readCpm22File,
 } from "../../../triptych/tools/lib/cpm22-disk.mjs";
+import {
+  createCpmSession,
+  loadCpmSystem,
+  makeSystemDisk,
+  TriptychCpu,
+} from "./cpm-harness.mjs";
 
-const triptychRoot = fileURLToPath(
-  new URL("../../../triptych/", import.meta.url),
-);
-const require = createRequire(import.meta.url);
-const { TriptychCpu } = require(
-  join(triptychRoot, "dist", "wasm", "triptych_host_wasm.js"),
-);
-
-const firmware = await assembleTriptychCpuFirmware(triptychRoot);
-const sourceDisk = await Deno.readFile(
-  join(triptychRoot, "third_party", "cpm22", "cpm22.img"),
-);
-const systemDisk = Uint8Array.from(sourceDisk);
-systemDisk.set(firmware.ccp, 0x0000);
-systemDisk.set(firmware.bdos, 0x0800);
-systemDisk.set(firmware.bios, 0x1600);
-const diskImage = new Uint8Array(Math.ceil(systemDisk.length / 512) * 512);
-diskImage.set(systemDisk);
-diskImage.fill(0xe5, 52 * 128, 52 * 128 + 64 * 32);
+const { firmware, sourceDisk } = await loadCpmSystem();
+const diskImage = makeSystemDisk(firmware, sourceDisk);
 
 const compiler = await loadAssembly("src/compiler/scope/compiler.asm");
 const runtime = await loadAssembly("src/runtime/image.asm");
@@ -52,26 +37,14 @@ disk = installCpm22File(disk, {
 
 let machine = new TriptychCpu(firmware.bootRom);
 machine.install_drive(0, disk, true);
-const decoder = new TextDecoder("ascii");
-const encoder = new TextEncoder();
-let transcript = "";
+let cpm = createCpmSession(machine);
 
 function waitPrompt(offset, description) {
-  for (let attempt = 0; attempt < 1800; attempt += 1) {
-    const status = machine.run_slice(50_000, 500_000);
-    transcript += decoder.decode(machine.take_serial_output());
-    assert.notEqual(status, 0, `${description}: CP/M halted`);
-    if (transcript.length > offset && transcript.endsWith("A>")) return;
-  }
-  throw new Error(`Timed out during ${description}`);
+  cpm.runUntilPrompt(offset, description);
 }
 
 function command(command, expected) {
-  const offset = transcript.length;
-  assert.ok(machine.enqueue_serial_input(encoder.encode(`${command}\r`)));
-  waitPrompt(offset, command);
-  const output = transcript.slice(offset);
-  assert.ok(output.includes(expected), `${command}: ${JSON.stringify(output)}`);
+  cpm.runCommand(command, expected, command);
 }
 
 function readOutputs(image) {
@@ -169,7 +142,7 @@ const changedDisk = installCpm22File(machine.export_drive(0), {
 machine.free();
 machine = new TriptychCpu(firmware.bootRom);
 machine.install_drive(0, changedDisk, true);
-transcript = "";
+cpm = createCpmSession(machine);
 waitPrompt(0, "faulted boot");
 const faults = installFaultBridge(machine);
 command("SKATE REPEAT.SK8", "OUTPUT ERROR\r\n");
@@ -196,7 +169,7 @@ assert.throws(
 machine.free();
 machine = new TriptychCpu(firmware.bootRom);
 machine.install_drive(0, failed, true);
-transcript = "";
+cpm = createCpmSession(machine);
 waitPrompt(0, "recovery boot");
 command("SKATE REPEAT.SK8", "COMPILED\r\n");
 const second = readOutputs(machine.export_drive(0));

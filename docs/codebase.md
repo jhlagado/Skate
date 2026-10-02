@@ -28,17 +28,23 @@ The following order follows the dependencies between the main subsystems.
    optional provider boundary for console, files and devices.
 4. [`src/compiler/scope/compiler.asm`](../src/compiler/scope/compiler.asm) is the
    native compiler composition root. Its include order is the first map of the
-   target compiler.
-5. The native input sequence consists of `cpm-source.asm`,
-   `cpm-transport.asm`, `lexer.asm`, `decimal.asm`, `interner.asm` and
-   `reader.asm`.
-6. The scope compiler sequence consists of `command.asm`, `definitions.asm`,
-   `bindings.asm`, `branches.asm`, `data.asm`, `procedure-forms.asm`,
-   `emitter.asm` and `publication.asm`.
-7. [`src/runtime/image.asm`](../src/runtime/image.asm) is the runtime
-   composition root, including `core.asm`, storage, primitives, pairs, data,
-   roots, numeric code, strings and vectors.
-8. The corresponding proofs are in `tools/compiler-checks/`. The procedure
+   target compiler, and it fixes the compiler's addresses.
+5. The scope compiler comes first in that order: `command.asm`,
+   `command-support.asm`, `replay.asm`, `definitions.asm`, `data.asm`,
+   `../procedure-forms.asm`, `../call-ec.asm`, `bindings.asm`,
+   `binding-primitives.asm`, `branches.asm` and `emitter.asm`.
+6. Output and publication follow: `output-sink.asm`, `aso-writer.asm`,
+   `publication.asm`, `aso-materializer.asm` and `publication-recovery.asm`.
+7. The CP/M input path is assembled last: `../cpm-source.asm`,
+   `../cpm-transport.asm`, the runtime loader `../../runtime/loader.asm`,
+   `../lexer.asm`, `../decimal.asm`, `../interner.asm` and `../reader.asm`.
+   Reading this path before the scope compiler is usually easier, even though
+   it is assembled after it.
+8. [`src/runtime/image.asm`](../src/runtime/image.asm) is the runtime
+   composition root. It starts with the cell contract and `core.asm`, then
+   storage, primitives, ports, the datum reader, pairs, output, roots, data,
+   numeric code, strings, vectors, rest arguments, `apply` and `call/ec`.
+9. The corresponding proofs are in `tools/compiler-checks/`. The procedure
    proof covers ordinary calls, closures,
    rest parameters, `apply` and one-shot `call/ec`.
 
@@ -92,7 +98,7 @@ A source program travels through these boundaries:
 ```text
 .SK8 source
     │
-    ├─ optional leading (include "LIB.SK8") preparation
+    ├─ leading (include "LIB.SK8") forms, resolved depth first
     │
     ▼
 CP/M source stream
@@ -136,24 +142,33 @@ program the user starts.
 `src/compiler/scope/compiler.asm` assembles the compiler in a fixed order. The
 order affects addresses and workspace, so a composition change needs a proof.
 
+The table follows that include order. Paths are relative to `src/compiler/`
+unless they start with `src/runtime/`.
+
 | File or group | Responsibility |
 | --- | --- |
-| `src/compiler/cpm-source.asm` and `cpm-transport.asm` | Open the CP/M source file, supply bytes and track source positions |
-| `src/compiler/lexer.asm` | Classify characters and produce tokens |
-| `src/compiler/decimal.asm` | Parse exact integers and binary16 literals |
-| `src/compiler/interner.asm` | Keep permanent symbol and string identities |
-| `src/compiler/reader.asm` | Turn tokens into structural datum events |
-| `src/compiler/scope/command.asm` and `scope/command/` | Dispatch top-level forms, compiler state, diagnostics and accepted primitive names |
-| `src/compiler/scope/definitions.asm` | Compile leading, internal and named definitions |
-| `src/compiler/scope/bindings.asm` | Resolve lexical names and local slots |
-| `src/compiler/scope/branches.asm` | Emit conditionals and branch fixups |
-| `src/compiler/scope/data.asm` | Publish quoted data and literal roots |
-| `src/compiler/procedure-forms.asm` | Compile calls, lambdas, captures and descriptors |
-| `src/compiler/call-ec.asm` | Compile one-shot escape procedures |
-| `src/compiler/scope/emitter.asm` | Emit runtime calls, values and patch sites |
-| `src/compiler/scope/output-sink.asm` and `aso-writer.asm` | Record emitted bytes and patches using logical image addresses |
-| `src/compiler/scope/aso-materializer.asm` | Replay the stream through bounded windows into the COM file |
-| `src/compiler/scope/publication.asm` and `publication-recovery.asm` | Publish files and recover interrupted replacement |
+| `scope/command.asm` and `scope/command/` | Drive the top level and dispatch forms, conditionals and bodies |
+| `scope/command-support.asm` | Errors, compiler state, diagnostics and accepted primitive names (`scope/command/`) |
+| `scope/replay.asm` and `scope/replay/` | Capture and replay binding-list events, symbol spellings and deferred declarations |
+| `scope/definitions.asm` and `scope/definitions/` | Compile leading, internal and named definitions |
+| `scope/data.asm` and `scope/data/` | Publish quoted data and literal roots |
+| `procedure-forms.asm` and `procedures/` | Compile calls, lambdas, captures and descriptors |
+| `call-ec.asm` | Compile one-shot escape procedures |
+| `scope/bindings.asm` and `scope/bindings/` | Resolve lexical names, local slots, globals and initializers |
+| `scope/binding-primitives.asm` | Recognise predefined procedure names |
+| `scope/branches.asm` | Emit conditionals and branch fixups |
+| `scope/emitter.asm` | Emit runtime calls, values and patch sites |
+| `scope/output-sink.asm` and `scope/aso-writer.asm` | Record emitted bytes and patches using logical image addresses |
+| `scope/publication.asm` and `scope/publication/` | Lay out the image, patch descriptors and write the publication stream |
+| `scope/aso-materializer.asm` | Replay the stream through bounded windows into the COM file |
+| `scope/publication-recovery.asm` | Recover an interrupted replacement |
+| `cpm-source.asm`, `cpm-source-include-parser.asm` and `source/` | Resolve the include tree, stream the ordered source files and track source positions |
+| `cpm-transport.asm` | CP/M binary record transport for compiler stages; the runtime image also includes it for file ports |
+| `src/runtime/loader.asm` | Load the checked `SKATE.RT` runtime into the staged output image; part of the compiler, not the runtime image |
+| `lexer.asm` and `lexer/` | Classify characters and produce tokens |
+| `decimal.asm` and `decimal/` | Parse exact integers and binary16 literals |
+| `interner.asm` | Keep permanent symbol and string identities |
+| `reader.asm` | Turn tokens into structural datum events |
 
 A compiler feature normally crosses the form compiler, the emitter and the
 runtime primitive. Changes to a form can therefore affect all three interfaces.
@@ -161,35 +176,44 @@ runtime primitive. Changes to a form can therefore affect all three interfaces.
 ## The runtime
 
 `src/runtime/image.asm` composes the generated-program runtime loaded by the
-native compiler. These are the current public runtime modules.
+native compiler. The table follows its include order; paths are relative to
+`src/runtime/`.
 
 | File or group | Responsibility |
 | --- | --- |
-| `core.asm` | Startup, invocation and frame coordination |
-| `storage/managed.asm`, `storage/page.asm` and `storage/slabs.asm` | Managed storage pages and allocation state |
-| `storage/pair-management.asm` and `storage/pairs.asm` | Pair construction, lists and collector-visible links |
-| `roots.asm` and `data.asm` | Root descriptors, literal data and collector state |
-| `primitives.asm` | Primitive dispatch and shared primitive support |
-| `binary16.asm`, `numeric.asm` and `float.asm` | Exact arithmetic, division, conversion and binary16 operations |
-| `strings.asm`, `managed-strings.asm` and `vectors.asm` | String and vector storage and operations |
-| `storage/stack-slots.asm` | Inline local bindings and promotion of captured bindings |
-| `ports.asm`, `cpm-ports.asm` and `file-ports.asm` | Scheme port values and CP/M byte/file services |
-| `datum-*.asm` | Read Scheme data from an input port |
+| `storage/cell-contract.asm` | Four-byte value-cell layout constants; emits no bytes |
+| `core.asm` and `core/` | Startup, environment, invocation and frame coordination |
+| `storage/stack-slots.asm` and `storage/slots/` | Inline local bindings and promotion of captured bindings |
+| `storage/managed.asm` | Managed closure and four-byte binding storage |
+| `storage/page.asm` and `storage/page/` | Page initialisation, allocation and release |
+| `primitives.asm` and `primitives/` | Primitive dispatch and numeric, predicate, I/O, data, pair and output primitives |
+| `ports.asm`, `cpm-ports.asm`, `../compiler/cpm-transport.asm` and `file-ports.asm` | Scheme port values, console byte services and CP/M sequential files |
+| `datum-reader.asm`, `datum-strings.asm`, `datum-symbols.asm`, `datum-lists.asm` and `datum-vectors.asm` | Read Scheme data from an input port |
+| `storage/pair-management.asm` and `storage/pairs.asm` | Eight-byte pair cells, lists and collector-visible links |
 | `output.asm` and `output/state.asm` | Value printing, port output and shared runtime state |
+| `roots.asm` and `roots/` | Root scanning, managed roots and binding roots |
+| `data.asm` and `data/` | Quoted data, the collector, the data writer and collector state |
+| `float.asm` | Binary16 value printing |
+| `storage/slabs.asm` | Closure pages within the runtime pool |
+| `binary16.asm` and `binary16/` | Binary16 classification, arithmetic, packing, comparison and conversion |
+| `numeric.asm` and `numeric/` | Exact arithmetic, division, conversion and comparison |
+| `strings.asm`, `managed-strings.asm` and `strings/` | String and character primitives and managed string storage |
+| `vectors.asm` and `vectors/` | Vector operations, storage and tracing |
 | `rest.asm`, `apply.asm` and `escape.asm` | Rest arguments, proper-list application and `call/ec` |
-| `external-effects.asm` | Optional provider-facing byte boundary |
-| `loader.asm` | Loads the runtime image into the generated program |
+
+Two runtime files are not part of `image.asm`. `loader.asm` is assembled into
+the compiler, and `external-effects.asm`, the optional provider-facing CP/M
+byte bridge, is assembled only by the test fixture `tests/cpm-effects.asm`.
 
 A runtime change often crosses three places: the compiler emitter that builds
 the call, the primitive that implements it and the storage or root code that
 keeps values live. The procedure and managed-storage proofs are the first tests
 to read for such a change.
 
-The proposed storage experiment is described in
-[`four-byte-cells.md`](four-byte-cells.md). It is a design note, not a
-description of the current representation: it records the measured baseline,
-the four-byte cell contract and the order in which heap bindings, pairs and
-value elements may be changed.
+Heap bindings, pairs and vector elements use four-byte value cells. The
+representation, its capacity consequences and the design record behind it are
+in [`four-byte-cells.md`](four-byte-cells.md). The layout constants live in
+`storage/cell-contract.asm`.
 
 The vector implementation separates three parts of one value.
 [`vectors/ops.asm`](../src/runtime/vectors/ops.asm) contains the Scheme
@@ -256,20 +280,46 @@ pair transactionally and checks the generated program after installation.
 Use the smallest proof that exercises the changed boundary, then run the full
 public check before publishing an assembly change.
 
+`deno task test` runs the host-side suite; `deno task test:cpm` runs the CP/M
+proofs; `deno task test:all` runs both plus `test:cpm:stress`.
+
 | Command | What it checks |
 | --- | --- |
-| `deno task check` | Formatting, lint, types, compiler budget and source inclusion |
-| `deno task test:source-inclusion` | Include ordering, path rules and source-package preparation |
-| `deno task test:cpm:procedures` | Procedures, closures, tail calls and ordinary application |
-| `deno task test:cpm:features` | Vectors, bounded `apply` and one-shot `call/ec` |
-| `deno task test:cpm:console` | Standard and file ports, datum input and source I/O helpers |
-| `deno task test:cpm:recovery` | Replacement failure and preservation of prior output |
-| `deno task test:cpm:full-image` | Materialization of a 65,280-byte image; does not execute that image |
-| `deno task test:aso` | Stream validation and window-boundary patches |
-| `deno task test:cpm:generated-effects` | Provider-facing generated effect bytes |
-| `deno task test:cpm:release` | Release disk, examples and publication checks |
+| `deno task check` | Formatting, lint, types and compiler budget |
+| `deno task test` | `check`, `test:effects`, `test:effects:cpm`, `test:aso`, `test:ports` and `test:runtime` |
+| `deno task test:all` | `test`, `test:cpm` and `test:cpm:stress` |
+| `deno task measure` | Compiler and runtime size budget report |
 | `deno task test:effects` | Host provider, terminal and bounded file tests |
-| `deno task test:effects:cpm` | CP/M byte bridge tests |
+| `deno task test:effects:cpm` | CP/M byte bridge tests (`tests/cpm-effects.asm`) |
+| `deno task test:aso` | Stream validation and window-boundary patches |
+| `deno task test:ports` | Effect-port qualification and runtime port fixtures |
+| `deno task test:runtime` | Runtime unit fixtures: heap, pages, roots, datum reader, strings, symbols, vectors and cell metrics |
+| `deno task test:cpm` | Every `test:cpm:*` proof below except the stress group |
+| `deno task test:cpm:core` | Core forms, the compile-error corpus (`--errors`) and the no-implicit-output check (`--no-output`) |
+| `deno task test:cpm:procedures` | Procedures, closures, tail calls and ordinary application |
+| `deno task test:cpm:runtime-errors` | Arity, rest-arity, unbound `set!`, deep recursion and stale escape errors at run time |
+| `deno task test:cpm:data` | Pairs, lists, strings, quoted data and the list libraries |
+| `deno task test:cpm:features` | Vectors, bounded `apply` and one-shot `call/ec` in one run |
+| `deno task test:cpm:integers` | Exact integer arithmetic and its runtime errors |
+| `deno task test:cpm:regressions` | Regression cases for fixed compiler defects |
+| `deno task test:cpm:edge` | Named `let`, captures and internal-definition edge cases |
+| `deno task test:cpm:console` | Standard and file ports, datum input and source I/O helpers |
+| `deno task test:cpm:examples` | The terminal demo with its included library and the house adventure |
+| `deno task test:cpm:generated-effects` | Provider-facing generated effect bytes |
+| `deno task test:cpm:float` | Binary16 literals, arithmetic and printing |
+| `deno task test:cpm:includes` | Nested, import-once, cyclic, missing and bounded include trees |
+| `deno task test:cpm:release` | Release disk, examples and publication checks |
+| `deno task test:cpm:recovery` | Replacement failure and preservation of prior output |
+| `deno task test:cpm:stress` | `test:cpm:capacity`, `test:cpm:large` and `test:cpm:full-image` |
+| `deno task test:cpm:capacity` | Compiler capacity: 256 globals with short, long and string-valued definitions, and a 256-form `begin` |
+| `deno task test:cpm:large` | Compilation of a 6,200-form source file |
+| `deno task test:cpm:full-image` | Materialization of a 65,280-byte image; does not execute that image |
+
+The procedure proof accepts several mode flags in one run (for example
+`--vectors --apply --ec`), so related groups share one assembly of the
+compiler and runtime. `scope-cpm-proof.mjs` needs a separate boot per mode
+because each corpus fills the CP/M directory. The CP/M proofs share the disk
+and console helpers in `tools/compiler-checks/cpm-harness.mjs`.
 
 The CP/M commands require sibling checkouts of ATOM (including its Z80 runtime dependency),
 Z80 tool services and Triptych. Host provider tests can run without booting
@@ -279,7 +329,7 @@ CP/M, but they do not replace the target proof.
 
 | Term | Meaning in the public tree |
 | --- | --- |
-| source package | Ordered source parts prepared for the CP/M compiler |
+| source part | One file of a program; included parts precede the files that include them |
 | reader | The datum reader that turns the byte stream into structural events |
 | scope compiler | The native compiler that resolves definitions, bindings, control flow and emitted calls |
 | runtime image | The assembled provider image loaded by the compiler and used by generated programs |

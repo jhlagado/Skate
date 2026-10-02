@@ -1,9 +1,53 @@
-# Four-byte cell experiment
+# Four-byte value cells
 
-This note records a possible storage change for Skate. It is an experiment,
-not a claim about the current public representation. The current implementation
-and its language behaviour remain the reference until an increment has passed
-the measurements and proofs described here.
+Skate stores heap bindings, pairs and vector elements in four-byte value cells.
+This was introduced as a staged storage change, and the first four increments
+described below (contract, heap bindings, pairs and vector elements) are
+implemented on `main`. Generated code, the `A:HL` value convention and the
+four-byte argument packet are unchanged.
+
+## Current representation
+
+A cell holds payload bits 0–15 at offsets 0 and 1, a cleared extension byte
+at offset 2 and a metadata byte at offset 3. The constants are defined in
+[`src/runtime/storage/cell-contract.asm`](../src/runtime/storage/cell-contract.asm).
+
+* A heap binding is one cell. A 256-byte binding page holds 64 cells. The
+  allocation-start map remains authoritative, and the metadata byte keeps the
+  existing allocation, initialization, escape and mark encoding.
+* A pair is two adjacent cells, CAR then CDR, in one eight-byte record. A pair
+  page holds 32 records and the free chain advances by eight bytes. The CAR
+  metadata byte owns the pair's allocation and mark bits.
+* A vector element is one cell. The vector length byte and the ownership and
+  mark maps stay outside the cells.
+* Inline stack, static and transient slots, argument packets, closure blocks,
+  strings and descriptors keep their previous formats.
+
+## Capacity
+
+The change trades heap capacity for a uniform layout. The page budget is
+unchanged, so live-object ceilings fall in proportion to records per page:
+
+| Object | Before | Now | Effect |
+| --- | --- | --- | --- |
+| Pair | 5 bytes, 51 per page | 8 bytes, 32 per page | live pair ceiling falls from about 2,900 to 1,856 (58 pages; pinned by the PAIR1856 proof case) |
+| Heap binding | 3 bytes, 85 per page | 4 bytes, 64 per page | about 25% fewer bindings per page |
+| Vector element | 4 bytes | 4 bytes | unchanged |
+
+Programs that keep long lists live therefore reach heap exhaustion sooner than
+they did with five-byte pairs. Programs dominated by short-lived pairs see the
+cost as more frequent collection rather than failure.
+
+## Size conventions
+
+Image sizes in this note are bytes after the 0100H load origin, which is what
+the CP/M harness reports and what a `.COM` or `SKATE.RT` file occupies. ATOM's
+whole-image figure includes the 256 bytes below the origin and is therefore
+256 bytes larger; where it is quoted, it is labelled as the ATOM total.
+
+The sections below are the design record written before and during the
+migration. Where they say "proposed" or "experiment", they describe the plan
+at that time; the implementation checkpoint at the end records what was built.
 
 ## Why consider it
 
@@ -23,11 +67,8 @@ and access, not from new numerical range.
 
 The baseline is public `main` at commit `83ba21f` (2 October 2026), assembled
 with ATOM at
-`11b3eeb197884f6abfdfeec89b67197a917c2d5a`. The pinned compiler image is
-22,224 bytes and the runtime image is 22,681 bytes under the image-size
-convention used by the ATOM qualification. The CP/M harness reports 21,968
-compiler bytes and 22,425 runtime bytes under its account convention; those
-figures differ by the image base and are not mixed in comparisons.
+`11b3eeb197884f6abfdfeec89b67197a917c2d5a`. The compiler was 21,968 bytes and
+the runtime 22,425 bytes after the load origin (ATOM totals 22,224 and 22,681).
 
 The baseline procedure and data proofs all passed. Their largest observed
 programs and useful stress counts were:
@@ -157,8 +198,8 @@ assignment.
 
 ## Migration increments
 
-Each increment is measured, reviewed by an Astra Medium reviewer, tested, and
-committed and pushed before the next one begins.
+Each increment is measured, reviewed, tested and committed before the next one
+begins.
 
 1. **Contract and helpers.** Add constants, non-emitting cell contract
    definitions and host-side measurement counters. Document the layout without
@@ -227,7 +268,7 @@ The experiment is successful only when all of the following are true:
   collector overflow paths have explicit coverage;
 * memory, image size, stack headroom, allocation counts and instruction counts
   are compared with the reference table; and
-* the increment has an Astra Medium review with every finding resolved.
+* the increment has been reviewed and every finding resolved.
 
 If those predicates cannot be met without a disproportionate cost, the public
 implementation remains on the current representation and this note records
@@ -265,8 +306,8 @@ changing the calling convention.
 
 The ordinary CP/M procedure proof, data proof, vector proof, `apply` proof and
 `call/ec` proof, together with the pair-focused host proofs, pass with this
-increment. The ATOM runtime image is 22,653 bytes in total, or 22,397 bytes
-after the 0100H load origin. The CP/M harness reports 22,397 runtime bytes.
+increment. The runtime is 22,397 bytes after the load origin (ATOM total
+22,653), as the CP/M harness also reports.
 The largest published images are 24,320 COM and 25,216 ASO for procedures,
 24,448 COM and 25,856 ASO for datum and data storage, 23,424 COM and 24,448
 ASO for vectors, 22,784 COM and 23,552 ASO for `apply`, and 22,912 COM and

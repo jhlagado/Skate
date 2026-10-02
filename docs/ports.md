@@ -19,8 +19,13 @@ Scheme operations with a CP/M file behind them.
 standard ports. Character and datum operations accept an explicit port;
 omitting it selects the corresponding current port. `read` parses a Scheme
 datum, while `read-char` returns one byte character. `eof-object?` recognises
-the end-of-input value. `write` prints datum syntax and `display` prints
-strings without quotation marks.
+the end-of-input value. `write` prints datum syntax that `read` accepts:
+strings are quoted with `\"`, `\\`, `\n`, `\r`, `\t` and `\xHH;` escapes,
+and characters use `#\space`, `#\newline`, `#\xHH` or the character itself.
+`display` prints strings and characters raw, including inside lists and
+vectors. Vectors print as `#(...)`, procedures and escape procedures as
+`#<procedure>` and ports as `#<port>`. Each port keeps its own lookahead and
+end-of-file state.
 
 ## Files
 
@@ -28,7 +33,9 @@ strings without quotation marks.
 `open-input-binary-file` and `open-output-binary-file` preserve physical bytes.
 The native adapter permits one input and one output file at a time, with
 sequential access and current-drive CP/M 8.3 names. Lowercase names are folded
-to uppercase. Drive prefixes, wildcards and directories are rejected.
+to uppercase. Drive prefixes, wildcards, directories, spaces and the CP/M
+delimiters `<>=,;[]|` are rejected, as is opening for output the file that is
+currently open for input.
 
 Text input folds CR, LF and CR/LF into logical newlines and treats Control-Z
 as EOF. Text output expands a newline to CR/LF. Binary ports preserve these
@@ -38,8 +45,10 @@ file format. Output replaces an existing file. Closing flushes its last
 record; this native replacement does not provide the transactional guarantees
 of the separate host file provider.
 
-Use `close-port` explicitly. Invalid directions, closed ports and failed file
-operations take the checked runtime-error path. Append, seeking and multiple
+Use `close-port` explicitly; closing a file port that is already closed does
+nothing. An open output file is also flushed and closed when the program ends
+or stops with a runtime error. Invalid directions, operations on closed ports
+and failed file operations take the checked runtime-error path. Append, seeking and multiple
 simultaneous handles per direction are not implemented.
 
 ## Source helpers

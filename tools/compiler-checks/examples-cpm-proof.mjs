@@ -1,17 +1,22 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { loadAssembly } from "../../tests/z80.ts";
 import { validateAso } from "./aso-proof.mjs";
-import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 import {
   createBlankCpm22Disk,
   installCpm22File,
   readCpm22File,
 } from "../../../triptych/tools/lib/cpm22-disk.mjs";
+import {
+  createCpmSession,
+  directoryFiles,
+  diskStats,
+  loadCpmSystem,
+  sha256,
+  TriptychCpu,
+} from "./cpm-harness.mjs";
 
 const skateRoot = fileURLToPath(new URL("../../", import.meta.url));
 const imageArgument = Deno.args.find((argument) =>
@@ -20,21 +25,8 @@ const imageArgument = Deno.args.find((argument) =>
 const imagePath = imageArgument
   ? resolve(skateRoot, imageArgument.slice("--image=".length))
   : null;
-const triptychRoot = fileURLToPath(
-  new URL("../../../triptych/", import.meta.url),
-);
-const require = createRequire(import.meta.url);
-const { TriptychCpu } = require(
-  join(triptychRoot, "dist", "wasm", "triptych_host_wasm.js"),
-);
-
 const encoder = new TextEncoder();
-const decoder = new TextDecoder("ascii");
 const sourceRoot = join(skateRoot, "examples", "applications");
-function sha256(bytes) {
-  return createHash("sha256").update(bytes).digest("hex");
-}
-
 function makeSystemDisk(firmware) {
   const system = createBlankCpm22Disk();
   system.set(firmware.ccp, 0x0000);
@@ -45,36 +37,6 @@ function makeSystemDisk(firmware) {
   return disk;
 }
 
-function directoryFiles(image) {
-  const directoryOffset = 52 * 128;
-  const files = [];
-  for (let index = 0; index < 64; index += 1) {
-    const offset = directoryOffset + index * 32;
-    if (image[offset] !== 0) continue;
-    const raw = String.fromCharCode(...image.slice(offset + 1, offset + 12));
-    const base = raw.slice(0, 8).trimEnd();
-    const extension = raw.slice(8).trimEnd();
-    const name = extension ? `${base}.${extension}` : base;
-    let blocks = 0;
-    for (let byte = 16; byte < 32; byte += 1) {
-      if (image[offset + byte] !== 0) blocks += 1;
-    }
-    files.push({ name, blocks });
-  }
-  return files;
-}
-
-function diskStats(image) {
-  const files = directoryFiles(image);
-  const usedBlocks = files.reduce((sum, file) => sum + file.blocks, 0);
-  return {
-    bytes: image.length,
-    files: files.length,
-    usedBlocks,
-    freeBlocks: 241 - usedBlocks,
-  };
-}
-
 function newMachine(firmware, image) {
   const machine = new TriptychCpu(firmware.bootRom);
   machine.install_drive(0, image, true);
@@ -82,55 +44,17 @@ function newMachine(firmware, image) {
 }
 
 function session(machine) {
-  let transcript = "";
-  let decoderSteps = 0;
-  function runUntilPrompt(offset, description) {
-    let instructions = 0n;
-    let tstates = 0n;
-    const limit = description.startsWith("compile") ? 12000 : 8000;
-    for (let attempt = 0; attempt < limit; attempt += 1) {
-      const status = machine.run_slice(50_000, 500_000);
-      instructions += machine.last_steps();
-      tstates += machine.last_tstates();
-      decoderSteps += 1;
-      transcript += decoder.decode(machine.take_serial_output());
-      assert.notEqual(status, 0, `CP/M halted during ${description}`);
-      if (transcript.length > offset && transcript.endsWith("A>")) {
-        return { instructions: Number(instructions), tstates: Number(tstates) };
-      }
-    }
-    throw new Error(
-      `Timed out during ${description}: ${
-        JSON.stringify(transcript.slice(-500))
-      }`,
-    );
-  }
-  function command(command, expected, description) {
-    const start = transcript.length;
-    assert.ok(machine.enqueue_serial_input(encoder.encode(command + "\r")));
-    const metrics = runUntilPrompt(start, description);
-    const output = transcript.slice(start);
-    assert.ok(
-      output.includes(expected),
-      `${description}: expected ${JSON.stringify(expected)} in ${
-        JSON.stringify(output)
-      }`,
-    );
-    return { output, ...metrics };
-  }
+  const cpm = createCpmSession(machine, {
+    promptAttempts: (description) =>
+      description.startsWith("compile") ? 12000 : 8000,
+  });
   return {
-    boot: () => runUntilPrompt(0, "boot"),
-    command,
-    get decoderSteps() {
-      return decoderSteps;
-    },
+    boot: () => cpm.runUntilPrompt(0, "boot"),
+    command: cpm.runCommandMeasured,
   };
 }
 
-const firmware = await assembleTriptychCpuFirmware(triptychRoot);
-const sourceDisk = await Deno.readFile(
-  join(triptychRoot, "third_party/cpm22/cpm22.img"),
-);
+const { firmware, sourceDisk } = await loadCpmSystem();
 const compiler = await loadAssembly("src/compiler/scope/compiler.asm");
 const provider = await loadAssembly(
   "src/runtime/image.asm",
