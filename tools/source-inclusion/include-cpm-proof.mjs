@@ -47,7 +47,7 @@ const includeAll = (count) =>
 // outputs are erased after each run to keep the small disk from filling.
 const boots = [
   {
-    description: "nested and import-once include trees",
+    description: "nested, import-once and rejected include trees",
     files: [
       ["MAIN.SK8", await fixture("MAIN.SK8")],
       ["LIB.SK8", await fixture("LIB.SK8")],
@@ -66,9 +66,18 @@ const boots = [
       ["LEFT.SK8", '(include "BASE.SK8")\r\n(display "l")'],
       ["RIGHT.SK8", '(include "BASE.SK8")\r\n(display "r")'],
       ["BASE.SK8", '(display "b")'],
-      // Eight files on the include path are accepted.
+      // Eight files on the include path are accepted; nine are not.
       ["DEPTH.SK8", '(include "D1.SK8")\r\n(display d1)\r\n(newline)'],
       ...chain("D", 7, "(define d7 7)"),
+      ["DEEP.SK8", '(include "DEPTH.SK8")\r\n(newline)'],
+      // Cycles, including a part that includes itself.
+      ["CYCLE.SK8", '(include "CA.SK8")\r\n1'],
+      ["CA.SK8", '(include "CB.SK8")\r\n(define ca 1)'],
+      ["CB.SK8", '(include "CA.SK8")\r\n(define cb 2)'],
+      ["SELF.SK8", '(include "SELF.SK8")\r\n1'],
+      ["MISSING.SK8", '(include "NB.SK8" "ABSENT.SK8")\r\n1'],
+      ["NESTMISS.SK8", '(include "NM.SK8")\r\n1'],
+      ["NM.SK8", '(include "ABSENT.SK8")\r\n(define nm 1)'],
     ],
     commands: [
       ["SKATE MAIN.SK8", "COMPILED\r\n", "MAIN.COM"],
@@ -87,19 +96,26 @@ const boots = [
       ["DEPTH", "1\r\n"],
       ["ERA DEPTH.COM", "A>"],
       ["ERA DEPTH.ASO", "A>"],
+      ["SKATE DEEP.SK8", "INCLUDE ERROR\r\n", null, "DEEP.COM"],
+      ["SKATE CYCLE.SK8", "INCLUDE ERROR\r\n", null, "CYCLE.COM"],
+      ["SKATE SELF.SK8", "INCLUDE ERROR\r\n", null, "SELF.COM"],
+      ["SKATE MISSING.SK8", "INCLUDE ERROR\r\n", null, "MISSING.COM"],
+      ["SKATE NESTMISS.SK8", "INCLUDE ERROR\r\n", null, "NESTMISS.COM"],
     ],
   },
   {
     description: "the 32-part source table bound",
     files: [
-      ...parts(31),
+      ...parts(32),
       ["FULL.SK8", `${includeAll(31)}\r\n(display p31)\r\n(newline)`],
+      ["OVER.SK8", `${includeAll(32)}\r\n(display p32)\r\n(newline)`],
     ],
     commands: [
       ["SKATE FULL.SK8", "COMPILED\r\n", "FULL.COM"],
       ["FULL", "31\r\n"],
       ["ERA FULL.COM", "A>"],
       ["ERA FULL.ASO", "A>"],
+      ["SKATE OVER.SK8", "INCLUDE ERROR\r\n", null, "OVER.COM"],
     ],
   },
 ];

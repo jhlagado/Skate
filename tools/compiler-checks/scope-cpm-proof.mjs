@@ -296,6 +296,7 @@ const errorCases = [
     "EXPECT\r\n",
     "BROKEN.SK8:2:16: EXPECT\r\n",
   ],
+  ["INCMISS.SK8", '(include "ABSENT.SK8")\r\n1', "INCLUDE ERROR\r\n"],
 ];
 const includeErrorFiles = [
   ["BROKEN.SK8", "(begin\r\n(let ((value 1 2)) value))\r\n"],

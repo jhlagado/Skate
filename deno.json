@@ -18,7 +18,7 @@
     "test:effects": "deno test --allow-read=.,/tmp --allow-write=/tmp tools/",
     "test:effects:cpm": "deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services --allow-write=/tmp tests/cpm-effects_test.ts",
     "test": "deno task check && deno task test:effects && deno task test:effects:cpm && deno task test:aso && deno task test:ports",
-    "test:cpm:core": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/scope-cpm-proof.mjs",
+    "test:cpm:core": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/scope-cpm-proof.mjs && deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/scope-cpm-proof.mjs --errors && deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/scope-cpm-proof.mjs --no-output",
     "test:cpm:capacity": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/scope-capacity-proof.mjs",
     "test:cpm:recovery": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/scope-recovery-proof.mjs",
     "test:aso": "deno test --config deno.runtime.json --allow-read tests/aso_test.ts tools/compiler-checks/aso-proof_test.mjs",

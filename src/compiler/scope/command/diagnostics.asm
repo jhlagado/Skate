@@ -1,12 +1,23 @@
 ; Close the source and choose a positioned diagnostic for parse failures.
 SCDIAG:
+        CALL CSCLOSE               ; Close any open part and read its sticky error.
+        JR NC,.SRCOK               ; The source itself did not fail.
+        CP 5                       ; Error 5 is a missing, malformed or cyclic include.
+        LD HL,SCINCTXT
+        JR Z,.SRCMSG
+        LD HL,SCSRCTXT             ; Open, read and close failures share one text.
+.SRCMSG:
+        LD (SCERRPTR),HL           ; A source failure replaces a later parse symptom.
+.SRCOK:
+        CALL CTCLOSER              ; Close a transport stream left open by a failure.
+        CALL SINKABRT              ; Delete the spool after the input FCBs are closed.
         LD A,(SCPHASE)             ; Finalisation errors no longer have source text.
         OR A
         JR NZ,.PLAINC
         LD A,(CSPEND)              ; Zero means a byte or terminal EOF was observed.
         OR A
         JR NZ,.PLAINC
-        LD A,(LTOKPART)            ; Snapshot the location before closing the source.
+        LD A,(LTOKPART)            ; Snapshot the location of the failing token.
         LD (SCERRPT),A
         LD HL,(LTOKOFF)
         LD (SCERROFF),HL
@@ -14,12 +25,8 @@ SCDIAG:
         LD (SCERRLIN),HL
         LD HL,(LTOKCOL)
         LD (SCERRCOL),HL
-        CALL CTCLOSER               ; Close a source left open by a parse failure.
-        CALL SINKABRT              ; Delete the spool after its source FCB is closed.
         JP SCPRLOC                  ; Prefix the existing diagnostic with its source.
 .PLAINC:
-        CALL CTCLOSER               ; Close a source left open by a parse failure.
-        CALL SINKABRT              ; Delete the spool after its source FCB is closed.
         LD DE,(SCERRPTR)            ; All rejected forms remain unpublished.
         JP SCPRINT                  ; Print the diagnostic and warm-start CP/M.
 

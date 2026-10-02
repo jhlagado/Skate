@@ -219,6 +219,8 @@ SCEVGOOD:
 
 ; Finish a nonempty package with the return instruction used by SRTCALL.
 SCENDPK:
+        CALL CSCLOSE               ; A missing, unreadable or bad part is an error.
+        RET C                      ; SCDIAG selects the source diagnostic.
         LD HL,(SCFORMN)            ; Reject an empty source before publication.
         LD A,H                     ; Test both bytes of the form count.
         OR L                       ; A zero count has no result for SRTPRINT.
