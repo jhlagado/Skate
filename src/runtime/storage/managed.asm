@@ -246,6 +246,7 @@ SRTCELOK:
         LD (SRTBCNT),DE
         LD (SRTCELLP),HL
         CALL SRTBNEW                 ; Publish the exact binding start before stores.
+        JP C,SRTERROR               ; Never initialise a cell the collector cannot see.
         XOR A
         LD (HL),A                   ; Clear the payload low byte.
         INC HL
