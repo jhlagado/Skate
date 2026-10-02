@@ -29,75 +29,41 @@ SRTWREST:
         CP 0F0H
         JR NZ,SRTWPROC             ; An escape token is a callable procedure.
         LD DE,SRTWPRTT             ; Every port prints as one opaque spelling.
-        JP SRTTEXT                 ; Send it through the selected output adapter.
-SRTWPROC:
-        LD DE,SRTWPRCT             ; Primitives, closures and escapes share this.
-        JP SRTTEXT                 ; Send it through the selected output adapter.
+        JR SRTWMSG
 SRTWSCAL:
-        LD A,H
+        LD A,H                     ; FFxx payloads are byte characters.
         CP 0FFH
-        JP Z,SRTWCHAR              ; Byte characters share the scalar tag with booleans.
-        PUSH HL
-        LD DE,0FE02H
-        OR A
-        SBC HL,DE
-        POP HL
-        JR Z,SRTWNIL
-        PUSH HL
-        LD DE,0FE03H
-        OR A
-        SBC HL,DE
-        POP HL
-        JR Z,SRTWEOFV
-        PUSH HL
-        LD DE,0FE04H
-        OR A
-        SBC HL,DE
-        POP HL
-        JR Z,SRTWUNS
-        PUSH HL                    ; Compare the false payload without changing it.
-        LD DE,0FE00H               ; #f is the reserved false scalar.
-        OR A                       ; Clear carry before the subtraction.
-        SBC HL,DE                  ; Test whether the payload is exactly FE00H.
-        POP HL                     ; Restore the value for the following formatter.
-        JR Z,SRTWBOOL              ; Preserve the established #t spelling.
-        PUSH HL                    ; Compare the true payload without changing it.
-        LD DE,0FE01H               ; #t is the reserved true scalar.
-        OR A                       ; Clear carry before the subtraction.
-        SBC HL,DE                  ; Test whether the payload is exactly FE01H.
-        POP HL                     ; Restore the value for the following formatter.
-        JR Z,SRTWBOOL              ; Preserve the established #t spelling.
-        LD A,H                     ; Remaining FExx scalars are primitive values.
-        CP 0FEH
-        JR Z,SRTWPROC              ; Print them as procedures, not as booleans.
-        PUSH HL
-        XOR A
-        CALL NCLASS
-        POP HL
-        JP NC,SRTFPRN
-SRTWBOOL:
-        LD DE,SRTWQF
-        LD A,H
-        CP 0FEH
-        JR NZ,SRTWMSG
-        LD A,L
+        JP Z,SRTWCHAR
+        CP 0FEH                    ; FExx holds reserved singletons and primitives.
+        JR NZ,SRTWNUMS
+        LD A,L                     ; FE00..FE04 have fixed spellings.
+        LD DE,SRTWQF               ; FE00 is #f.
         OR A
         JR Z,SRTWMSG
-        LD DE,SRTWQT
+        LD DE,SRTWQT               ; FE01 is #t.
+        DEC A
+        JR Z,SRTWMSG
+        LD DE,SRTWNILT             ; FE02 is the empty list.
+        DEC A
+        JR Z,SRTWMSG
+        LD DE,SRTWEOF              ; FE03 is the EOF object.
+        DEC A
+        JR Z,SRTWMSG
+        LD DE,SRTWUNST             ; FE04 is the unspecified value.
+        DEC A
+        JR Z,SRTWMSG
+SRTWPROC:
+        LD DE,SRTWPRCT             ; Primitives, closures and escapes share this.
 SRTWMSG:
-        JP SRTTEXT
-
-SRTWNIL:
-        LD DE,SRTWNILT
-        JP SRTTEXT
-
-SRTWUNS:
-        LD DE,SRTWUNST
-        JP SRTTEXT
-
-SRTWEOFV:
-        LD DE,SRTWEOF
-        JP SRTTEXT
+        JP SRTTEXT                 ; Send the spelling through the output adapter.
+SRTWNUMS:
+        PUSH HL                    ; Keep the payload across classification.
+        XOR A                      ; Classify it as a binary16 scalar.
+        CALL NCLASS
+        POP HL
+        JP NC,SRTFPRN              ; Valid binary16 values use the float printer.
+        LD DE,SRTWQF               ; Keep the established fallback spelling.
+        JR SRTWMSG
 
 ; Print a character raw for display, or in write mode as #\c, #\space,
 ; #\newline or #\xHH so the datum reader accepts the spelling again.
