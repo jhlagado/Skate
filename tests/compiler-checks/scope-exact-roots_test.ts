@@ -115,8 +115,8 @@ async function rootRuntime() {
   }
 
   function bindingStart(address: number) {
-    const offset = address - heapBase;
-    memory[assembled.address("SRTBMB") + (offset >> 3)] |= 1 << (offset & 7);
+    const cell = (address - heapBase) >> 2;
+    memory[assembled.address("SRTBMB") + (cell >> 3)] |= 1 << (cell & 7);
   }
 
   function closureStart(address: number) {

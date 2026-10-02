@@ -3,6 +3,7 @@
 ; Included in runtime order by ../roots.asm.
 
 ; Convert an aligned binding byte address to its bitmap byte and bit mask.
+; The map holds one bit per four-byte cell from SRTHEAP.
 SRTBPOS:
         LD HL,(SRTBADDR)
         LD DE,SRTHEAP
@@ -15,11 +16,13 @@ SRTBPOS:
         LD A,L
         AND 3
         JR NZ,SRTBPF
+        SRL H                      ; Count in four-byte cells: one bit per cell.
+        RR L
+        SRL H
+        RR L
         LD A,L
         AND 7
         LD C,A
-        LD A,C
-        OR A
         JR Z,SRTBPSZ
         LD A,1
 SRTBPSH:

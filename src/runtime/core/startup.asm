@@ -6,7 +6,8 @@ ORG 0100H
 
 SRTHEAP    EQU 03000H              ; Base used by the full-pool allocation maps.
 SRTLOEND EQU 09000H              ; Low pages end before the external mark maps.
-SRTMPEND  EQU 0B800H              ; The managed high band begins after the maps.
+SRTMPEND  EQU 0AB00H              ; The managed high band begins after the maps.
+SRTMPENH  EQU 0ABH                ; High byte of SRTMPEND for page mapping.
 SRTHEPEN  EQU 0C000H              ; Managed objects stop before transient storage.
 SRTETOH   EQU 0E0H                ; Pair tag-seven values above this byte are escapes.
 SRTETOK   EQU 0E000H              ; Escape generations occupy the non-heap range.
@@ -92,7 +93,7 @@ SRTTPAOK:
         LDIR
         LD HL,SRTBMB               ; Clear binding allocation-start metadata.
         LD DE,SRTBMB+1
-        LD BC,11FFH
+        LD BC,047FH
         LD (HL),A
         LDIR
         LD HL,SRTCFREE              ; Empty every rounded closure size class.

@@ -2,7 +2,7 @@
 ; Shared data labels for the page modules.
 SRTPGIMG: DW 0                     ; Exact final loaded image end supplied by SCFIN.
 SRTPGBAS: DW 0                     ; First aligned page in the low managed extent.
-SRTPGLOW: DW 0                     ; Number of pages before the B800 extent.
+SRTPGLOW: DW 0                     ; Number of pages before the high extent.
 SRTPGHIG: DW 0                     ; Number of pages in the selected high extent.
 SRTPGCNT: DW 0                     ; Total virtual pages in both explicit extents.
 SRTPGMET: DW 0                     ; Whole pages reserved for bitmap and directory.

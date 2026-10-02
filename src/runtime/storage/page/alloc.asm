@@ -112,7 +112,7 @@ SRTGPMAP:
         SBC HL,DE                  ; A carry means that the index is in the low gap.
         JR C,.LOW                  ; Low pages are based at the rounded image end.
         LD A,L                     ; High-extent offsets fit in the low byte.
-        ADD A,0B8H                 ; The managed high band starts at B800H.
+        ADD A,SRTMPENH             ; The managed high band starts at SRTMPEND.
         LD H,A                     ; Return a page-aligned address in the high extent.
         LD L,0                     ; Every managed page address ends at byte zero.
         RET                        ; The caller receives the mapped high page.
@@ -161,7 +161,7 @@ SRTGPREL:
         XOR A                      ; The high extent offset has no high byte.
         LD H,A                     ; Add the low-extent page count below.
         LD DE,(SRTPGLOW)           ; High virtual indices follow every low page.
-        ADD HL,DE                  ; Map B800H to the first high-extent index.
+        ADD HL,DE                  ; Map SRTMPEND to the first high-extent index.
         JR .INDEX                  ; Validate the mapped run below.
 .LOWADDR:
         LD HL,(SRTPGADR)           ; Convert the low page address to an index.

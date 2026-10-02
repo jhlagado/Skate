@@ -30,7 +30,7 @@ unchanged, so live-object ceilings fall in proportion to records per page:
 
 | Object | Before | Now | Effect |
 | --- | --- | --- | --- |
-| Pair | 5 bytes, 51 per page | 8 bytes, 32 per page | live pair ceiling falls from about 2,900 to 1,856 (58 pages; pinned by the PAIR1856 proof case) |
+| Pair | 5 bytes, 51 per page | 8 bytes, 32 per page | live pair ceiling fell from about 2,900 to 1,856 (58 pages); the smaller binding start map later raised it to 2,272 (71 pages; pinned by the PAIR2272 proof case) |
 | Heap binding | 3 bytes, 85 per page | 4 bytes, 64 per page | about 25% fewer bindings per page |
 | Vector element | 4 bytes | 4 bytes | unchanged |
 

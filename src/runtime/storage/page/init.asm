@@ -4,7 +4,7 @@
 ; A=2 invalid request or A=3 uninitialised, with carry set.
 ; SRTGPREL: HL = page address, DE = count; returns A=0 or A=2 invalid request
 ; or A=3 uninitialised, with carry set. The pool owns the gap below 9000H and
-; the B800H..C000H high extent; maps and exact roots occupy 9000H..B800H.
+; the AB00H..C000H high extent; maps and exact roots occupy 9000H..AB00H.
 
 SRTGPINI:
         XOR A                      ; Invalidate any previous domain before checks.

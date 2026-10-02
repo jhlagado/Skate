@@ -16,16 +16,16 @@ SRTRESTC:     DB 0                 ; Original surplus count passed to SRTQBLD.
 SRTNCT:       DB 0                 ; Number of generated operands not yet consumed.
 ; The exact-root operand table and allocation maps use a fixed work band
 ; outside the provider image.  The page domain ends its low band before 9000H,
-; skips this band through B800H and manages B800H..C000H.
+; skips this band through AB00H and manages AB00H..C000H.
 SRTNRTAB:     EQU 0A200H           ; Four-byte exact roots for up to 255 operands.
 SRTNRVAL:     DW 0                 ; Shadow-root payload staging.
 SRTNRTAG:     DB 0                 ; Shadow-root tag staging.
 ; These maps are outside the serialized provider image and occupy the 9000H
-; through B800H work band reserved by the page manager.  Their larger extents
+; through AB00H work band reserved by the page manager.  Their larger extents
 ; cover the full 3000H..C000H address span, including images below 4000H.
 SRTCLBM      EQU 09000H           ; 2304 bytes mark every allocated closure start.
 SRTCLMK      EQU 09900H           ; 2304 bytes: even marks, odd vector type bits.
-SRTBMB       EQU 0A600H           ; 4608 bytes mark every allocated binding start.
+SRTBMB       EQU 0A600H           ; 1152 bytes: one bit per four-byte binding cell.
 SRTNLEFT:     DB 0                 ; Remaining values in an arithmetic or compare fold.
 SRTNACCT:     DB 0                 ; Accumulator tag for a variadic numeric fold.
 SRTNTAG:      DB 0                 ; Current packet value tag during numeric work.
