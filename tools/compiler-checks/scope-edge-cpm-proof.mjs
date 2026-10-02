@@ -59,7 +59,10 @@ const cases = [
     "2",
   ],
 ];
-for (const [name, source] of cases) {
+// The runtime needs a TPA reaching its E400H stack ceiling.  This program is
+// run once with a lowered BDOS base and must refuse cleanly before using it.
+const smallTpaCase = ["SMALLTPA.SK8", "(begin (write 1) (newline))", "1"];
+for (const [name, source] of [...cases, smallTpaCase]) {
   disk = installCpm22File(disk, {
     name,
     bytes: new TextEncoder().encode(source + "\x1a"),
@@ -95,6 +98,33 @@ try {
       `${expected}\r\n`,
       `${name}: unexpected program output`,
     );
+    runCommand(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
+    runCommand(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
+  }
+  {
+    const [name, , expected] = smallTpaCase;
+    const command = name.replace(".SK8", "");
+    runCommand(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
+    const realBase = machine.read_ram(0x0006, 2);
+    const loweredBase = 0xd000;
+    // Keep BDOS callable through a trampoline at the lowered base address.
+    machine.write_ram(
+      loweredBase,
+      new Uint8Array([0xc3, realBase[0], realBase[1]]),
+    );
+    machine.write_ram(
+      0x0006,
+      new Uint8Array([loweredBase & 255, loweredBase >> 8]),
+    );
+    const refused = runCommand(command, "NOT ENOUGH MEMORY\r\n", "small TPA");
+    assert.equal(programOutput(refused), "NOT ENOUGH MEMORY\r\n");
+    assert.deepEqual(
+      [...machine.read_ram(0x0006, 2)],
+      [...realBase],
+      "warm start restores the BDOS vector",
+    );
+    const normal = runCommand(command, `${expected}\r\n`, "full TPA");
+    assert.equal(programOutput(normal), `${expected}\r\n`);
     runCommand(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
     runCommand(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
   }

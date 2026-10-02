@@ -7,10 +7,10 @@ SRTSRET:
         LD HL,(SRTSDST)
         PUSH IX
         RET
-; Construct a managed string from zero through seven byte characters.
+; Construct a managed string from zero through eight byte characters.
 SRTSMK:
-        LD A,(SRTARGC)             ; The compiler packet supports at most seven values.
-        CP 8
+        LD A,(SRTARGC)             ; The compiler packet supports at most eight values.
+        CP 9                       ; Eight characters fill the packet exactly.
         JP NC,SRTERROR             ; Keep the runtime safe for a malformed caller.
         LD (SRTSLENB),A           ; The argument count is the resulting byte length.
         LD B,A                     ; Validate every packet value before allocating.

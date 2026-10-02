@@ -23,13 +23,24 @@ SRTMKBE  EQU 0D400H              ; Collector mark worklist ends here.
 SRTSTKRS  EQU 00100H              ; Reserve one page for calls below a frame.
 SRTSTKGU  EQU SRTMKBE+SRTSTKRS    ; Keep native stack work above the mark queue.
 SRTMHIGH EQU 0                   ; The external map band needs no extra pool pages.
+SRTMTOP   EQU 0E400H              ; Stack ceiling: the TPA must extend at least this far.
 SRTOWNOF   EQU 12                  ; Descriptor offset of the owned-slot mask.
 SRTCAPOF   EQU 28                  ; Descriptor offset of the capture mask.
 SRTMASKB   EQU 16                  ; Sixteen bytes cover 128 local slots.
 
 SRTSTART:
-        LD SP,0E400H              ; Use the full four-kilobyte guarded stack band.
-        LD HL,0E400H              ; The native stack begins at the fixed ceiling.
+        LD SP,SRTBOOTE            ; Use a private boot stack until the TPA is known.
+        LD A,(0005H)              ; CP/M places JP BDOS at its 0005H entry.
+        CP 0C3H
+        JR NZ,SRTTPAOK            ; A bare provider host has no BDOS to protect.
+        LD HL,(0006H)             ; CP/M publishes the BDOS base as the TPA end.
+        LD DE,SRTMTOP             ; The runtime uses every byte below its ceiling.
+        OR A                      ; Clear carry before the unsigned comparison.
+        SBC HL,DE
+        JP C,SRTTPAL              ; A smaller TPA would let the stack overwrite BDOS.
+SRTTPAOK:
+        LD SP,SRTMTOP             ; Use the full four-kilobyte guarded stack band.
+        LD HL,SRTMTOP             ; The native stack begins at the fixed ceiling.
         LD (SRTLOWSP),HL          ; Record its low-water mark for qualification.
         LD HL,0                    ; Reset the runtime counters for this program.
         LD (SRTBCNT),HL
@@ -92,7 +103,7 @@ SRTSTART:
         LDIR
         LD HL,SRTCLOWN              ; No closure slab owns a page at startup.
         LD DE,SRTCLOWN+1
-        LD BC,255
+        LD BC,127                   ; The owner directory has 128 entries.
         LD (HL),A
         LDIR
         LD HL,SRTCLUSE              ; No closure object occupies a slab yet.
@@ -125,6 +136,17 @@ SRTSTART:
 SRTCALL:
         CALL 0000H                ; The compiler patches the generated entry.
         JP SRTEXIT                ; Close open files, then warm-start CP/M.
+
+; Refuse to run when CP/M's BDOS starts below SRTMTOP.  Nothing above the loaded image
+; has been written yet, so CP/M can still print the message and warm start.
+SRTTPAL:
+        LD DE,SRTTPATX            ; Explain why the program did not start.
+        LD C,9                    ; Select CP/M's dollar-terminated output.
+        CALL 5                    ; BDOS switches to its own stack for the call.
+        JP 0                      ; Return to CP/M without touching high memory.
+SRTTPATX:  DB "NOT ENOUGH MEMORY",13,10,"$"
+SRTBOOTS:  DS 8                   ; Boot stack used only for the TPA check.
+SRTBOOTE:                         ; The boot stack grows down from here.
 
 ; Dynamic apply state is declared in this source part so later modules can
 ; resolve the shared fields without retaining cross-part forward records.

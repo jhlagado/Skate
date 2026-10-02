@@ -62,6 +62,29 @@ if (Deno.args.includes("--data")) {
   });
 }
 
+// Pin the live-pair ceiling of four-byte pair cells.  With the current runtime
+// image this program keeps 1,888 pairs (59 full 32-record pair pages) live;
+// one more pair must stop with RUNTIME ERROR rather than corrupt the heap.
+const livePairCeiling = 1888;
+function livePairSource(count) {
+  return `(define build (lambda (n acc) (if (zero? n) acc (build (- n 1) (cons n acc))))) (define len (lambda (l n) (if (null? l) n (len (cdr l) (+ n 1))))) (define keep (build ${count} '())) (begin (write (len keep 0)) (newline))`;
+}
+// The data group's disk directory is nearly full, so the ceiling cases run with
+// the ordinary procedure group.
+const capacityCases = [
+  [
+    `PAIR${livePairCeiling}.SK8`,
+    livePairSource(livePairCeiling),
+    String(livePairCeiling),
+  ],
+];
+const capacityRuntimeErrorCases = [
+  [
+    `PAIR${livePairCeiling + 1}.SK8`,
+    livePairSource(livePairCeiling + 1),
+    "RUNTIME ERROR\r\n",
+  ],
+];
 const longA = `"${"a".repeat(200)}"`;
 const longB = `"${"b".repeat(100)}"`;
 const boundary = `"${"c".repeat(254)}"`;
@@ -94,6 +117,12 @@ const dataCases = [
   ["PAIRP.SK8", "(pair? (cons 1 2))", "#t"],
   ["NULLP.SK8", "(null? (quote ()))", "#t"],
   ["LISTCASE.SK8", "(list 1 2 3)", "(1 2 3)"],
+  ["LIST8.SK8", "(list 1 2 3 4 5 6 7 8)", "(1 2 3 4 5 6 7 8)"],
+  [
+    "STRING8.SK8",
+    "(string #\\a #\\b #\\c #\\d #\\e #\\f #\\g #\\h)",
+    '"abcdefgh"',
+  ],
   ["EQ.SK8", "(eq? 1 1)", "#t"],
   ["WRITE.SK8", "(begin (write (quote (1 2))) (newline))", "(1 2)"],
   ["DISPLAY.SK8", '(begin (display "hi") (newline))', "hi"],
@@ -183,6 +212,11 @@ const dataCases = [
   ["LAMBDAW.SK8", "(begin (write ((lambda (x) x) 42)))", "42"],
 ];
 const vectorCases = [
+  [
+    "VECTOR8.SK8",
+    "(define v (vector 1 2 3 4 5 6 7 8)) (begin (write (vector-length v)) (write (vector-ref v 0)) (write (vector-ref v 7)) (newline))",
+    "818",
+  ],
   [
     "VECTOR.SK8",
     "(begin (write (vector-ref (vector 10 20 30) 1)) (newline))",
@@ -378,6 +412,11 @@ const cases = [
   [
     "ECREPEAT.SK8",
     "(define loop (lambda (n) (if (zero? n) 0 (begin (call/ec (lambda (escape) (escape 1))) (loop (- n 1)))))) (loop 300)",
+    "0",
+  ],
+  [
+    "ECMANY.SK8",
+    "(define loop (lambda (n) (if (zero? n) 0 (begin (call/ec (lambda (escape) (escape 1))) (loop (- n 1)))))) (loop 20000)",
     "0",
   ],
   [
@@ -641,9 +680,12 @@ const applyCaseNames = new Set([
 const ecCaseNames = new Set(
   cases.filter(([name]) => name.startsWith("EC")).map(([name]) => name),
 );
-const regularCases = cases.filter(([name]) =>
-  !applyCaseNames.has(name) && !ecCaseNames.has(name)
-);
+const regularCases = [
+  ...cases.filter(([name]) =>
+    !applyCaseNames.has(name) && !ecCaseNames.has(name)
+  ),
+  ...capacityCases,
+];
 function programCasesFor(mode) {
   switch (mode) {
     case "runtime-errors":
@@ -831,7 +873,7 @@ function runtimeErrorCasesFor(mode) {
     case "data":
       return dataRuntimeErrorCases;
     default:
-      return [];
+      return capacityRuntimeErrorCases;
   }
 }
 const selectedErrorCases = uniqueCases(modes.map(errorCasesFor));
@@ -964,10 +1006,15 @@ try {
   for (const [name, , expected] of selectedRuntimeErrorCases) {
     const outputName = name.replace(".SK8", ".COM");
     runCommand(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
-    runCommand(
+    const rejected = runCommand(
       outputName.replace(".COM", ""),
       expected,
       `reject ${outputName}`,
+    );
+    assert.equal(
+      programOutput(rejected),
+      expected,
+      `${name}: runtime failure printed more than its diagnostic`,
     );
     runCommand(`ERA ${outputName}`, "A>", `remove ${outputName}`);
     runCommand(

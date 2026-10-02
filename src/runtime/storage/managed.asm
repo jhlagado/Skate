@@ -195,6 +195,7 @@ SRTCLALC:
         RET C
         LD (SRTCLBAS),HL
         CALL SRTCLINC
+        RET C                      ; An unowned page cannot accept the allocation.
         LD HL,(SRTCLBAS)
         XOR A
         RET
@@ -223,6 +224,7 @@ SRTCLSM:
         LD (HL),D
         LD HL,(SRTCLBAS)
         CALL SRTCLINC
+        RET C                      ; An unowned page cannot accept the allocation.
         LD HL,(SRTCLBAS)
         XOR A
         RET
@@ -244,6 +246,7 @@ SRTCELOK:
         LD (SRTBCNT),DE
         LD (SRTCELLP),HL
         CALL SRTBNEW                 ; Publish the exact binding start before stores.
+        JP C,SRTERROR               ; Never initialise a cell the collector cannot see.
         XOR A
         LD (HL),A                   ; Clear the payload low byte.
         INC HL
