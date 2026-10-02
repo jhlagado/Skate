@@ -38,10 +38,7 @@ LEXSKIP:  CALL LEXPEEK      ; One-byte lookahead owns callback clobbers.
         JP Z,LSTRING     ; String handling consumes its own closing quote.
         CP 35            ; Hash syntax introduces booleans and characters.
         JP Z,LEXHASH       ; Dispatch the byte immediately after the hash.
-        CP 32            ; Other source controls cannot begin an ordinary token.
-        JP C,LSYNTAX     ; The first byte is below printable ASCII.
-        CP 127           ; DEL is a control byte even though it is ASCII.
-        JP Z,LSYNTAX     ; Reject DEL outside a supported escape.
+        CALL LEXCTRL     ; Source controls cannot begin an ordinary token.
         CALL LAPPEND     ; Save the first ordinary token byte.
 LEXTOKEN: CALL LEXPEEK       ; Keep the terminator available to the next token request.
         JP C,LEXCLASS      ; EOF terminates an otherwise complete token.
@@ -51,8 +48,15 @@ LEXTOKEN: CALL LEXPEEK       ; Keep the terminator available to the next token r
         CP 64            ; All ordinary token spellings fit the numeric-token buffer limit.
         JP Z,LEXCAP       ; Capacity is exhausted before the next buffer write.
         CALL LEXTAKE       ; Consume a nondelimiter already known to fit.
+        CALL LEXCTRL     ; Control bytes are invalid anywhere in a token.
         CALL LAPPEND     ; Append this raw token byte.
         JR LEXTOKEN        ; Continue until a delimiter or EOF.
+; Reject a control byte or DEL in A as malformed source; otherwise return.
+LEXCTRL: CP 32           ; Bytes below space are controls.
+        JP C,LSYNTAX     ; The error unwinds to LEXNEXT's caller.
+        CP 127           ; DEL is a control byte even though it is ASCII.
+        RET NZ           ; A printable byte is accepted unchanged.
+        JP LSYNTAX       ; Reject DEL outside a supported escape.
 ; Consume whitespace and retry at the next source byte.
 LEXWSKIP: CALL LEXTAKE
         JR LEXSKIP         ; Recheck EOF and comments after consuming whitespace.

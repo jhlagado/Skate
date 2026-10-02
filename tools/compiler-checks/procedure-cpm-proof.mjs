@@ -624,6 +624,8 @@ const regressionCases = [
 ];
 const regressionErrorCases = [
   ["IF33.SK8", "(if #t ".repeat(33) + "1" + " 2)".repeat(33), "CAP\r\n"],
+  ["CTLTOKEN.SK8", "(quote ab\x01c)", "COMPILE ERROR\r\n"],
+  ["NULTOKEN.SK8", "(write +inf.0\x00-inf.0)", "COMPILE ERROR\r\n"],
 ];
 const integerMode = Deno.args.includes("--integers");
 const regressionMode = Deno.args.includes("--regressions");
