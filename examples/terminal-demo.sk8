@@ -1,3 +1,6 @@
+; Compile with TERMINAL.SK8 (libraries/terminal.sk8) on the same drive.
+(include "TERMINAL.SK8")
+
 (begin
   (terminal-clear)
   (terminal-home)
