@@ -497,6 +497,18 @@ function runProgram(name, input, expected, exact = true) {
   return output;
 }
 
+// `--keep-going` records program-output failures and reports them together.
+const keepGoing = Deno.args.includes("--keep-going");
+const failures = [];
+function checkCase(name, check) {
+  if (!keepGoing) return check();
+  try {
+    return check();
+  } catch (error) {
+    failures.push(`${name}: ${String(error.message).slice(0, 400)}`);
+  }
+}
+
 try {
   machine.install_drive(0, disk, true);
   runUntilPrompt(0, "the boot prompt");
@@ -512,7 +524,7 @@ try {
       comBytes: generated.length,
       asoBytes,
     });
-    runProgram(name, input, expected, exact);
+    checkCase(name, () => runProgram(name, input, expected, exact));
     if (name === "FILEOUT.SK8") {
       const outputFile = readCpm22File(machine.export_drive(0), "OUTPUT.TXT");
       assert.deepEqual(
@@ -561,9 +573,13 @@ try {
   }
   for (const [name] of errorCases) {
     command(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
-    runProgram(name, "", "RUNTIME ERROR\r\n");
+    checkCase(name, () => runProgram(name, "", "RUNTIME ERROR\r\n"));
     command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
     command(`ERA ${name.replace(".SK8", ".ASO")}`, "A>", `remove ${name}`);
+  }
+  if (failures.length > 0) {
+    console.log(JSON.stringify({ status: "failed", failures }, null, 2));
+    Deno.exit(1);
   }
   console.log(JSON.stringify(
     {
