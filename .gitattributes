@@ -1,3 +1,4 @@
 *.sk8 text eol=crlf
+*.SK8 text eol=crlf
 *.skm text eol=crlf
 examples/applications/*.txt text eol=crlf
