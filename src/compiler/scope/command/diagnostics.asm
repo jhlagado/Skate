@@ -52,16 +52,7 @@ SCPRLOC:
 
 ; Print one source-table FCB prefix as NAME.EXT, omitting CP/M padding spaces.
 SCPARTNM:
-        LD L,A                        ; Twelve bytes describe each source entry.
-        LD H,0
-        ADD HL,HL                     ; Two times the part ordinal.
-        ADD HL,HL                     ; Four times the part ordinal.
-        PUSH HL
-        ADD HL,HL                     ; Eight times the part ordinal.
-        POP DE                        ; Add the four-times component for twelve.
-        ADD HL,DE
-        LD DE,CSSEEN
-        ADD HL,DE
+        CALL CSENTRY                  ; HL addresses the part's 12-byte FCB prefix.
         INC HL                        ; FCB byte zero is the drive number.
         LD B,8
         CALL SCPRSEG                 ; Print the padded base name without spaces.

@@ -1,8 +1,6 @@
 {
   "tasks": {
-    "prepare:source": "deno run --config deno.runtime.json --allow-read --allow-write tools/source-inclusion/prepare-skate-source.mjs",
-    "test:source-inclusion": "deno test --config deno.runtime.json --allow-read=. --allow-write=. tests/source-inclusion",
-    "check": "deno fmt --check tools tests && deno lint tools tests && deno check --config deno.runtime.json tools/compiler-checks/scope-budget.ts tests/compiler-checks/scope-budget_test.ts tests/cpm-effects_test.ts && deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services tests/compiler-checks/scope-budget_test.ts && deno task test:source-inclusion",
+    "check": "deno fmt --check tools tests && deno lint tools tests && deno check --config deno.runtime.json tools/compiler-checks/scope-budget.ts tests/compiler-checks/scope-budget_test.ts tests/cpm-effects_test.ts && deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services tests/compiler-checks/scope-budget_test.ts",
     "test:cpm": "deno task test:cpm:core && deno task test:cpm:procedures && deno task test:cpm:data && deno task test:cpm:features && deno task test:cpm:integers && deno task test:cpm:edge && deno task test:cpm:console && deno task test:cpm:generated-effects && deno task test:cpm:float && deno task test:cpm:includes && deno task test:cpm:release && deno task test:cpm:recovery",
     "test:cpm:includes": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych --allow-write=build tools/source-inclusion/include-cpm-proof.mjs",
     "test:cpm:procedures": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych --allow-write=build tools/compiler-checks/procedure-cpm-proof.mjs",

@@ -34,7 +34,7 @@ const partNames = Array.from(
   { length: 16 },
   (_, index) => `PART${String(index + 1).padStart(2, "0")}.SK8`,
 );
-const releaseManifest = "RELEASE.SKM";
+const releaseRoot = "RELEASE.SK8";
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -141,9 +141,9 @@ function session(machine) {
 
 async function addSources(disk) {
   let result = installCpm22File(disk, {
-    name: releaseManifest,
+    name: releaseRoot,
     bytes: Uint8Array.from([
-      ...(await Deno.readFile(join(sourceRoot, "release.skm"))),
+      ...(await Deno.readFile(join(sourceRoot, "release.sk8"))),
       0x1a,
     ]),
     padByte: 0x1a,
@@ -302,7 +302,7 @@ try {
   const first = session(machine);
   first.boot();
   const compile = first.command(
-    `SKATE ${releaseManifest}`,
+    `SKATE ${releaseRoot}`,
     "COMPILED\r\n",
     "compile the release source",
   );
@@ -352,7 +352,7 @@ try {
     const full = session(fullMachine);
     full.boot();
     records.diskFull = full.command(
-      `SKATE ${releaseManifest}`,
+      `SKATE ${releaseRoot}`,
       "OUTPUT ERROR\r\n",
       "reject a full-disk publication",
     );
@@ -391,7 +391,7 @@ try {
   const failed = session(machine);
   failed.boot();
   records.compileFailure = failed.command(
-    `SKATE ${releaseManifest}`,
+    `SKATE ${releaseRoot}`,
     "EXPECT\r\n",
     "reject an invalid release source",
   );

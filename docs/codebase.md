@@ -92,7 +92,7 @@ A source program travels through these boundaries:
 ```text
 .SK8 source
     │
-    ├─ optional leading (include "LIB.SK8") preparation
+    ├─ leading (include "LIB.SK8") forms, resolved depth first
     │
     ▼
 CP/M source stream
@@ -138,7 +138,7 @@ order affects addresses and workspace, so a composition change needs a proof.
 
 | File or group | Responsibility |
 | --- | --- |
-| `src/compiler/cpm-source.asm` and `cpm-transport.asm` | Open the CP/M source file, supply bytes and track source positions |
+| `src/compiler/cpm-source.asm` and `cpm-transport.asm` | Resolve the include tree, stream the ordered source files and track source positions |
 | `src/compiler/lexer.asm` | Classify characters and produce tokens |
 | `src/compiler/decimal.asm` | Parse exact integers and binary16 literals |
 | `src/compiler/interner.asm` | Keep permanent symbol and string identities |
@@ -258,8 +258,8 @@ public check before publishing an assembly change.
 
 | Command | What it checks |
 | --- | --- |
-| `deno task check` | Formatting, lint, types, compiler budget and source inclusion |
-| `deno task test:source-inclusion` | Include ordering, path rules and source-package preparation |
+| `deno task check` | Formatting, lint, types and compiler budget |
+| `deno task test:cpm:includes` | Nested, import-once, cyclic, missing and bounded include trees |
 | `deno task test:cpm:procedures` | Procedures, closures, tail calls and ordinary application |
 | `deno task test:cpm:features` | Vectors, bounded `apply` and one-shot `call/ec` |
 | `deno task test:cpm:console` | Standard and file ports, datum input and source I/O helpers |
@@ -279,7 +279,7 @@ CP/M, but they do not replace the target proof.
 
 | Term | Meaning in the public tree |
 | --- | --- |
-| source package | Ordered source parts prepared for the CP/M compiler |
+| source part | One file of a program; included parts precede the files that include them |
 | reader | The datum reader that turns the byte stream into structural events |
 | scope compiler | The native compiler that resolves definitions, bindings, control flow and emitted calls |
 | runtime image | The assembled provider image loaded by the compiler and used by generated programs |
