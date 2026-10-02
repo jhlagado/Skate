@@ -77,6 +77,11 @@ disk = installCpm22File(disk, {
   ),
   padByte: 0x1a,
 });
+disk = installCpm22File(disk, {
+  name: "CRLF.TXT",
+  bytes: Uint8Array.from([0x41, 0x0d, 0x0a, 0x42, 0x0d, 0x0a]),
+  padByte: 0x1a,
+});
 const vector64Input = `#(${Array(64).fill("1").join(" ")})\r`;
 const vector65Input = `#(${Array(65).fill("1").join(" ")})\r`;
 
@@ -371,6 +376,21 @@ const cases = [
     "RUNTIME ERROR\r\n",
     "",
     false,
+  ],
+  [
+    "FILECRLF.SK8",
+    '(let ((p (open-input-file "CRLF.TXT"))) (write (read-char p)) (write (read-char p)) (write (read-char p)) (write (read-char p)) (write (read-char p)) (close-port p) (newline))',
+    String.raw`#\A#\newline#\B#\newline#<eof>` + "\r\n",
+  ],
+  [
+    "FILELINE.SK8",
+    '(include "IO.SK8") (let ((p (open-input-file "CRLF.TXT"))) (write (read-line-from p)) (write (read-line-from p)) (write (read-line-from p)) (close-port p) (newline))',
+    '"A""B"#<eof>\r\n',
+  ],
+  [
+    "FILECOPY.SK8",
+    '(include "IO.SK8") (let ((p (open-input-file "CRLF.TXT"))) (write (copy-stream-from-to p (current-output-port))) (close-port p) (newline))',
+    "A\r\nB\r\n4\r\n",
   ],
   [
     "ADVENTUR.SK8",

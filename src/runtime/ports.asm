@@ -306,10 +306,11 @@ SRTINPOL:
         LD A,(SRTFIMOD)
         OR A
         JR NZ,SRTINBIN                ; Binary files preserve CR, LF and Control-Z.
-        JR SRTCRNXT                   ; Text files use the normal CR/LF policy.
+        JR SRTINCRK                   ; Text files share the console CR/LF folding.
 SRTINC2:
         CALL SRTIN                    ; BDOS function one supplies the next raw byte.
         LD B,A                        ; Keep it while checking the pending CR state.
+SRTINCRK:
         LD A,(SRTINCR)
         OR A
         JR Z,SRTCRNXT                 ; No earlier CR needs an LF decision.
