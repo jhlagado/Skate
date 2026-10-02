@@ -195,6 +195,7 @@ SRTCLALC:
         RET C
         LD (SRTCLBAS),HL
         CALL SRTCLINC
+        RET C                      ; An unowned page cannot accept the allocation.
         LD HL,(SRTCLBAS)
         XOR A
         RET
@@ -223,6 +224,7 @@ SRTCLSM:
         LD (HL),D
         LD HL,(SRTCLBAS)
         CALL SRTCLINC
+        RET C                      ; An unowned page cannot accept the allocation.
         LD HL,(SRTCLBAS)
         XOR A
         RET
