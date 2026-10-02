@@ -19,7 +19,7 @@ const backing = makeSystemDisk(firmware, sourceDisk);
 const countArgument = Deno.args.find((argument) =>
   argument.startsWith("--count=")
 );
-const count = countArgument === undefined
+let count = countArgument === undefined
   ? 3000
   : Number.parseInt(countArgument.slice("--count=".length), 10);
 const tailArgument = Deno.args.find((argument) =>
@@ -31,7 +31,7 @@ const tail = tailArgument === undefined
 const tailLengthArgument = Deno.args.find((argument) =>
   argument.startsWith("--tail-length=")
 );
-const tailLength = tailLengthArgument === undefined
+let tailLength = tailLengthArgument === undefined
   ? undefined
   : Number.parseInt(tailLengthArgument.slice("--tail-length=".length), 10);
 if (tailLength !== undefined) {
@@ -62,6 +62,23 @@ const provider = await loadAssembly("src/runtime/image.asm");
 const compilerBytes = compiler.image.bytes.slice(0x0100);
 const runtimeBytes = provider.image.bytes.slice(0x0100);
 assert.equal(runtimeBytes.length, compiler.address("SRTLEN"));
+// --fill-image=N sizes the program so the published image is exactly N bytes
+// whatever the runtime length: each top-level `1` emits FORM_BYTES and the
+// closing string literal adds one byte per character over a fixed overhead.
+const fillArgument = Deno.args.find((argument) =>
+  argument.startsWith("--fill-image=")
+);
+if (fillArgument !== undefined) {
+  const FORM_BYTES = 5;
+  const FIXED_BYTES = 8;
+  const target = Number.parseInt(
+    fillArgument.slice("--fill-image=".length),
+    10,
+  );
+  const free = target - runtimeBytes.length - FIXED_BYTES;
+  count = Math.floor(free / FORM_BYTES);
+  tailLength = free - count * FORM_BYTES;
+}
 const source = [
   Array.from({ length: count }, () => "1").join(" "),
   tailLength === undefined ? "" : `"${"a".repeat(tailLength)}"`,
