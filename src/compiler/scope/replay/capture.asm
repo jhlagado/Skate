@@ -64,9 +64,6 @@ SCRECCLS:
         DEC A
         LD (SCREDEP),A
         JR SCRECSCN
-SCRECAP:
-        SCF
-        RET
 SCRECBAD:
         SCF
         RET

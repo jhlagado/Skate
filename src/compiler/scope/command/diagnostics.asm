@@ -67,8 +67,7 @@ SCPARTNM:
         CALL SCPRSEG                 ; Print the padded base name without spaces.
         LD E,'.'
         CALL SCCPUT
-        LD B,3
-        JP SCPRSEG
+        LD B,3                       ; The extension follows in the same print loop.
 
 ; Print B bytes from HL, skipping CP/M padding spaces.
 SCPRSEG:

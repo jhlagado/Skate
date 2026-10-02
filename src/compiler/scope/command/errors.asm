@@ -11,10 +11,6 @@ SCCAP:
 SCSYN:
         SCF                       ; The caller reports a compile-error diagnostic.
         RET                        ; Reader state remains terminal until the next run.
-SCEXERR:
-        LD HL,SCEXTXT
-        LD (SCERRPTR),HL
-        JP SCSYN
 SCENDSYN:
         LD HL,SCENDT
         LD (SCERRPTR),HL
@@ -36,6 +32,3 @@ SCUNSUP:
         LD (SCERRPTR),HL
         SCF                       ; Binary16 and unsupported forms are explicit errors.
         RET                        ; The public command does not publish a partial file.
-SCREAD:
-        SCF                       ; Reader errors are reported through SCFAIL.
-        RET                        ; The reader itself retains the original code.

@@ -7,7 +7,6 @@ SCVTMP:     DW 0                   ; Temporary literal payload.
 SCBTMP:     DB 0                   ; Temporary boolean payload.
 SCPHIGH:    DB 0                   ; Formal-slot high byte during descriptor output.
 SCFPTR:     DW 0                   ; Staged address retained by SCFIX.
-SCPTMP:     DW 0                   ; Absolute target retained by SCPATCH.
 SCFKIND:    DB 0                   ; Pending slot kind for SCFIX.
 SCFSLOT:    DB 0                   ; Pending slot number for SCFIX.
 SCID:       DW 0                   ; Current full interner symbol identity.
@@ -16,7 +15,6 @@ SCGSLOT:    DB 0                   ; Global slot returned by SCGGET.
 SCGIDX:     DB 0                   ; Candidate global slot during a key scan.
 SCPKIND:    DB 0                   ; Predefined primitive kind for the current name.
 SCDEFSL:  DB 0                   ; Definition initializer's global slot.
-SCOP:       DB 0                   ; Selected binary operation 0, 1 or 2.
 SCALLOW:    DB 0                   ; Package-level permission for define.
 SCTOP:      DB 0                   ; Saved define permission for SCFORM.
 SCBDEFIN:   DB 0                   ; Leading body-definition permission.
@@ -80,7 +78,6 @@ SCIFTAIL:   DB 0                   ; Tail context saved while compiling an if.
 SCTLSAV:    DB 0                   ; Saved tail context while evaluating arguments.
 SCSKIP:     DW 0                   ; Lambda jump-over patch address.
 SCPBODY:    DW 0                   ; Procedure body staged address during setup.
-SCLOCVAL:   DB 0                   ; Temporary local slot for owner marking.
 SCMSLOT:    DB 0                   ; Slot selected while setting a mask bit.
 SCMPR:      DB 0                   ; Procedure index selected for mask writes.
 SCMTADR:    DW 0                   ; Mask byte address during bit assembly.

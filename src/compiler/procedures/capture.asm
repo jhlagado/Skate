@@ -425,7 +425,6 @@ SCMSKSET:
         ADD HL,DE
         LD (SCMTADR),HL            ; HL now names the selected mask byte.
         LD A,C                     ; The low three bits select a bit in that byte.
-        JP SCBITSET
 
 ; Set one bit in the mask whose base address is in HL.
 SCBITSET:

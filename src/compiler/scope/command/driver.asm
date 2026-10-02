@@ -88,12 +88,10 @@ SCREFAIL:
         LD A,1                     ; Recovery failure has no source location.
         LD (SCPHASE),A             ; Force the plain output diagnostic path.
         CALL SCPRECER               ; Select OUTPUT ERROR and close any stream.
-        JP SCFAIL                   ; Do not start a new transaction after uncertainty.
 SCFAIL:
         JP SCDIAG                  ; Close input and print the selected diagnostic.
 SCMEM:
         LD DE,SCMEMTXT             ; Memory guard failure is distinct to the user.
-        JP SCPRINT                ; Print the diagnostic and return to CP/M.
 
 SCPRINT:
         LD C,9                     ; CP/M function 9 prints a dollar-terminated string.
@@ -102,7 +100,6 @@ SCPRINT:
 
 ; Initialise reader contexts, compiler tables and the staged runtime image.
 SCSETUP:
-        LD A,0FFH                 ; Unknown global names carry the FF marker.
         XOR A                     ; Reset global and local allocation cursors.
         LD (SCGCOUNT),A           ; Low byte of the 16-bit global count.
         LD (SCGCOUNT+1),A         ; High byte remains zero until all 256 slots exist.
@@ -278,9 +275,7 @@ SCREF:
         JR C,SCRGLOB                ; Existing globals use the ordinary slot path.
         CALL SCPLOOK                ; Unbound primitive names can stay immediate.
         OR A
-        JR NZ,SCRPRIM               ; Emit the predefined value without a slot.
-        JP SCRRFWD                  ; Reserve recursive forward names or use globals.
-SCRRFWD:
+        JP NZ,SCPRIM                ; Emit the predefined value without a slot.
         LD A,(SCRECMOD)             ; Only a recursive initializer may reserve a cell.
         OR A
         JR Z,SCGGETP                ; Ordinary unresolved names become globals.
@@ -302,8 +297,6 @@ SCRGLOB:
         LD L,A                     ; SCGHAS returns the existing global slot in A.
         XOR A                      ; Kind zero denotes a package-global slot.
         JP SCLOAD                  ; Emit the checked runtime load and its fixup.
-SCRPRIM:
-        JP SCPRIM                  ; Emit a reserved primitive value directly.
 SCRLOCAL:
         LD L,A                     ; SCLOCF returns the matching local slot number.
         LD A,1                     ; Kind one denotes a local slot.
