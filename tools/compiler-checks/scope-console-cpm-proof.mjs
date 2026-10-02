@@ -361,6 +361,18 @@ const cases = [
     String.raw`("a\"\\\n" #\space #\x01 #\a sym -12 #(1 #\b "c"))` + "\r\n",
   ],
   [
+    "LONGLST.SK8",
+    "(define (build n acc) (if (zero? n) acc (build (- n 1) (cons 0 acc)))) (display (build 1200 '()))",
+    `(${Array(1200).fill("0").join(" ")})`,
+  ],
+  [
+    "DEEPNEST.SK8",
+    "(define (nest n acc) (if (zero? n) acc (nest (- n 1) (cons acc '())))) (write (nest 1200 '()))",
+    "RUNTIME ERROR\r\n",
+    "",
+    false,
+  ],
+  [
     "ADVENTUR.SK8",
     await Deno.readTextFile("examples/applications/advent.sk8"),
     "You are at a fork. Choose left or right: l\r\nYou take the left path.",
@@ -561,6 +573,15 @@ try {
     }
     const nativeLowSp = readWord(lowStackAddress);
     const observedLowSp = observedStackLow();
+    if (name === "LONGLST.SK8") {
+      checkCase(name, () =>
+        assert.ok(
+          observedLowSp >= 0xd500,
+          `LONGLST.SK8: printing used stack down to ${
+            observedLowSp.toString(16)
+          }`,
+        ));
+    }
     const heapEnd = readWord(heapPointerAddress);
     assert.ok(nativeLowSp >= 0xd400, `${name}: native stack crossed its guard`);
     assert.ok(

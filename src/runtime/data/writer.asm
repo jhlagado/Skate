@@ -1,5 +1,5 @@
 ; Scheme value and pair printing through the output adapter.
-; Entry points: SRTWRVAL, SRTWPAIR, SRTWTAIL, SRTCH and SRTIN.
+; Entry points: SRTWRVAL, SRTWPAIR, SRTCH and SRTIN.
 ; Included in runtime order by ../data.asm.
 
 SRTWRVAL:
@@ -150,116 +150,66 @@ SRTWHXD:
         LD A,(HL)                  ; Load the selected digit character.
         JP SRTCH                   ; Send it while preserving the formatter state.
 
+; Print a pair as a list.  Only CAR values recurse; successive CDR pairs are
+; followed in a loop so a long proper list uses constant native stack.
 SRTWPAIR:
-        PUSH HL                     ; CP/M output is allowed to clobber HL.
-        LD A,'('
+        CALL SRTWSTK               ; Refuse nesting that would reach the guard band.
+        LD A,'('                   ; Open the list; SRTCH preserves the pair in HL.
         CALL SRTCH
-        POP HL
-        PUSH HL                     ; Keep the outer pair while printing its CAR.
-        LD A,1                       ; The outer value has already selected pair output.
-        CALL SRTCARV                ; Decode the packed CAR field through one helper.
-        JP C,SRTERROR               ; A corrupt pair cannot be printed safely.
-        CALL SRTWRVAL
-        POP HL
-        PUSH HL                     ; Keep the outer pair while inspecting its CDR.
-        LD A,1                       ; Decode the packed CDR tag and payload together.
-        CALL SRTCDRV
-        JP C,SRTERROR               ; A corrupt pair cannot be printed safely.
-        LD (SRTQATAG),A
-        LD (SRTQAVAL),HL
-        LD A,(SRTQATAG)
-        CP 1
-        JR NZ,SRTWRDOT
-        LD HL,(SRTQAVAL)
-        CALL SRTPCHK
-        JR C,SRTWRDOT
-        LD A,' '
-        CALL SRTCH
-        LD A,(SRTQATAG)
-        LD HL,(SRTQAVAL)
-        CALL SRTWTAIL
-        POP HL
-        JR SRTWCLS
-SRTWRDOT:
-        LD A,(SRTQATAG)
-        OR A
-        JR NZ,SRTWRDV
-        LD HL,(SRTQAVAL)
-        LD DE,0FE02H
-        OR A
-        SBC HL,DE
-        JR Z,SRTWRNIL
-SRTWRDV:
-        LD A,' '
-        CALL SRTCH
+SRTWPLP:
+        PUSH HL                    ; Keep this pair while printing its CAR.
+        LD A,1                     ; HL names a pair record.
+        CALL SRTCARV               ; Decode the packed CAR field into A:HL.
+        JP C,SRTERROR              ; A corrupt pair cannot be printed safely.
+        CALL SRTWRVAL              ; Nested values recurse only through the CAR.
+        POP HL                     ; Recover this pair for its CDR.
+        LD A,1                     ; HL still names a pair record.
+        CALL SRTCDRV               ; Decode the packed CDR field into A:HL.
+        JP C,SRTERROR              ; A corrupt pair cannot be printed safely.
+        CP 1                       ; A pair CDR continues the same list.
+        JR NZ,SRTWPEND
+        LD A,' '                   ; Separate the next element.
+        CALL SRTCH                 ; SRTCH preserves the CDR pair in HL.
+        JR SRTWPLP                 ; Iterate rather than recurse along the list.
+SRTWPEND:
+        OR A                       ; Only a scalar can be the empty list.
+        JR NZ,SRTWPDOT
+        PUSH HL                    ; Compare the payload without changing it.
+        LD DE,0FE02H               ; FE02 is the empty list.
+        SBC HL,DE                  ; OR A above cleared carry for the compare.
+        POP HL                     ; Restore the CDR payload.
+        JR Z,SRTWPCLS              ; A proper list closes immediately.
+SRTWPDOT:
+        LD B,A                     ; Keep the CDR tag while printing the dot.
+        LD A,' '                   ; A non-list CDR uses dotted-pair syntax.
+        CALL SRTCH                 ; SRTCH preserves B and the payload in HL.
         LD A,'.'
         CALL SRTCH
         LD A,' '
         CALL SRTCH
-        LD A,(SRTQATAG)
-        LD HL,(SRTQAVAL)
-        CALL SRTWRVAL
-        POP HL
-        JR SRTWCLS
-SRTWRNIL:
-        POP HL
-        JR SRTWCLS
-SRTWCLS:
-        LD A,')'
+        LD A,B                     ; Restore the CDR tag for the final value.
+        CALL SRTWRVAL              ; Print the dotted tail.
+SRTWPCLS:
+        LD A,')'                   ; Close the list.
         JP SRTCH
 
-; Print the tail of a proper list without opening another parenthesis.
-SRTWTAIL:
-        PUSH HL                     ; Preserve this pair across its CAR output.
-        LD A,1
-        CALL SRTCARV                ; Read the next CAR from the packed record.
-        JP C,SRTERROR
-        CALL SRTWRVAL
-        POP HL
-        PUSH HL                     ; Preserve this pair while inspecting its CDR.
-        LD A,1
-        CALL SRTCDRV                ; Read the next CDR and its packed tag.
-        JP C,SRTERROR
-        LD (SRTQATAG),A
-        LD (SRTQAVAL),HL
-        LD A,(SRTQATAG)
-        CP 1
-        JR NZ,SRTWTNIL
-        LD HL,(SRTQAVAL)
-        CALL SRTPCHK
-        JR C,SRTWTDOT
-        LD A,' '
-        CALL SRTCH
-        LD HL,(SRTQAVAL)
-        CALL SRTWTAIL
-        POP HL
-        RET
-SRTWTNIL:
-        OR A
-        JR NZ,SRTWTDOT
-        LD HL,(SRTQAVAL)
-        LD DE,0FE02H
-        OR A
-        SBC HL,DE
-        JR NZ,SRTWTDOT
-        POP HL
-        RET
-SRTWTDOT:
-        LD A,' '
-        CALL SRTCH
-        LD A,'.'
-        CALL SRTCH
-        LD A,' '
-        CALL SRTCH
-        LD A,(SRTQATAG)
-        LD HL,(SRTQAVAL)
-        CALL SRTWRVAL
-        POP HL
-        RET
+; Raise a runtime error before nested printing can descend into the guarded
+; bands below SRTSTKGU.  HL is preserved; A, DE and the flags are clobbered.
+SRTWSTK:
+        PUSH HL                    ; Keep the value payload while measuring SP.
+        LD HL,0                    ; Copy the native stack pointer into HL.
+        ADD HL,SP
+        LD DE,SRTSTKGU             ; Compare it with the guarded band's top.
+        OR A                       ; Clear carry before the subtraction.
+        SBC HL,DE                  ; Carry means SP is already below the guard.
+        POP HL                     ; Restore the payload; POP leaves flags unchanged.
+        RET NC                     ; Enough native stack remains for another level.
+        JP SRTERROR                ; Report the nesting as a checked runtime error.
 
 ; Print a tag-seven vector as #( elements ).  Elements recurse through
 ; SRTWRVAL; the cursor and remaining count are kept on the native stack.
 SRTWVEC:
+        CALL SRTWSTK               ; Refuse nesting that would reach the guard band.
         CALL SRTVLD                ; Validate the block and return its base in HL.
         JP C,SRTERROR              ; A corrupt vector cannot be printed safely.
         LD A,35                    ; Open the vector with its reader prefix.
