@@ -42,7 +42,7 @@
                    (set! place 1))
                   ((and (= place 3) (eq? key #\u))
                    (set! place 1))
-                  ((and (= place 3) (eq? key #\x74))
+                  ((and (= place 3) (eq? key #\t))
                    (set! place 4))
                   (else 0))
                 (game-loop)))))))
