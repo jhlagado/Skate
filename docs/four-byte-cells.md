@@ -256,10 +256,17 @@ tag, while the CDR metadata low nibble carries the CDR tag. This deliberately
 keeps the current collector state encoding working while the high-nibble tag
 and low-nibble flag layout remains a future, separately reviewed change.
 
+Vector elements now use the same physical cell order: payload at offsets 0 and
+1, a cleared extension at offset 2, and the current raw logical tag at offset
+3. The vector length byte and ownership maps remain outside the cells. Datum
+reader stacks and argument packets continue to use their documented packet
+layout; explicit copy code adapts those packets into vector cells instead of
+changing the calling convention.
+
 The ordinary CP/M procedure proof, data proof, vector proof, `apply` proof and
 `call/ec` proof, together with the pair-focused host proofs, pass with this
-increment. The ATOM runtime image is 22,640 bytes in total, or 22,384 bytes
-after the 0100H load origin. The CP/M harness reports 22,384 runtime bytes.
+increment. The ATOM runtime image is 22,653 bytes in total, or 22,397 bytes
+after the 0100H load origin. The CP/M harness reports 22,397 runtime bytes.
 The largest published images are 24,320 COM and 25,216 ASO for procedures,
 24,448 COM and 25,856 ASO for datum and data storage, 23,424 COM and 24,448
 ASO for vectors, 22,784 COM and 23,552 ASO for `apply`, and 22,912 COM and

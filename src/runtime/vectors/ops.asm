@@ -127,6 +127,7 @@ SRTVREF:
         INC HL
         LD D,(HL)                  ; Recover the element payload high byte.
         INC HL
+        INC HL                     ; Skip the reserved extension byte.
         LD A,(HL)                  ; Recover the element's logical tag.
         EX DE,HL                   ; Return the payload in the standard ABI.
         PUSH IX                    ; Retire the packet through the common cleanup.
@@ -153,10 +154,10 @@ SRTVSET:
         INC HL
         LD (HL),D                  ; Publish the payload high byte.
         INC HL
-        LD A,(SRTVFTAG)            ; Publish the logical element tag.
+        XOR A                      ; Keep the future payload extension clear.
         LD (HL),A
         INC HL
-        XOR A                      ; The spare byte carries no state.
+        LD A,(SRTVFTAG)            ; Publish the logical element tag.
         LD (HL),A
         XOR A                      ; Return the unspecified scalar value.
         LD HL,0FE04H
@@ -225,10 +226,10 @@ SRTVFLP:
         INC HL
         LD (HL),D                  ; Store the payload high byte.
         INC HL
-        LD A,(SRTVFTAG)            ; Store the fill tag.
+        XOR A                      ; Keep the future payload extension clear.
         LD (HL),A
         INC HL
-        XOR A                      ; The fourth byte is unused by vector values.
+        LD A,(SRTVFTAG)            ; Store the fill tag in cell metadata.
         LD (HL),A
         INC HL
         LD (SRTVPTR),HL            ; Advance to the next element.
@@ -257,6 +258,7 @@ SRTVPLP:
         LD D,(HL)                  ; Read its payload high byte.
         INC HL
         LD A,(HL)                  ; Read its logical tag.
+        LD (SRTVFTAG),A            ; Preserve it while clearing the extension.
         INC HL
         INC HL                     ; Skip the packet publication flag.
         LD (SRTVPKT),HL            ; Advance the source cursor by four bytes.
@@ -265,9 +267,10 @@ SRTVPLP:
         INC HL
         LD (HL),D                  ; Store the payload high byte.
         INC HL
-        LD (HL),A                  ; Store the logical tag.
+        XOR A                      ; Keep the future payload extension clear.
+        LD (HL),A
         INC HL
-        XOR A                      ; The vector spare byte carries no state.
+        LD A,(SRTVFTAG)            ; Store the logical tag in cell metadata.
         LD (HL),A
         INC HL
         LD (SRTVPTR),HL            ; Advance to the next destination element.

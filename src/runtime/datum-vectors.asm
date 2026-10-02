@@ -100,12 +100,13 @@ SRTDVPLP:
         LD A,(SRTVLEFT)             ; Stop after all children have been copied.
         OR A
         RET Z
-        LD HL,(SRTVPKT)             ; Read one source payload, tag and spare byte.
+        LD HL,(SRTVPKT)             ; Read one source payload, tag and flags.
         LD E,(HL)
         INC HL
         LD D,(HL)
         INC HL
         LD A,(HL)
+        LD (SRTVFTAG),A
         INC HL
         INC HL
         LD (SRTVPKT),HL
@@ -114,9 +115,10 @@ SRTDVPLP:
         INC HL
         LD (HL),D
         INC HL
+        XOR A
         LD (HL),A
         INC HL
-        XOR A
+        LD A,(SRTVFTAG)
         LD (HL),A
         INC HL
         LD (SRTVPTR),HL

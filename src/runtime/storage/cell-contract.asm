@@ -39,3 +39,11 @@ SRPCCARM      EQU 3
 SRPCDDR0       EQU 4
 SRPCDDR1       EQU 5
 SRPCDDRM       EQU 7
+
+; Vector elements are four-byte cells without pair allocation state. Their
+; current compatibility metadata stores the raw logical tag at byte three;
+; byte two remains the reserved extension until tag/flag packing changes.
+SRTVCP0        EQU 0
+SRTVCP1        EQU 1
+SRTVCEX        EQU 2
+SRTVCMET       EQU 3

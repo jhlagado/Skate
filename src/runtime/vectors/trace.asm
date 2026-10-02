@@ -45,9 +45,9 @@ SRTVMLP:
         INC HL
         LD D,(HL)
         INC HL
-        LD A,(HL)
         INC HL
-        INC HL                     ; Skip the element spare byte.
+        LD A,(HL)
+        INC HL                     ; Advance past the cell metadata byte.
         LD (SRTVPTR),HL            ; Retain the cursor before tracing the value.
         EX DE,HL                   ; Present the child in the runtime ABI.
         CALL SRTMVALU              ; Mark a pair, closure, string or vector child.

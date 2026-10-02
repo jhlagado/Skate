@@ -79,7 +79,7 @@ function pairPart(
 function vectorElement(memory: Uint8Array, vector: number, index: number) {
   const element = vector + 1 + index * 4;
   return {
-    tag: memory[element + 2],
+    tag: memory[element + 3],
     payload: readWord(memory, element),
   };
 }

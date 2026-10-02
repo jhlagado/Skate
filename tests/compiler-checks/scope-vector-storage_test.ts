@@ -19,8 +19,8 @@ Deno.test("vector overflow fallback preserves every rooted pair", async () => {
     pairs.push(pair.payload);
     writeWord(memory, vector.payload, 1);
     writeWord(memory, vector.payload + 1, pair.payload);
-    memory[vector.payload + 3] = 1;
-    memory[vector.payload + 4] = 0;
+    memory[vector.payload + 3] = 0;
+    memory[vector.payload + 4] = 1;
   }
 
   for (let index = 0; index < count; index++) {
