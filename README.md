@@ -50,16 +50,33 @@ the source tree and names that cannot be represented on a CP/M disk.
 (newline)
 ```
 
-## Build
+## Building and testing
 
-Make the packages listed in `deno.runtime.json` available beside the checkout,
-then run:
+The build uses [Deno](https://deno.com/) and expects these checkouts beside
+this one (the paths in `deno.runtime.json` and the task permissions are
+relative to the Skate checkout):
 
-```sh
-deno task check
-deno task test:cpm
-deno task measure
-```
+| Sibling | Used for |
+| --- | --- |
+| `../atom` | The ATOM assembler, with `npm install` run so that `node_modules/@jhlagado/z80-runtime` and `node_modules/@jhlagado/z80-tool-services` resolve |
+| `../z80-runtime` | The Z80 emulator used by the unit tests (reached through ATOM's `node_modules` link) |
+| `../z80-tool-services` | Assembler services used by ATOM |
+| `../triptych` | The CP/M 2.2 machine for the `test:cpm` proofs; its WASM host must be built into `dist/wasm/` |
+
+The main tasks are:
+
+| Task | What it runs |
+| --- | --- |
+| `deno task check` | Formatting, lint, type checks, the compiler budget and source-inclusion tests |
+| `deno task test` | `check` plus the host-side unit tests: effects, the CP/M byte bridge, ASO, ports and the runtime fixtures (`test:runtime`) |
+| `deno task test:cpm` | The CP/M proofs: each compiles programs with the native compiler on an emulated CP/M 2.2 machine and runs them |
+| `deno task test:cpm:stress` | Capacity, large-source and full 65,280-byte image proofs |
+| `deno task test:all` | `test`, `test:cpm` and `test:cpm:stress` |
+| `deno task measure` | Compiler and runtime size budget report |
+
+`test:cpm` and `test:cpm:stress` take tens of minutes; each `test:cpm:*` task
+can be run on its own. The [codebase guide](docs/codebase.md#tests-and-verification)
+lists every task.
 
 The compiler writes a checked `.COM` program for use from a CP/M prompt. Any
 intermediate publication data is an implementation detail of the build.
