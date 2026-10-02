@@ -592,10 +592,18 @@ const integerRuntimeErrorCases = [
   ["MINUS0.SK8", "(-)", "RUNTIME ERROR\r\n"],
   ["CMPARITY.SK8", "(< 1)", "RUNTIME ERROR\r\n"],
 ];
-const integerMode = Deno.args.includes("--integers");
-const applyMode = Deno.args.includes("--apply");
-const ecMode = Deno.args.includes("--ec");
-const runtimeErrorMode = Deno.args.includes("--runtime-errors");
+// Each mode flag selects one proof group.  Several flags may be combined so a
+// single run (and a single assembly of the compiler and runtime) covers them.
+const modeFlags = [
+  "runtime-errors",
+  "integers",
+  "apply",
+  "ec",
+  "vectors",
+  "data",
+];
+const modes = modeFlags.filter((mode) => Deno.args.includes(`--${mode}`));
+if (modes.length === 0) modes.push("regular");
 const applyCaseNames = new Set([
   "APPFIX.SK8",
   "APPLEAD.SK8",
@@ -612,19 +620,33 @@ const ecCaseNames = new Set(
 const regularCases = cases.filter(([name]) =>
   !applyCaseNames.has(name) && !ecCaseNames.has(name)
 );
-const selectedCases = runtimeErrorMode
-  ? []
-  : integerMode
-  ? integerCases
-  : applyMode
-  ? cases.filter(([name]) => applyCaseNames.has(name))
-  : ecMode
-  ? cases.filter(([name]) => name.startsWith("EC"))
-  : Deno.args.includes("--vectors")
-  ? vectorCases
-  : Deno.args.includes("--data")
-  ? dataCases
-  : regularCases;
+function programCasesFor(mode) {
+  switch (mode) {
+    case "runtime-errors":
+      return [];
+    case "integers":
+      return integerCases;
+    case "apply":
+      return cases.filter(([name]) => applyCaseNames.has(name));
+    case "ec":
+      return cases.filter(([name]) => name.startsWith("EC"));
+    case "vectors":
+      return vectorCases;
+    case "data":
+      return dataCases;
+    default:
+      return regularCases;
+  }
+}
+function uniqueCases(groups) {
+  const seen = new Set();
+  return groups.flat().filter(([name]) => {
+    if (seen.has(name)) return false;
+    seen.add(name);
+    return true;
+  });
+}
+const selectedCases = uniqueCases(modes.map(programCasesFor));
 
 // Programs historically relied on the compiler printing the last value.  The
 // language now leaves output to explicit procedures, so keep these proofs
@@ -749,30 +771,41 @@ const dataRuntimeErrorCases = [
   ["STRTYPE.SK8", '(string-ref "x" #\\A)', "RUNTIME ERROR\r\n"],
   ["CHINTERR.SK8", "(char->integer 65)", "RUNTIME ERROR\r\n"],
 ];
-const selectedErrorCases = runtimeErrorMode
-  ? []
-  : applyMode
-  ? []
-  : integerMode
-  ? []
-  : ecMode
-  ? errorCases.filter(([name]) => name.startsWith("EC"))
-  : Deno.args.includes("--data")
-  ? dataErrorCases
-  : [...errorCases, ...restErrorCases];
-const selectedRuntimeErrorCases = runtimeErrorMode
-  ? runtimeErrorCases
-  : applyMode
-  ? applyRuntimeErrorCases
-  : integerMode
-  ? integerRuntimeErrorCases
-  : ecMode
-  ? runtimeErrorCases.filter(([name]) => name.startsWith("EC"))
-  : Deno.args.includes("--vectors")
-  ? vectorRuntimeErrorCases
-  : Deno.args.includes("--data")
-  ? dataRuntimeErrorCases
-  : [];
+function errorCasesFor(mode) {
+  switch (mode) {
+    case "runtime-errors":
+    case "apply":
+    case "integers":
+      return [];
+    case "ec":
+      return errorCases.filter(([name]) => name.startsWith("EC"));
+    case "data":
+      return dataErrorCases;
+    default:
+      return [...errorCases, ...restErrorCases];
+  }
+}
+function runtimeErrorCasesFor(mode) {
+  switch (mode) {
+    case "runtime-errors":
+      // The call/ec runtime errors belong to the --ec group.
+      return runtimeErrorCases.filter(([name]) => !name.startsWith("EC"));
+    case "apply":
+      return applyRuntimeErrorCases;
+    case "integers":
+      return integerRuntimeErrorCases;
+    case "ec":
+      return runtimeErrorCases.filter(([name]) => name.startsWith("EC"));
+    case "vectors":
+      return vectorRuntimeErrorCases;
+    case "data":
+      return dataRuntimeErrorCases;
+    default:
+      return [];
+  }
+}
+const selectedErrorCases = uniqueCases(modes.map(errorCasesFor));
+const selectedRuntimeErrorCases = uniqueCases(modes.map(runtimeErrorCasesFor));
 const caseArgument = Deno.args.find((argument) =>
   argument.startsWith("--case=")
 );
