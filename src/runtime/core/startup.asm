@@ -92,7 +92,7 @@ SRTSTART:
         LDIR
         LD HL,SRTCLOWN              ; No closure slab owns a page at startup.
         LD DE,SRTCLOWN+1
-        LD BC,255
+        LD BC,127                   ; The owner directory has 128 entries.
         LD (HL),A
         LDIR
         LD HL,SRTCLUSE              ; No closure object occupies a slab yet.
