@@ -74,6 +74,29 @@ if (Deno.args.includes("--data")) {
   });
 }
 
+// Pin the live-pair ceiling of four-byte pair cells.  With the current runtime
+// image this program keeps 1,888 pairs (59 full 32-record pair pages) live;
+// one more pair must stop with RUNTIME ERROR rather than corrupt the heap.
+const livePairCeiling = 1888;
+function livePairSource(count) {
+  return `(define build (lambda (n acc) (if (zero? n) acc (build (- n 1) (cons n acc))))) (define len (lambda (l n) (if (null? l) n (len (cdr l) (+ n 1))))) (define keep (build ${count} '())) (begin (write (len keep 0)) (newline))`;
+}
+// The data group's disk directory is nearly full, so the ceiling cases run with
+// the ordinary procedure group.
+const capacityCases = [
+  [
+    `PAIR${livePairCeiling}.SK8`,
+    livePairSource(livePairCeiling),
+    String(livePairCeiling),
+  ],
+];
+const capacityRuntimeErrorCases = [
+  [
+    `PAIR${livePairCeiling + 1}.SK8`,
+    livePairSource(livePairCeiling + 1),
+    "RUNTIME ERROR\r\n",
+  ],
+];
 const longA = `"${"a".repeat(200)}"`;
 const longB = `"${"b".repeat(100)}"`;
 const boundary = `"${"c".repeat(254)}"`;
@@ -625,9 +648,12 @@ const applyCaseNames = new Set([
 const ecCaseNames = new Set(
   cases.filter(([name]) => name.startsWith("EC")).map(([name]) => name),
 );
-const regularCases = cases.filter(([name]) =>
-  !applyCaseNames.has(name) && !ecCaseNames.has(name)
-);
+const regularCases = [
+  ...cases.filter(([name]) =>
+    !applyCaseNames.has(name) && !ecCaseNames.has(name)
+  ),
+  ...capacityCases,
+];
 const selectedCases = runtimeErrorMode
   ? []
   : integerMode
@@ -788,7 +814,7 @@ const selectedRuntimeErrorCases = runtimeErrorMode
   ? vectorRuntimeErrorCases
   : Deno.args.includes("--data")
   ? dataRuntimeErrorCases
-  : [];
+  : capacityRuntimeErrorCases;
 const caseArgument = Deno.args.find((argument) =>
   argument.startsWith("--case=")
 );
@@ -957,10 +983,15 @@ try {
   for (const [name, , expected] of selectedRuntimeErrorCases) {
     const outputName = name.replace(".SK8", ".COM");
     runCommand(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
-    runCommand(
+    const rejected = runCommand(
       outputName.replace(".COM", ""),
       expected,
       `reject ${outputName}`,
+    );
+    assert.equal(
+      programOutput(rejected),
+      expected,
+      `${name}: runtime failure printed more than its diagnostic`,
     );
     runCommand(`ERA ${outputName}`, "A>", `remove ${outputName}`);
     runCommand(
