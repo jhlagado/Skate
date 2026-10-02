@@ -103,6 +103,9 @@ SRTERROR:
         CALL SRTDCLN              ; Clear active datum-reader roots before failure.
         LD DE,SRTERRTX          ; Explain an arithmetic or runtime failure.
 SRTOUT:
+        PUSH DE                    ; Keep the message while files are closed.
+        CALL SRTFCLW               ; Flush and close an open output file; ignore status.
+        POP DE                     ; Recover the diagnostic message.
         LD C,9                     ; Select CP/M's dollar-terminated output.
         CALL 5                     ; Print the terminal diagnostic.
         JP 0                       ; Do not return with a damaged value stack.

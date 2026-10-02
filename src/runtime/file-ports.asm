@@ -125,6 +125,12 @@ SRTFCBAD:
         SCF
         RET
 
+; Leave the program after flushing and closing any open output file, so text
+; written without close-port survives a normal exit.
+SRTEXIT:
+        CALL SRTFCLW               ; Carry only reports there was nothing to close.
+        JP 0                       ; Return to CP/M through the warm start.
+
 ; Write one byte to the active output stream.  Text mode turns a bare LF into
 ; CR/LF and avoids adding a second CR when newline has already emitted CR.
 SRTFWR:

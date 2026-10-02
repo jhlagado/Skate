@@ -421,6 +421,18 @@ const cases = [
     "#f#t#t#f\r\n",
   ],
   [
+    "FILEERR.SK8",
+    `(let ((p (open-output-file "PART.TXT"))) (display "${
+      "0123456789".repeat(13)
+    }" p) (car 1))`,
+    "RUNTIME ERROR\r\n",
+  ],
+  [
+    "FILEEXIT.SK8",
+    '(let ((p (open-output-file "EXIT.TXT"))) (display "kept" p) (display "ok"))',
+    "ok",
+  ],
+  [
     "ADVENTUR.SK8",
     await Deno.readTextFile("examples/applications/advent.sk8"),
     "You are at a fork. Choose left or right: l\r\nYou take the left path.",
@@ -618,6 +630,26 @@ try {
         [0x00, 0x1a, 0x0d, 0x0a],
         "BINOUT.SK8: binary file bytes",
       );
+    }
+    if (name === "FILEERR.SK8") {
+      checkCase(name, () => {
+        const outputFile = readCpm22File(machine.export_drive(0), "PART.TXT");
+        assert.equal(
+          decoder.decode(outputFile.slice(0, 131)),
+          "0123456789".repeat(13) + "\x1a",
+          "FILEERR.SK8: bytes written before the error",
+        );
+      });
+    }
+    if (name === "FILEEXIT.SK8") {
+      checkCase(name, () => {
+        const outputFile = readCpm22File(machine.export_drive(0), "EXIT.TXT");
+        assert.equal(
+          decoder.decode(outputFile.slice(0, 5)),
+          "kept\x1a",
+          "FILEEXIT.SK8: bytes written before normal exit",
+        );
+      });
     }
     const nativeLowSp = readWord(lowStackAddress);
     const observedLowSp = observedStackLow();
