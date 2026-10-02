@@ -26,3 +26,16 @@ SRTCTAG5       EQU 5
 SRTCTAG6       EQU 6
 SRTCTAG7       EQU 7
 SRTCTAG8       EQU 8
+
+; Pair cells use the same four-byte extent.  The first cell carries the
+; pair-level allocation and mark bits in its legacy packed state byte; the
+; second cell carries only the CDR tag.  These offsets keep the pair changes
+; explicit while the public value ABI remains A:HL plus a logical tag.
+SRTPW          EQU 8
+SRPPCAP        EQU 32
+SRPCCAR0       EQU 0
+SRPCCAR1       EQU 1
+SRPCCARM      EQU 3
+SRPCDDR0       EQU 4
+SRPCDDR1       EQU 5
+SRPCDDRM       EQU 7

@@ -527,8 +527,8 @@ Deno.test("a closure capture keeps a pair alive and releases both together", asy
   memory[assembled.address("SRTSLOTS")] = 0;
 
   // Close the graph through the pair's CDR so collection must handle a cycle.
-  writeWord(memory, pair.payload + 2, closure.payload);
-  memory[pair.payload + 4] = (memory[pair.payload + 4] & 0xc7) | 0x10;
+  writeWord(memory, pair.payload + 4, closure.payload);
+  memory[pair.payload + 7] = 2;
 
   writeWord(memory, root, closure.payload);
   memory[root + 2] = 2;

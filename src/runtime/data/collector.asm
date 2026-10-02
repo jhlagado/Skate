@@ -2,7 +2,7 @@
 ; Entry points: SRTGC, SRTROOTS, SRTMARK and SRTDRAIN.
 ; Included in runtime order by ../data.asm.
 
-; Stop-the-world mark-and-sweep for every five-byte pair slab.  Root discovery
+; Stop-the-world mark-and-sweep for every eight-byte pair slab.  Root discovery
 ; is exact: compiler-patched static records, active value stacks, frames and
 ; construction scratch are visited by type rather than by byte pattern.
 SRTGC:
@@ -70,16 +70,16 @@ SRTPCLAB:
         LD (SRTPSST),HL
         LD (SRTPSBA),DE
         LD (SRTPSCAN),DE
-        LD C,51                     ; Each page contains 51 five-byte records.
+        LD C,SRPPCAP                ; Each page contains 32 eight-byte records.
 SRTPCLP:
         LD HL,(SRTPSCAN)
-        LD DE,4
+        LD DE,SRPCCARM
         ADD HL,DE
         LD A,(HL)
         AND 7FH                     ; Preserve tags and allocation, clear marking.
         LD (HL),A
         LD HL,(SRTPSCAN)
-        LD DE,5
+        LD DE,SRTPW
         ADD HL,DE
         LD (SRTPSCAN),HL
         DEC C
@@ -93,7 +93,7 @@ SRTPCLSK:
         DJNZ SRTPCLAB
         RET
 
-; Sweep all pair slabs.  Dead records become zero-state records; live records
+; Sweep all pair slabs.  Dead records become zero-state cells; live records
 ; retain their tags and allocation bit but lose the mark bit.
 SRTPSW:
         LD A,(SRTPSLBN)
@@ -113,10 +113,10 @@ SRTPSWL:
         LD (SRTPSST),HL
         LD (SRTPSBA),DE
         LD (SRTPSCAN),DE
-        LD C,51
+        LD C,SRPPCAP
 SRTPSWLP:
         LD HL,(SRTPSCAN)
-        LD DE,4
+        LD DE,SRPCCARM
         ADD HL,DE
         LD A,(HL)
         AND 40H                     ; An unallocated record is already dead.
@@ -125,8 +125,13 @@ SRTPSWLP:
         AND 80H                     ; A marked allocation remains reachable.
         JR NZ,SRTPSWV
 SRTPSWF:
-        XOR A                       ; Clear stale tags and both ownership bits.
+        XOR A                       ; Clear the CAR tag and both ownership bits.
         LD (HL),A
+        INC HL
+        INC HL
+        INC HL
+        INC HL                       ; Reach the CDR metadata byte.
+        LD (HL),A                   ; A dead pair carries no CDR tag.
         JR SRTPSWN
 SRTPSWV:
         LD A,(HL)
@@ -134,7 +139,7 @@ SRTPSWV:
         LD (HL),A
 SRTPSWN:
         LD HL,(SRTPSCAN)
-        LD DE,5
+        LD DE,SRTPW
         ADD HL,DE
         LD (SRTPSCAN),HL
         DEC C
@@ -201,10 +206,10 @@ SRTGFS:
         LD (SRTPSST),HL
         LD (SRTPSBA),DE
         LD (SRTPSCAN),DE
-        LD C,51
+        LD C,SRPPCAP
 SRTGFSLP:
         LD HL,(SRTPSCAN)
-        LD DE,4
+        LD DE,SRPCCARM
         ADD HL,DE
         LD A,(HL)
         AND 80H                     ; Only marked records need another visit.
@@ -229,7 +234,7 @@ SRTGFSLP:
         LD (SRTPSCAN),DE
 SRTGFSN:
         LD HL,(SRTPSCAN)
-        LD DE,5
+        LD DE,SRTPW
         ADD HL,DE
         LD (SRTPSCAN),HL
         DEC C
@@ -281,7 +286,7 @@ SRTMARK:
         CALL SRTPCHK
         RET C
         LD HL,(SRTPSAD)             ; Recover the validated record address.
-        LD DE,4
+        LD DE,SRPCCARM
         ADD HL,DE
         LD A,(HL)
         AND 40H                     ; A swept or never-published record is ignored.
@@ -325,24 +330,24 @@ SRTMARKV:
         LD D,(HL)
         LD (SRTQCAR),DE
         LD HL,(SRTMVAL)
-        INC HL
-        INC HL
+        LD DE,SRPCDDR0
+        ADD HL,DE
         LD E,(HL)
         INC HL
         LD D,(HL)
         LD (SRTQCDR),DE
         LD HL,(SRTMVAL)
-        LD DE,4
+        LD DE,SRPCCARM
         ADD HL,DE
         LD A,(HL)
         LD (SRTQFLG),A
-        AND 7                       ; The CAR tag occupies the low three bits.
+        AND 0FH                     ; The CAR tag occupies its cell metadata nibble.
         LD (SRTQCTAG),A
-        LD A,(SRTQFLG)
-        SRL A                       ; Shift the CDR tag down from bits three to five.
-        SRL A
-        SRL A
-        AND 7
+        LD HL,(SRTMVAL)
+        LD DE,SRPCDDRM
+        ADD HL,DE
+        LD A,(HL)
+        AND 0FH                     ; The CDR tag occupies its cell metadata nibble.
         LD (SRTQDTAG),A
         LD A,(SRTQCTAG)
         LD HL,(SRTQCAR)

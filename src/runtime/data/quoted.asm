@@ -4,10 +4,12 @@
 
 ; Pair, quoted-list and literal output services for the generated runtime.
 ;
-; Pair slabs contain 51 five-byte records.  A record stores the CAR payload,
-; CDR payload and one packed byte: three bits for each value tag, one allocated
-; bit and one mark bit.  Logical pair values use tag one and the record address
-; as their payload.  Symbols and strings use tags four and five and point at a
+; Pair slabs contain 32 eight-byte records.  A record is two adjacent value
+; cells: the first stores the CAR payload and metadata, and the second stores
+; the CDR payload and metadata.  The first metadata byte retains the current
+; allocation and mark bits; each cell carries its logical tag in the low
+; nibble.  Logical pair values use tag one and the record address as their
+; payload.  Symbols and strings use tags four and five and point at a
 ; length-prefixed output literal.
 
 ; Save one value on the quoted-data stack.

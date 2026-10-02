@@ -402,7 +402,7 @@ Deno.test("datum reader clears roots when pair allocation fails", async () => {
   memory[assembled.address("SRTPSLIM")] = 1;
   const roots = 0xd700;
   const pairs: number[] = [];
-  for (let index = 0; index < 51; index++) {
+  for (let index = 0; index < 32; index++) {
     const pair = call("SRTMAKEP");
     assert.equal(pair.carry, 0);
     pairs.push(pair.payload);

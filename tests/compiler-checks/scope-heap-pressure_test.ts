@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { loadAssembly } from "../z80.ts";
 
+const PAIR_BYTES = 8;
+const CAR_META = 3;
+const CDR_PAYLOAD = 4;
+const CDR_META = 7;
+
 type RuntimeImage = Awaited<ReturnType<typeof loadAssembly>>;
 type CpuState = {
   a: number;
@@ -88,11 +93,12 @@ function fillSinglePairPage(
 ) {
   const end = page + 0x100;
   const canary = memory.slice(end, end + 4);
-  for (let address = page; address + 4 < end; address += 5) {
-    if ((memory[address + 4] & 0x40) !== 0) continue;
+  for (let address = page; address + PAIR_BYTES <= end; address += PAIR_BYTES) {
+    if ((memory[address + CAR_META] & 0x40) !== 0) continue;
     writeWord(memory, address, 0);
-    writeWord(memory, address + 2, 0);
-    memory[address + 4] = 0x40;
+    writeWord(memory, address + CDR_PAYLOAD, 0);
+    memory[address + CAR_META] = 0x40;
+    memory[address + CDR_META] = 0;
   }
   assert.deepEqual(memory.slice(end, end + 4), canary);
   memory[assembled.address("SRTPSLT") + 2] = 0xff;
@@ -134,8 +140,9 @@ Deno.test("direct cons preserves both scalar inputs through collection", async (
   assert.equal(result.sp, 0xdffa);
   assert.equal(result.carry, 0);
   assert.equal(readWord(memory, result.payload), 0x1234);
-  assert.equal(readWord(memory, result.payload + 2), 0x5678);
-  assert.equal(memory[result.payload + 4], 0x5b);
+  assert.equal(readWord(memory, result.payload + CDR_PAYLOAD), 0x5678);
+  assert.equal(memory[result.payload + CAR_META], 0x43);
+  assert.equal(memory[result.payload + CDR_META], 3);
 });
 
 Deno.test("packet cons preserves both scalar inputs through collection", async () => {
@@ -166,8 +173,9 @@ Deno.test("packet cons preserves both scalar inputs through collection", async (
   assert.equal(result.sp, 0xdff0);
   assert.equal(result.carry, 0);
   assert.equal(readWord(memory, result.payload), 0x1234);
-  assert.equal(readWord(memory, result.payload + 2), 0x5678);
-  assert.equal(memory[result.payload + 4], 0x5b);
+  assert.equal(readWord(memory, result.payload + CDR_PAYLOAD), 0x5678);
+  assert.equal(memory[result.payload + CAR_META], 0x43);
+  assert.equal(memory[result.payload + CDR_META], 3);
 });
 
 Deno.test("quoted list construction survives collection at both allocations", async () => {
@@ -199,12 +207,14 @@ Deno.test("quoted list construction survives collection at both allocations", as
   assert.equal(result.sp, 0xdff2);
   assert.equal(result.carry, 0);
   const head = result.payload;
-  const tail = readWord(memory, head + 2);
+  const tail = readWord(memory, head + CDR_PAYLOAD);
   assert.equal(readWord(memory, head), 41);
-  assert.equal(memory[head + 4], 0x4b);
+  assert.equal(memory[head + CAR_META], 0x43);
+  assert.equal(memory[head + CDR_META], 1);
   assert.equal(readWord(memory, tail), 42);
-  assert.equal(readWord(memory, tail + 2), 0xfe02);
-  assert.equal(memory[tail + 4], 0x43);
+  assert.equal(readWord(memory, tail + CDR_PAYLOAD), 0xfe02);
+  assert.equal(memory[tail + CAR_META], 0x43);
+  assert.equal(memory[tail + CDR_META], 0);
 });
 
 Deno.test("tracing preserves a linked list of more than one thousand pairs", async () => {
@@ -231,11 +241,13 @@ Deno.test("tracing preserves a linked list of more than one thousand pairs", asy
     const address = records[index];
     writeWord(memory, address, index);
     if (index + 1 < records.length) {
-      writeWord(memory, address + 2, records[index + 1]);
-      memory[address + 4] = 0x4b;
+      writeWord(memory, address + CDR_PAYLOAD, records[index + 1]);
+      memory[address + CAR_META] = 0x43;
+      memory[address + CDR_META] = 1;
     } else {
-      writeWord(memory, address + 2, 0xfe02);
-      memory[address + 4] = 0x43;
+      writeWord(memory, address + CDR_PAYLOAD, 0xfe02);
+      memory[address + CAR_META] = 0x43;
+      memory[address + CDR_META] = 0;
     }
   }
   writeWord(memory, 0xd700, records[0]);
@@ -249,9 +261,13 @@ Deno.test("tracing preserves a linked list of more than one thousand pairs", asy
     const address = records[index];
     assert.equal(readWord(memory, address), index);
     assert.equal(
-      readWord(memory, address + 2),
+      readWord(memory, address + CDR_PAYLOAD),
       index + 1 < records.length ? records[index + 1] : 0xfe02,
     );
-    assert.equal(memory[address + 4], index + 1 < records.length ? 0x4b : 0x43);
+    assert.equal(memory[address + CAR_META], 0x43);
+    assert.equal(
+      memory[address + CDR_META],
+      index + 1 < records.length ? 1 : 0,
+    );
   }
 });

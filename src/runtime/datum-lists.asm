@@ -3,7 +3,7 @@
 ; Reader values use a separate 64-slot stack so a read cannot overwrite the
 ; quoted-data stack used by list, rest and apply.  Each open list owns one
 ; eight-byte frame: state, value count and the stack cursor at its opening.
-; Completed lists are folded through the existing five-byte pair allocator.
+; Completed lists are folded through the eight-byte pair allocator.
 
 ; Mark the active reader value stack during a collection.
 SRTDRRT:

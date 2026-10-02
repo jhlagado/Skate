@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { loadAssembly } from "../z80.ts";
 
+const PAIR_BYTES = 8;
+const PAIRS_PER_SLAB = 32;
+const CAR_META = 3;
+const CDR_PAYLOAD = 4;
+const CDR_META = 7;
+
 function writeWord(memory: Uint8Array, address: number, value: number) {
   memory[address] = value & 255;
   memory[address + 1] = value >>> 8;
@@ -62,8 +68,9 @@ async function rootRuntime() {
   memory[descriptor] = pairBase >>> 8;
   memory[descriptor + 1] = 0;
   memory[descriptor + 2] = 0xff;
-  for (let index = 0; index < 51; index++) {
-    memory[pairBase + index * 5 + 4] = 0x43;
+  for (let index = 0; index < PAIRS_PER_SLAB; index++) {
+    memory[pairBase + index * PAIR_BYTES + CAR_META] = 0x43;
+    memory[pairBase + index * PAIR_BYTES + CDR_META] = 0;
   }
 
   writeWord(memory, assembled.address("SRTHEAPP"), 0xc000);
@@ -102,8 +109,9 @@ async function rootRuntime() {
 
   function pair(address: number, car = 1, cdr = 0xfe02) {
     writeWord(memory, address, car);
-    writeWord(memory, address + 2, cdr);
-    memory[address + 4] = 0x43;
+    writeWord(memory, address + CDR_PAYLOAD, cdr);
+    memory[address + CAR_META] = 0x43;
+    memory[address + CDR_META] = 0;
   }
 
   function bindingStart(address: number) {
@@ -153,13 +161,13 @@ Deno.test("exact roots preserve a published global pair and ignore inactive byte
   const fixture = await rootRuntime();
   const { memory, pairBase, pair } = fixture;
   pair(pairBase);
-  pair(pairBase + 5);
+  pair(pairBase + PAIR_BYTES);
   memory[0x5c00] = pairBase & 255;
   memory[0x5c01] = pairBase >>> 8;
   memory[0x5c02] = 1;
   preserveStaticPair(fixture, pairBase);
-  assert.equal(memory[pairBase + 4], 0x43);
-  assert.equal(memory[pairBase + 5 + 4], 0);
+  assert.equal(memory[pairBase + CAR_META], 0x43);
+  assert.equal(memory[pairBase + PAIR_BYTES + CAR_META], 0);
 });
 
 Deno.test("exact roots preserve an active argument packet", async () => {
@@ -172,7 +180,7 @@ Deno.test("exact roots preserve an active argument packet", async () => {
   memory[packet + 3] = 1;
   memory[assembled.address("SRTARGC")] = 1;
   call("SRTGC");
-  assert.equal(memory[pairBase + 4], 0x43);
+  assert.equal(memory[pairBase + CAR_META], 0x43);
 });
 
 Deno.test("exact roots preserve generated operands", async () => {
@@ -185,7 +193,7 @@ Deno.test("exact roots preserve generated operands", async () => {
   memory[roots + 3] = 1;
   memory[assembled.address("SRTNCT")] = 1;
   call("SRTGC");
-  assert.equal(memory[pairBase + 4], 0x43);
+  assert.equal(memory[pairBase + CAR_META], 0x43);
 });
 
 Deno.test("exact roots preserve operator and quoted stack entries", async () => {
@@ -203,7 +211,7 @@ Deno.test("exact roots preserve operator and quoted stack entries", async () => 
       base + 4,
     );
     call("SRTGC");
-    assert.equal(memory[pairBase + 4], 0x43, stack);
+    assert.equal(memory[pairBase + CAR_META], 0x43, stack);
   }
 });
 
@@ -231,7 +239,7 @@ Deno.test("an active environment traces its binding value", async () => {
   writeWord(memory, assembled.address("SRTENV"), map);
   memory[assembled.address("SRTSLOTS")] = 1;
   call("SRTGC");
-  assert.equal(memory[pairBase + 4], 0x43);
+  assert.equal(memory[pairBase + CAR_META], 0x43);
   assert.equal(memory[binding + 3] & 0x70, 0x20);
 });
 
@@ -247,7 +255,7 @@ Deno.test("suspended environments remain roots through their frame maps", async 
     call,
   } = fixture;
   pair(pairBase);
-  pair(pairBase + 5);
+  pair(pairBase + PAIR_BYTES);
   const currentMap = 0x5c00;
   const callerMap = 0x5c10;
   const currentBinding = 0x6200;
@@ -264,7 +272,7 @@ Deno.test("suspended environments remain roots through their frame maps", async 
   memory[callerMap + 2] = 0;
   memory[callerMap + 3] = 2;
   writeWord(memory, currentBinding, pairBase);
-  writeWord(memory, callerBinding, pairBase + 5);
+  writeWord(memory, callerBinding, pairBase + PAIR_BYTES);
   memory[currentBinding + 3] = 0x29;
   memory[callerBinding + 3] = 0x29;
   memory[currentDescriptor + 3] = 1;
@@ -277,8 +285,8 @@ Deno.test("suspended environments remain roots through their frame maps", async 
   writeWord(memory, assembled.address("SRTFRAME"), currentMap);
   memory[assembled.address("SRTSLOTS")] = 1;
   call("SRTGC");
-  assert.equal(memory[pairBase + 4], 0x43);
-  assert.equal(memory[pairBase + 5 + 4], 0x43);
+  assert.equal(memory[pairBase + CAR_META], 0x43);
+  assert.equal(memory[pairBase + PAIR_BYTES + CAR_META], 0x43);
 });
 
 Deno.test("a captured closure traces only its declared binding slots", async () => {
@@ -313,7 +321,7 @@ Deno.test("a captured closure traces only its declared binding slots", async () 
   writeWord(memory, assembled.address("SRTGBASE"), 0x5c00);
   writeWord(memory, assembled.address("SRTGEND"), 0x5c04);
   call("SRTGC");
-  assert.equal(memory[pairBase + 4], 0x43);
+  assert.equal(memory[pairBase + CAR_META], 0x43);
 });
 
 Deno.test("closure roots drain a full worklist without reporting an error", async () => {
@@ -439,7 +447,7 @@ Deno.test("an interior pair pointer is rejected without touching the canary", as
   writeWord(memory, assembled.address("SRTGBASE"), 0x7000);
   writeWord(memory, assembled.address("SRTGEND"), 0x7004);
   call("SRTGC");
-  assert.equal(memory[pairBase + 4], 0);
+  assert.equal(memory[pairBase + CAR_META], 0);
   assert.equal(memory[0x7f00], 0xa5);
 });
 

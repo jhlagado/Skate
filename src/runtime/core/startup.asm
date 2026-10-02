@@ -41,7 +41,7 @@ SRTSTART:
         CALL SRTGPINI              ; Derive and initialise the page-domain metadata.
         JP C,SRTERROR              ; Refuse to enter generated code without pages.
         CALL SRTSYINI              ; Reset the pinned symbol arena for this program.
-        CALL SRTPIN                ; Reserve and clear the first five-byte pair slab.
+        CALL SRTPIN                ; Reserve and clear the first eight-byte pair slab.
         JP C,SRTERROR              ; Refuse to enter code without pair capacity.
         LD HL,SRTOPB               ; The operator side stack starts above pair cells.
         LD (SRTOPS),HL            ; Reset it for this generated program run.

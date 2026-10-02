@@ -95,7 +95,7 @@ SRTWBEG:  DB 0
 SRTWMODE: DB 0                    ; Zero displays contents; one writes readable syntax.
 
 ; Pair-class table and scan cursors.  Each entry is a page-aligned slab base.
-SRTPSLBN: DB 0                    ; Number of five-byte pair slabs currently assigned.
+SRTPSLBN: DB 0                    ; Number of eight-byte pair slabs currently assigned.
 SRTPSLT:  DS 384                  ; One hundred twenty-eight three-byte descriptors.
 SRTPSLHD: DB 0                    ; One-based index of the first available slab.
 SRTPSLIM: DB 0                    ; Maximum descriptor slots for the page domain.
@@ -106,7 +106,7 @@ SRTPSFST: DW 0                    ; First free record while chains are rebuilt.
 SRTPSFLK: DW 0                    ; Last free record while chains are rebuilt.
 SRTPSDP:   DW 0                   ; Current slab descriptor during a rebuild.
 SRTPSBA:   DW 0                   ; Current slab base during allocation or tracing.
-SRTPSCAN:  DW 0                   ; Current five-byte record during a slab walk.
+SRTPSCAN:  DW 0                   ; Current eight-byte record during a slab walk.
 SRTPSAD:   DW 0                   ; Candidate pair address being validated or marked.
 SRTPSST:   DW 0                   ; Next slab-table entry saved during a record walk.
 SRTFSST:   DW 0                   ; Fallback scan's saved descriptor cursor.

@@ -173,7 +173,9 @@ committed and pushed before the next one begins.
    A 256-byte page then contains 32 pair records, subject to the existing
    page-boundary rules. Update `cons`, `car`, `cdr`, equality, printing, quoted
    data, rest lists, `apply` and pair tracing. Prove malformed and interior
-   pointers as well as ordinary list workloads.
+   pointers as well as ordinary list workloads. Pair validation should check
+   the assigned page and aligned slot directly; it must not scan every record
+   in every slab for each value.
 4. **Value elements.** Normalize vector elements and any remaining internal
    inline value arrays to the cell metadata position, while keeping argument
    packets at their documented boundary layout. If a packet-backed array is
@@ -233,25 +235,46 @@ the measured reason for rejection.
 
 ## Implementation checkpoint
 
-The heap-binding increment is now implemented for the public runtime. A
-binding page carries 64 four-byte cells instead of 85 three-byte records. The
-payload low and high bytes stay at offsets 0 and 1; offset 2 is cleared and
-reserved for a future payload extension; offset 3 carries the existing
-allocation, initialization, escape and mark state. The existing allocation
-start map remains authoritative, with an alignment check for four-byte cell
-starts, and active stack slots, argument packets and the `A:HL` calling
-convention remain unchanged. Byte +3 still uses the current packed allocation,
-initialization, escape, mark and tag encoding; the future tag/flag constants
-are reservations only. Pair storage is still the five-byte reference layout
-until its own increment is complete.
+The heap-binding increment is implemented for the public runtime. A binding
+page carries 64 four-byte cells instead of 85 three-byte records. The payload
+low and high bytes stay at offsets 0 and 1; offset 2 is cleared and reserved
+for a future payload extension; offset 3 carries the existing allocation,
+initialization, escape and mark state. The existing allocation start map
+remains authoritative, with an alignment check for four-byte cell starts, and
+active stack slots, argument packets and the `A:HL` calling convention remain
+unchanged. Byte +3 still uses the current packed allocation, initialization,
+escape, mark and tag encoding; the future tag/flag constants are reservations
+only.
 
-The ordinary CP/M procedure proof passes all 44 successful cases and eight
-expected compile-error cases with this increment. The ATOM runtime image is
-22,699 bytes (22,443 bytes after the 0100H origin); the CP/M harness reports
-22,443 runtime bytes. The largest procedure image is 24,337 bytes, producing
-a 24,448-byte COM and a 25,216-byte ASO file. Across the independent cases
-the maximum observed counts are 5,001 pair allocations, 3 heap-binding
-allocations, 4 closure allocations, one collection and 255 activations. The
-binding allocation traffic is therefore 13 records, or 39 bytes in the
-reference model versus 52 bytes in the four-byte model; these are allocation
-traffic projections, not peak live heap occupancy.
+The pair increment is also implemented. A pair is now two adjacent four-byte
+cells: CAR payload at offsets 0 and 1, a cleared extension at 2, and CAR
+metadata at 3; CDR payload at 4 and 5, a cleared extension at 6, and CDR
+metadata at 7. Pair pages contain 32 records, and the free chain advances by
+eight bytes. The CAR metadata byte remains the owner of the pair allocation
+and mark bits during this compatibility step; its low nibble carries the CAR
+tag, while the CDR metadata low nibble carries the CDR tag. This deliberately
+keeps the current collector state encoding working while the high-nibble tag
+and low-nibble flag layout remains a future, separately reviewed change.
+
+The ordinary CP/M procedure proof, data proof, vector proof, `apply` proof and
+`call/ec` proof, together with the pair-focused host proofs, pass with this
+increment. The ATOM runtime image is 22,640 bytes in total, or 22,384 bytes
+after the 0100H load origin. The CP/M harness reports 22,384 runtime bytes.
+The largest published images are 24,320 COM and 25,216 ASO for procedures,
+24,448 COM and 25,856 ASO for datum and data storage, 23,424 COM and 24,448
+ASO for vectors, 22,784 COM and 23,552 ASO for `apply`, and 22,912 COM and
+23,680 ASO for `call/ec`.
+
+The pair suite covers the 32-record page boundary, free-chain reuse, fallback
+tracing, exact roots, malformed and interior pointers, datum construction,
+vector overflow and a list of more than one thousand pairs. Pair validation
+now checks the descriptor page and the aligned slot metadata directly, reducing
+the vector overflow qualification from an unbounded record walk to a bounded
+descriptor walk without weakening the interior-pointer or free-record checks.
+The procedure suite observed 8,008 pair allocations (40,040 bytes in the
+five-byte reference projection versus 64,064 bytes in the eight-byte
+experiment projection); the data suite observed 3,700 (18,500 versus 29,600),
+and the vector suite observed 4,026 (20,130 versus 32,208). The binding
+allocation traffic remains 13 records, or 39 bytes in the reference model
+versus 52 bytes in the four-byte model. These are allocation traffic
+projections, not peak live heap occupancy.

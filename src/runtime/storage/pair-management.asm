@@ -37,10 +37,10 @@ SRTPSRBS:
         LD (SRTPSFLK+1),A
         LD (SRTPSLV),A              ; Count live records to identify an empty slab.
         LD (SRTPSCAN),DE             ; Begin with record zero in this slab.
-        LD C,51                     ; Inspect all complete five-byte records.
+        LD C,SRPPCAP                ; Inspect all complete eight-byte records.
 SRTPSRBR:
         LD HL,(SRTPSCAN)
-        LD DE,4
+        LD DE,SRPCCARM
         ADD HL,DE                   ; Read the packed allocation state.
         LD A,(HL)
         AND 40H
@@ -68,7 +68,7 @@ SRTPSRBL:
         LD (SRTPSFLK),HL            ; The current record becomes the predecessor.
 SRTPSRBN:
         LD HL,(SRTPSCAN)
-        LD DE,5
+        LD DE,SRTPW
         ADD HL,DE
         LD (SRTPSCAN),HL
         DEC C
@@ -134,60 +134,48 @@ SRTPSRBX:
         JP NZ,SRTPSRBS
         RET
 
-; Check A:HL and return carry clear only for a live pair pointer.
+; Check A:HL and return carry clear only for a live pair pointer.  Pair pages
+; are allocated on 256-byte boundaries and records are eight-byte aligned, so
+; the descriptor scan only has to establish that the page is assigned.  The
+; old check walked every record on every page; using the candidate's slot here
+; keeps the same interior/free-record safety with a bounded descriptor scan.
 SRTPCHK:
         CP 1                        ; Only the public pair tag can name a record.
         JR NZ,SRTNPAIR              ; Other values are never valid pair pointers.
-        LD (SRTPSAD),HL             ; Preserve the candidate during slab walking.
+        LD (SRTPSAD),HL             ; Preserve the candidate during page checks.
+        LD A,L
+        AND 7
+        JR NZ,SRTNPAIR              ; Interior and unaligned addresses are invalid.
+        LD A,L
+        CP 0F9H
+        JR NC,SRTNPAIR              ; The final valid slot starts at F8H.
         LD A,(SRTPSLBN)             ; An empty class has no valid pair address.
         OR A
         JR Z,SRTNPAIR
         LD B,A                      ; B counts slab entries in the class table.
         LD DE,SRTPSLT               ; DE walks the three-byte slab descriptors.
-SRTPCS:
+SRTPCPG:
         LD A,(DE)                   ; Read the slab page number.
         OR A
-        JR Z,SRTPCSK                ; Released descriptors contain no records.
-        LD H,A                      ; The low address byte is zero.
-        LD L,0
-        INC DE                      ; Skip the next-list and free-head fields.
-        INC DE
-        INC DE                      ; DE now names the following descriptor.
-        LD (SRTPSST),DE             ; Keep the table cursor across comparisons.
-        LD (SRTPSBA),HL             ; Preserve the base across record comparisons.
-        LD (SRTPSCAN),HL            ; Begin at record zero in this slab.
-        LD C,51                     ; Check every possible five-byte record.
-SRTPCREC:
-        LD HL,(SRTPSCAN)            ; Load the current record address.
-        LD DE,(SRTPSAD)             ; Compare it with the candidate pointer.
-        LD A,H                      ; Compare high bytes without changing the cursor.
-        CP D                        ; A mismatch skips the state-byte read.
-        JR NZ,SRTPCN                ; Continue with the next record.
-        LD A,L                      ; Compare low bytes after the high byte matched.
-        CP E                        ; A mismatch still leaves the candidate invalid.
-        JR NZ,SRTPCN                ; Continue with the next record.
-        LD DE,4                     ; The flags byte follows both payloads.
-        ADD HL,DE                   ; HL now addresses the candidate state.
+        JR Z,SRTPCAD                ; Released descriptors still consume a slot.
+        CP H                        ; The candidate high byte names its page.
+        JR Z,SRTPCFN
+SRTPCAD:
+        LD A,E
+        ADD A,3
+        LD E,A
+        JR NC,SRTPCNX
+        INC D
+SRTPCNX:
+        DJNZ SRTPCPG
+        JR SRTNPAIR                 ; No assigned slab owns the candidate page.
+SRTPCFN:
+        LD HL,(SRTPSAD)             ; Recover the validated page-and-slot address.
+        LD DE,SRPCCARM              ; The CAR metadata follows its payload.
+        ADD HL,DE
         LD A,(HL)                   ; Read allocation and mark bits.
-        AND 40H                     ; An allocated bit is required for validity.
-        JR NZ,SRTPCYES              ; The caller may safely read both fields.
-SRTPCN:
-        LD HL,(SRTPSCAN)            ; Recover the record start before advancing.
-        LD DE,5                     ; Move to the next five-byte record.
-        ADD HL,DE                   ; Advance by one complete five-byte record.
-        LD (SRTPSCAN),HL            ; Preserve the cursor for the next iteration.
-        DEC C                       ; Consume one position in this slab.
-        JR NZ,SRTPCREC              ; Continue until every record was checked.
-        LD DE,(SRTPSST)             ; Restore the next slab-table entry.
-        DJNZ SRTPCS                 ; Search the next slab when this one misses.
-        JR SRTNPAIR                 ; No allocated record has the requested address.
-SRTPCSK:
-        INC DE                      ; Skip the three bytes of a released descriptor.
-        INC DE
-        INC DE
-        DJNZ SRTPCS
-        JR SRTNPAIR
-SRTPCYES:
+        AND 40H                     ; A live allocation is required for validity.
+        JR Z,SRTNPAIR
         LD HL,(SRTPSAD)             ; Return the original pair pointer unchanged.
         XOR A                       ; Carry clear identifies a live pair.
         RET

@@ -35,6 +35,6 @@ Deno.test("vector overflow fallback preserves every rooted pair", async () => {
   call("SRTGC");
   assert.equal(memory[assembled.address("SRTMOVER")], 1);
   for (const pair of pairs) {
-    assert.equal(memory[pair + 4] & 0x40, 0x40, `pair ${pair.toString(16)}`);
+    assert.equal(memory[pair + 3] & 0x40, 0x40, `pair ${pair.toString(16)}`);
   }
 });

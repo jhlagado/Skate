@@ -32,7 +32,7 @@ SRTPSIL:
         CALL SRTFINDP               ; The first free record creates one page.
         RET C                       ; Startup reports a page-capacity failure.
         LD (SRTPSCAN),HL            ; Keep the probe record while returning it.
-        LD DE,4                     ; Locate its packed state byte.
+        LD DE,SRPCCARM              ; Locate the CAR metadata byte.
         ADD HL,DE                   ; HL addresses the allocation and mark bits.
         XOR A                       ; Return the probe record to the free chain.
         LD (HL),A                   ; The page remains assigned to the pair class.
@@ -76,7 +76,7 @@ SRTPSIL:
         LD (HL),A
         RET
 
-; Allocate, initialise and return one five-byte pair record.
+; Allocate, initialise and return one eight-byte pair record.
 SRTMAKEP:
         LD HL,(SRTQCAR)             ; Copy constructor inputs into dedicated roots.
         LD (SRTCRCAR),HL
@@ -113,33 +113,26 @@ SRTPINIT:
         LD (HL),E                   ; Publish the low CAR byte.
         INC HL                      ; Advance to the high CAR byte.
         LD (HL),D                   ; Publish the high CAR byte.
-        INC HL                      ; Advance to the low CDR byte.
-        LD DE,(SRTQCDR)             ; Store the CDR payload at offsets two and three.
+        INC HL                      ; Advance to the reserved CAR extension byte.
+        XOR A
+        LD (HL),A                   ; Keep the future payload extension canonical.
+        INC HL                      ; Advance to the CAR metadata byte.
+        LD A,(SRTQCTAG)
+        AND 0FH
+        OR 40H                      ; Publish allocation after both values are rooted.
+        LD (HL),A
+        INC HL                      ; Advance to the low CDR payload byte.
+        LD DE,(SRTQCDR)             ; Store the CDR payload at offsets four and five.
         LD (HL),E                   ; Publish the low CDR byte.
         INC HL                      ; Advance to the high CDR byte.
         LD (HL),D                   ; Publish the high CDR byte.
-        INC HL                      ; Advance to the packed tag and state byte.
-        LD A,(SRTQCTAG)             ; Keep the CAR tag in the packed three-bit field.
-        CP 8                        ; Escape values use the tag-seven vector field.
-        JR NZ,SRTPTCAR              ; All other values already fit the packed field.
-        LD A,7                      ; E000H..FFFFH cannot be a managed vector address.
-SRTPTCAR:
-        AND 7                       ; A malformed internal tag cannot escape its field.
-        LD (SRTPTAG),A              ; Preserve it while shifting the CDR tag.
-        LD A,(SRTQDTAG)             ; Place the CDR tag in bits three to five.
-        CP 8                        ; Escape values share the reserved high address range.
-        JR NZ,SRTPTCDR              ; Other logical tags fit directly in three bits.
-        LD A,7                      ; CAR/CDR decode restores logical tag eight later.
-SRTPTCDR:
-        AND 7                       ; Keep the packed representation bounded.
-        ADD A,A                     ; Shift the CDR tag one bit toward its field.
-        ADD A,A                     ; Shift it two bits toward its field.
-        ADD A,A                     ; Shift it three bits toward its field.
-        LD B,A                      ; Preserve the shifted CDR tag across the merge.
-        LD A,(SRTPTAG)              ; Recover the packed CAR tag.
-        OR B                        ; Combine the two logical value tags.
-        OR 40H                      ; Mark the record allocated after all values exist.
-        LD (HL),A                   ; Publish one complete, live pair record.
+        INC HL                      ; Advance to the reserved CDR extension byte.
+        XOR A
+        LD (HL),A                   ; Keep the future payload extension canonical.
+        INC HL                      ; Advance to the CDR metadata byte.
+        LD A,(SRTQDTAG)
+        AND 0FH
+        LD (HL),A                   ; The CDR tag occupies its own cell metadata.
         LD HL,(SRTQPAIR)            ; Return the logical pair address.
         LD A,1                      ; Tag one identifies a pair to generated code.
         RET
@@ -194,8 +187,8 @@ SRTPSHS:
         LD A,(SRTPSNXT)
         LD (HL),A                   ; Publish the next free offset before claiming this one.
         LD HL,(SRTPSCAN)
-        LD DE,4
-        ADD HL,DE                   ; Reach the packed state byte of the free record.
+        LD DE,SRPCCARM
+        ADD HL,DE                   ; Reach the CAR metadata byte of the free record.
         LD A,(HL)
         OR 40H                      ; Preserve tags while claiming the record.
         LD (HL),A
@@ -276,14 +269,14 @@ SRTPSUSE:
         LD A,(SRTPSLHD)             ; Link the new slab to the old list head.
         LD (HL),A
         INC HL                      ; Descriptor byte two is the free-record head.
-        LD A,5                      ; Record one is the first free record after the probe.
+        LD A,SRTPW                  ; Record one is the first free record after the probe.
         LD (HL),A
         LD A,C
         INC A                        ; Available-list links use one-based indices.
         LD (SRTPSLHD),A             ; The new slab's one-based index is the new head.
-        LD C,50                      ; Initialise the remaining free-record chain.
+        LD C,SRPPCAP-1              ; Initialise the remaining free-record chain.
         LD HL,(SRTPSBA)
-        LD DE,5
+        LD DE,SRTPW
         ADD HL,DE                   ; Begin at record one.
         LD (SRTPSCAN),HL
 SRTPSFI:
@@ -292,7 +285,7 @@ SRTPSFI:
         JR Z,SRTPSFL                ; The final record links to the FFH sentinel.
         LD HL,(SRTPSCAN)
         LD A,L
-        ADD A,5
+        ADD A,SRTPW
         LD (HL),A                   ; Link to the next record's in-page offset.
         INC HL
         XOR A
@@ -307,21 +300,39 @@ SRTPSFL:
         LD (HL),A
 SRTPSFS:
         LD HL,(SRTPSCAN)
-        LD DE,4
-        ADD HL,DE
+        INC HL                      ; Skip the free-record link's two bytes.
+        INC HL
         XOR A
-        LD (HL),A                   ; Free records carry no tags or ownership bits.
+        LD (HL),A                   ; Clear the CAR extension byte.
+        INC HL
+        LD (HL),A                   ; Free records carry no CAR metadata.
+        INC HL
+        INC HL
+        INC HL
+        LD (HL),A                   ; Clear the CDR extension byte.
+        INC HL
+        LD (HL),A                   ; Free records carry no CDR metadata.
         LD HL,(SRTPSCAN)
-        LD DE,5
+        LD DE,SRTPW
         ADD HL,DE
-        LD (SRTPSCAN),HL            ; Advance to the next five-byte record.
+        LD (SRTPSCAN),HL            ; Advance to the next eight-byte record.
         DEC C
         JR NZ,SRTPSFI
         LD HL,(SRTPSBA)             ; Reserve record zero for this allocation.
-        LD DE,4
-        ADD HL,DE
+        INC HL
+        INC HL
+        XOR A
+        LD (HL),A                   ; Clear the CAR extension byte.
+        INC HL
         LD A,40H
-        LD (HL),A
+        LD (HL),A                   ; Reserve record zero in its CAR metadata.
+        INC HL
+        INC HL
+        INC HL
+        XOR A
+        LD (HL),A                   ; Clear the CDR extension byte.
+        INC HL
+        LD (HL),A                   ; Record zero has no CDR tag yet.
         LD HL,(SRTPSBA)             ; Return the first record's address.
         XOR A                       ; Carry clear reports a usable pair slot.
         RET
@@ -352,18 +363,10 @@ SRTCARV:
         LD E,(HL)
         INC HL
         LD D,(HL)
-        INC HL                     ; Skip the two CDR payload bytes.
         INC HL
-        INC HL                     ; Reach the packed tag and state byte.
+        INC HL                     ; Reach the CAR metadata byte.
         LD A,(HL)
-        AND 7                       ; The CAR tag occupies bits zero to two.
-        CP 7                        ; Tag seven also carries pair-stored escape tokens.
-        JR NZ,SRTCAROK
-        LD A,D                      ; Vector pointers remain below the managed ceiling.
-        CP SRTETOH
-        LD A,7                      ; Ordinary vectors retain their packed tag.
-        JR C,SRTCAROK
-        LD A,8                      ; Restore the logical escape tag after pair storage.
+        AND 0FH                     ; The CAR tag occupies its cell metadata nibble.
 SRTCAROK:
         OR A                       ; Pair access reports success with carry clear.
         EX DE,HL
@@ -383,24 +386,16 @@ SRTCDRV:
         CALL SRTPCHK
         RET C
         LD HL,(SRTQAVAL)
-        INC HL
-        INC HL
+        LD DE,SRPCDDR0
+        ADD HL,DE
         LD E,(HL)
         INC HL
         LD D,(HL)
         INC HL
+        INC HL
+        ; Reach the CDR metadata byte.
         LD A,(HL)
-        SRL A                       ; Move CDR tag bits three through five down.
-        SRL A
-        SRL A
-        AND 7                       ; Keep only the packed CDR tag.
-        CP 7                        ; Tag seven also carries pair-stored escape tokens.
-        JR NZ,SRTCDROK
-        LD A,D                      ; Managed vector addresses cannot reach E000H.
-        CP SRTETOH
-        LD A,7                      ; Ordinary vectors retain their packed tag.
-        JR C,SRTCDROK
-        LD A,8                      ; Restore logical tag eight for the caller.
+        AND 0FH                      ; The CDR tag occupies its cell metadata nibble.
 SRTCDROK:
         OR A                       ; Pair access reports success with carry clear.
         EX DE,HL
