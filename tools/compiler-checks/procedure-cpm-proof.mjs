@@ -1,40 +1,28 @@
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
 import {
   applyRuntimeErrorCases,
   runtimeErrorCases,
   vectorRuntimeErrorCases,
 } from "./procedure-error-cases.mjs";
 import { loadAssembly } from "../../tests/z80.ts";
-import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 import {
   installCpm22File,
   readCpm22File,
 } from "../../../triptych/tools/lib/cpm22-disk.mjs";
 import { validateAso } from "./aso-proof.mjs";
 import { summarizeCellMeasurements } from "./cell-metrics.mjs";
+import {
+  createCpmSession,
+  loadCpmSystem,
+  makeSystemDisk,
+  programOutput,
+  readWord,
+  TriptychCpu,
+} from "./cpm-harness.mjs";
 
-const triptychRoot = fileURLToPath(
-  new URL("../../../triptych/", import.meta.url),
-);
-const require = createRequire(import.meta.url);
-const { TriptychCpu } = require(
-  join(triptychRoot, "dist", "wasm", "triptych_host_wasm.js"),
-);
-const firmware = await assembleTriptychCpuFirmware(triptychRoot);
-const sourceDisk = await Deno.readFile(
-  join(triptychRoot, "third_party", "cpm22", "cpm22.img"),
-);
-const systemDisk = Uint8Array.from(sourceDisk);
-systemDisk.set(firmware.ccp, 0x0000);
-systemDisk.set(firmware.bdos, 0x0800);
-systemDisk.set(firmware.bios, 0x1600);
-const backing = new Uint8Array(Math.ceil(systemDisk.length / 512) * 512);
-backing.set(systemDisk);
+const { firmware, sourceDisk } = await loadCpmSystem();
 // Keep CP/M system tracks and start the application disk with a free directory.
-backing.fill(0xe5, 52 * 128, 52 * 128 + 64 * 32);
+const backing = makeSystemDisk(firmware, sourceDisk);
 const compiler = await loadAssembly("src/compiler/scope/compiler.asm");
 const provider = await loadAssembly(
   "src/runtime/image.asm",
@@ -839,52 +827,12 @@ for (
   });
 }
 const machine = new TriptychCpu(firmware.bootRom);
-const decoder = new TextDecoder("ascii");
-let transcript = "";
-
-function readWord(address) {
-  const bytes = machine.read_ram(address, 2);
-  return bytes[0] | bytes[1] << 8;
-}
-
-function runUntilPrompt(offset, description) {
-  // Nested tail apply allocates two short-lived argument lists per step.
-  // Allow that bounded stress case to finish without changing the stack guard.
-  const limit = description.startsWith("run ") ? 16000 : 1800;
-  for (let attempt = 0; attempt < limit; attempt += 1) {
-    const status = machine.run_slice(50_000, 500_000);
-    transcript += decoder.decode(machine.take_serial_output());
-    assert.notEqual(status, 0, `CP/M halted while waiting for ${description}`);
-    if (transcript.length > offset && transcript.endsWith("A>")) return;
-  }
-  throw new Error(
-    `Timed out waiting for ${description}: ${
-      JSON.stringify(transcript.slice(-500))
-    }`,
-  );
-}
-
-function runCommand(command, expected, description) {
-  const start = transcript.length;
-  assert.ok(
-    machine.enqueue_serial_input(new TextEncoder().encode(command + "\r")),
-  );
-  runUntilPrompt(start, description);
-  const output = transcript.slice(start);
-  assert.ok(
-    output.includes(expected),
-    `${description}: expected ${JSON.stringify(expected)} in ${
-      JSON.stringify(output)
-    }`,
-  );
-  return output;
-}
-function programOutput(output) {
-  const commandEnd = output.indexOf("\r\r\n");
-  const prompt = output.lastIndexOf("\r\nA>");
-  assert.ok(commandEnd >= 0 && prompt > commandEnd, JSON.stringify(output));
-  return output.slice(commandEnd + 3, prompt);
-}
+// Nested tail apply allocates two short-lived argument lists per step.
+// Allow that bounded stress case to finish without changing the stack guard.
+const { runUntilPrompt, runCommand } = createCpmSession(machine, {
+  promptAttempts: (description) =>
+    description.startsWith("run ") ? 16000 : 1800,
+});
 
 try {
   machine.install_drive(0, disk, true);
@@ -937,12 +885,12 @@ try {
     }
     if (name === "GCLOCAL.SK8" || name === "ECGCMAP.SK8") {
       assert.ok(
-        readWord(collectionCountAddress) > 0,
+        readWord(machine, collectionCountAddress) > 0,
         `${name}: did not exercise GC`,
       );
     }
-    const nativeLowSp = readWord(lowStackAddress);
-    const heapEnd = readWord(heapPointerAddress);
+    const nativeLowSp = readWord(machine, lowStackAddress);
+    const heapEnd = readWord(machine, heapPointerAddress);
     assert.ok(nativeLowSp >= 0xd400, `${name}: native stack crossed its guard`);
     assert.ok(heapEnd < nativeLowSp, `${name}: heap and stack collided`);
     measurements.push({
@@ -953,11 +901,11 @@ try {
       asoBytes,
       lowSp: nativeLowSp,
       heapEnd,
-      bindingAllocations: readWord(bindingAllocationAddress),
-      closureAllocations: readWord(closureAllocationAddress),
-      pairAllocations: readWord(pairAllocationAddress),
-      collections: readWord(collectionCountAddress),
-      activations: readWord(frameCountAddress),
+      bindingAllocations: readWord(machine, bindingAllocationAddress),
+      closureAllocations: readWord(machine, closureAllocationAddress),
+      pairAllocations: readWord(machine, pairAllocationAddress),
+      collections: readWord(machine, collectionCountAddress),
+      activations: readWord(machine, frameCountAddress),
     });
     runCommand(`ERA ${outputName}`, "A>", `remove ${outputName}`);
     runCommand(

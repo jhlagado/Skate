@@ -1,7 +1,4 @@
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
 
 import { loadAssembly } from "../../tests/z80.ts";
 import { validateAso } from "./aso-proof.mjs";
@@ -9,26 +6,15 @@ import {
   installCpm22File,
   readCpm22File,
 } from "../../../triptych/tools/lib/cpm22-disk.mjs";
-import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
+import {
+  createCpmSession,
+  loadCpmSystem,
+  makeSystemDisk,
+  TriptychCpu,
+} from "./cpm-harness.mjs";
 
-const triptychRoot = fileURLToPath(
-  new URL("../../../triptych/", import.meta.url),
-);
-const require = createRequire(import.meta.url);
-const { TriptychCpu } = require(
-  join(triptychRoot, "dist", "wasm", "triptych_host_wasm.js"),
-);
-const firmware = await assembleTriptychCpuFirmware(triptychRoot);
-const sourceDisk = await Deno.readFile(
-  join(triptychRoot, "third_party", "cpm22", "cpm22.img"),
-);
-const systemDisk = Uint8Array.from(sourceDisk);
-systemDisk.set(firmware.ccp, 0x0000);
-systemDisk.set(firmware.bdos, 0x0800);
-systemDisk.set(firmware.bios, 0x1600);
-const backing = new Uint8Array(Math.ceil(systemDisk.length / 512) * 512);
-backing.set(systemDisk);
-backing.fill(0xe5, 52 * 128, 52 * 128 + 64 * 32);
+const { firmware, sourceDisk } = await loadCpmSystem();
+const backing = makeSystemDisk(firmware, sourceDisk);
 
 const countArgument = Deno.args.find((argument) =>
   argument.startsWith("--count=")
@@ -98,32 +84,8 @@ disk = installCpm22File(disk, {
 });
 
 const machine = new TriptychCpu(firmware.bootRom);
-const decoder = new TextDecoder("ascii");
-let transcript = "";
-function runUntilPrompt(offset, description) {
-  for (let attempt = 0; attempt < 2400; attempt += 1) {
-    const status = machine.run_slice(50_000, 500_000);
-    transcript += decoder.decode(machine.take_serial_output());
-    assert.notEqual(status, 0, `CP/M halted while waiting for ${description}`);
-    if (transcript.length > offset && transcript.endsWith("A>")) return;
-  }
-  throw new Error(
-    `Timed out waiting for ${description}: ${
-      JSON.stringify(transcript.slice(-500))
-    }`,
-  );
-}
-function runCommand(command, expected, description) {
-  const start = transcript.length;
-  assert.ok(
-    machine.enqueue_serial_input(new TextEncoder().encode(`${command}\r`)),
-  );
-  runUntilPrompt(start, description);
-  const output = transcript.slice(start);
-  assert.ok(output.includes(expected), JSON.stringify(output));
-  return output;
-}
-
+const cpm = createCpmSession(machine, { promptAttempts: 2400 });
+const { runUntilPrompt, runCommand } = cpm;
 try {
   machine.install_drive(0, disk, true);
   runUntilPrompt(0, "the boot prompt");

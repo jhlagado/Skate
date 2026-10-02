@@ -1,34 +1,21 @@
 import assert from "node:assert/strict";
-import { join } from "node:path";
-import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
 
 import { loadAssembly } from "../../tests/z80.ts";
 import { validateAso } from "./aso-proof.mjs";
-import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 import {
   installCpm22File,
   readCpm22File,
 } from "../../../triptych/tools/lib/cpm22-disk.mjs";
+import {
+  createCpmSession,
+  loadCpmSystem,
+  makeSystemDisk,
+  readWord,
+  TriptychCpu,
+} from "./cpm-harness.mjs";
 
-const triptychRoot = fileURLToPath(
-  new URL("../../../triptych/", import.meta.url),
-);
-const require = createRequire(import.meta.url);
-const { TriptychCpu } = require(
-  join(triptychRoot, "dist", "wasm", "triptych_host_wasm.js"),
-);
-const firmware = await assembleTriptychCpuFirmware(triptychRoot);
-const sourceDisk = await Deno.readFile(
-  join(triptychRoot, "third_party", "cpm22", "cpm22.img"),
-);
-const systemDisk = Uint8Array.from(sourceDisk);
-systemDisk.set(firmware.ccp, 0x0000);
-systemDisk.set(firmware.bdos, 0x0800);
-systemDisk.set(firmware.bios, 0x1600);
-const backing = new Uint8Array(Math.ceil(systemDisk.length / 512) * 512);
-backing.set(systemDisk);
-backing.fill(0xe5, 52 * 128, 52 * 128 + 64 * 32);
+const { firmware, sourceDisk } = await loadCpmSystem();
+const backing = makeSystemDisk(firmware, sourceDisk);
 
 const compiler = await loadAssembly("src/compiler/scope/compiler.asm");
 const provider = await loadAssembly(
@@ -338,12 +325,8 @@ for (const [name, source] of [...cases, ...errorCases]) {
 }
 
 const machine = new TriptychCpu(firmware.bootRom);
-const decoder = new TextDecoder("ascii");
-let transcript = "";
-function readWord(address) {
-  const bytes = machine.read_ram(address, 2);
-  return bytes[0] | bytes[1] << 8;
-}
+const cpm = createCpmSession(machine);
+const { runUntilPrompt, runCommand: command } = cpm;
 function prepareStackMeasurement() {
   machine.write_ram(
     stackGuardBase,
@@ -355,42 +338,17 @@ function observedStackLow() {
   const offset = bytes.findIndex((value) => value !== 0xa5);
   return offset < 0 ? stackTop : stackGuardBase + offset;
 }
-function runUntilPrompt(offset, description) {
-  for (let attempt = 0; attempt < 1800; attempt += 1) {
-    const status = machine.run_slice(50_000, 500_000);
-    transcript += decoder.decode(machine.take_serial_output());
-    assert.notEqual(status, 0, `CP/M halted while waiting for ${description}`);
-    if (transcript.length > offset && transcript.endsWith("A>")) return;
-  }
-  throw new Error(
-    `Timed out waiting for ${description}: ${
-      JSON.stringify(transcript.slice(-500))
-    }`,
-  );
-}
-function command(command, expected, description) {
-  const start = transcript.length;
-  assert.ok(
-    machine.enqueue_serial_input(new TextEncoder().encode(command + "\r")),
-  );
-  runUntilPrompt(start, description);
-  const output = transcript.slice(start);
-  assert.ok(output.includes(expected), JSON.stringify(output));
-  return output;
-}
 function runProgram(name, input, expected, exact = true) {
-  const start = transcript.length;
-  const commandBytes = new TextEncoder().encode(
-    name.replace(".SK8", "") + "\r",
-  );
-  assert.ok(machine.enqueue_serial_input(commandBytes));
+  const start = cpm.transcript.length;
+  cpm.send(name.replace(".SK8", "") + "\r");
   const commandEcho = `${name.replace(".SK8", "")}\r\r\n`;
   let atProgramEntry = false;
   for (let attempt = 0; attempt < 2_000_000; attempt += 1) {
     const state = machine.cpu_state();
     try {
       if (
-        state.pc() === 0x0100 && transcript.slice(start).includes(commandEcho)
+        state.pc() === 0x0100 &&
+        cpm.transcript.slice(start).includes(commandEcho)
       ) {
         atProgramEntry = true;
         break;
@@ -398,11 +356,9 @@ function runProgram(name, input, expected, exact = true) {
     } finally {
       state.free();
     }
-    const status = machine.run_slice(1, 500);
-    transcript += decoder.decode(machine.take_serial_output());
-    assert.notEqual(status, 0, `CP/M halted while starting ${name}`);
+    cpm.slice(1, 500, `CP/M halted while starting ${name}`);
   }
-  assert.ok(transcript.slice(start).includes(commandEcho));
+  assert.ok(cpm.transcript.slice(start).includes(commandEcho));
   assert.ok(
     atProgramEntry,
     `${name}: did not stop at COM entry before execution`,
@@ -413,25 +369,19 @@ function runProgram(name, input, expected, exact = true) {
     // Let the running program reach its blocking console read before sending
     // the byte.  This keeps the proof independent of execution speed.
     for (let attempt = 0; attempt < 8; attempt += 1) {
-      const status = machine.run_slice(50_000, 500_000);
-      transcript += decoder.decode(machine.take_serial_output());
-      assert.notEqual(status, 0, `CP/M halted before input for ${name}`);
+      cpm.slice(50_000, 500_000, `CP/M halted before input for ${name}`);
     }
     for (const chunk of inputChunks) {
       if (chunk.length > 0) {
-        assert.ok(
-          machine.enqueue_serial_input(new TextEncoder().encode(chunk)),
-        );
+        cpm.send(chunk);
       }
       for (let attempt = 0; attempt < 8; attempt += 1) {
-        const status = machine.run_slice(50_000, 500_000);
-        transcript += decoder.decode(machine.take_serial_output());
-        assert.notEqual(status, 0, `CP/M halted before input for ${name}`);
+        cpm.slice(50_000, 500_000, `CP/M halted before input for ${name}`);
       }
     }
   }
   runUntilPrompt(start, `run ${name}`);
-  const output = transcript.slice(start);
+  const output = cpm.transcript.slice(start);
   assert.ok(output.includes(expected), JSON.stringify(output));
   const commandEnd = output.indexOf("\r\r\n");
   const prompt = output.lastIndexOf("\r\nA>");
@@ -482,9 +432,9 @@ try {
         "BINOUT.SK8: binary file bytes",
       );
     }
-    const nativeLowSp = readWord(lowStackAddress);
+    const nativeLowSp = readWord(machine, lowStackAddress);
     const observedLowSp = observedStackLow();
-    const heapEnd = readWord(heapPointerAddress);
+    const heapEnd = readWord(machine, heapPointerAddress);
     assert.ok(nativeLowSp >= 0xd400, `${name}: native stack crossed its guard`);
     assert.ok(
       observedLowSp < stackTop,
@@ -495,18 +445,23 @@ try {
     measurements[measurements.length - 1].observedLowSp = observedLowSp;
     measurements[measurements.length - 1].heapEnd = heapEnd;
     measurements[measurements.length - 1].bindingAllocations = readWord(
+      machine,
       bindingAllocationAddress,
     );
     measurements[measurements.length - 1].closureAllocations = readWord(
+      machine,
       closureAllocationAddress,
     );
     measurements[measurements.length - 1].pairAllocations = readWord(
+      machine,
       pairAllocationAddress,
     );
     measurements[measurements.length - 1].collections = readWord(
+      machine,
       collectionCountAddress,
     );
     measurements[measurements.length - 1].activations = readWord(
+      machine,
       frameCountAddress,
     );
     command(`ERA ${name.replace(".SK8", ".COM")}`, "A>", `remove ${name}`);
