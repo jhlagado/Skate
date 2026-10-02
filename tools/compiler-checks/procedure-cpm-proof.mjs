@@ -613,6 +613,7 @@ const regressionCases = [
   ],
 ];
 const regressionErrorCases = [
+  ["IF33.SK8", "(if #t ".repeat(33) + "1" + " 2)".repeat(33), "CAP\r\n"],
 ];
 const integerMode = Deno.args.includes("--integers");
 const regressionMode = Deno.args.includes("--regressions");

@@ -44,6 +44,7 @@ SCMASKB  EQU 16                  ; One mask covers the 128 local slots.
 SCLOCEV  EQU 0C600H              ; One escape flag belongs to each local slot.
 SCBFRAME EQU 0C700H              ; Nested body lookahead records use this area.
 SCBFSZ   EQU 9                   ; Cursors, owner and procedure patch state.
+SCBFMAX  EQU 28                  ; 28 records of SCBFSZ bytes end below SCGPRIM.
 SCGPRIM  EQU 0C800H              ; One predefined-primitive kind per global slot.
 SCBRANCH EQU 0C900H              ; Generic short-circuit branch patch stack.
 SCIFALSE EQU 0CA00H              ; False-branch patch words for nested if forms.

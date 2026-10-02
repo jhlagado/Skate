@@ -82,7 +82,7 @@ SCLAMPD:
 ; Save local cursors and select the newly-created procedure as owner.
 SCLOPEN:
         LD A,(SCBDEP)              ; The compiler frame table is explicitly bounded.
-        CP 32
+        CP SCBFMAX                 ; 28 nine-byte records fit below SCGPRIM.
         JP NC,SCCAP                ; Reject nesting beyond the reserved records.
         LD C,A                     ; C selects the current four-byte frame.
         INC A

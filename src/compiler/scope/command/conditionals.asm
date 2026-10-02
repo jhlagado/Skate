@@ -71,8 +71,11 @@ SCANDF:
         LD (SCTCTX),A              ; Only the second operand can inherit it.
         LD HL,SRTFAL               ; Test the value while retaining its registers.
         CALL SCCALL                ; Z means the first operand is #f.
+        RET C                      ; Staged output is exhausted.
         CALL SCJZ                  ; Branch to the first operand's final-value path.
+        RET C
         CALL SCBRPUSH              ; Save the patch in the nested branch stack.
+        RET C                      ; More than 64 pending branches is a capacity error.
         CALL SCEXPR                ; Compile the second operand only when needed.
         RET C                      ; Preserve a nested syntax or capacity error.
         CALL SCEXPECT              ; And is exactly two operands in this increment.
@@ -97,8 +100,11 @@ SCORF:
         LD (SCTCTX),A              ; Only the second operand can inherit it.
         LD HL,SRTFAL               ; Test the value while retaining its registers.
         CALL SCCALL                ; Z means the first operand is false.
+        RET C                      ; Staged output is exhausted.
         CALL SCJNZ                 ; A true first operand skips the second.
+        RET C
         CALL SCBRPUSH              ; Save the patch in the nested branch stack.
+        RET C                      ; More than 64 pending branches is a capacity error.
         CALL SCEXPR                ; Compile the second operand only when needed.
         RET C                      ; Preserve a nested syntax or capacity error.
         CALL SCEXPECT              ; Or is exactly two operands in this increment.
@@ -149,6 +155,7 @@ SCCNTEST:
         JP C,SCCNERR
         LD HL,SRTFAL
         CALL SCCALL                ; Z means that the test value is #f.
+        JP C,SCCNERR
         CALL SCJZ                  ; Save the false path until this clause closes.
         JP C,SCCNERR
         CALL SCBRPUSH
@@ -302,23 +309,8 @@ SCCNPLP:
         CALL SINKPTCH
         JP SCCNPLP
 SCCNPDN:
-        LD A,(SCCNDEP)
-        DEC A
-        LD (SCCNDEP),A
-        LD L,A
-        LD H,0
-        LD DE,SCNBASE
-        ADD HL,DE
-        LD A,(HL)
-        LD (SCCNBASE),A
-        LD A,(SCCNDEP)
-        LD L,A
-        LD H,0
-        LD DE,SCNTOPS
-        ADD HL,DE
-        LD A,(HL)
-        LD (SCCDTOP),A
-        XOR A
+        CALL SCNABORT              ; Release this cond's patch frame.
+        XOR A                      ; Return carry clear after a complete cond.
         RET
 
 SCCNERR:
