@@ -11,32 +11,11 @@ SRTWRITE:
         CALL SRTWRVAL
         JP SRTUNSP
 SRTDSPP:
-        LD A,1
-        LD (SRTWMODE),A            ; Compound values use the readable write format.
-        CALL SRTOUT1
-        CALL SRTONE
-        CP 5
-        JR Z,SRTDISPL
-        CP 6
-        JR NZ,SRTDISPV
-        CALL SRTSVLD
-        JP C,SRTERROR
-SRTDISPL:
-        CALL SRTWRLIT
-        JP SRTUNSP
-SRTDISPV:
-        OR A
-        JR NZ,SRTDWR
-        LD A,H
-        CP 0FFH
-        JR NZ,SRTDZERO
-        LD A,L                      ; A top-level character is displayed as its byte.
-        CALL SRTCH
-        JP SRTUNSP
-SRTDZERO:
-        XOR A                       ; Restore the scalar tag after checking its payload.
-SRTDWR:
-        CALL SRTWRVAL
+        XOR A                      ; display prints strings and characters raw,
+        LD (SRTWMODE),A            ; including those nested inside compound values.
+        CALL SRTOUT1               ; Select the optional output port.
+        CALL SRTONE                ; Load the one value to display.
+        CALL SRTWRVAL              ; Share the writer with display formatting.
         JP SRTUNSP
 
 ; newline accepts no arguments and returns UNSPECIFIED.

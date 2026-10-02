@@ -82,17 +82,17 @@ const cases = [
   [
     "CHARPRNT.SK8",
     "(begin (write #\\A) (display #\\B) (newline))",
-    "#\\x41B\r\n",
+    "#\\AB\r\n",
   ],
   [
     "CHARCTL.SK8",
     "(begin (write #\\newline) (write #\\x00) (write #\\x7f) (newline))",
-    "#\\x0a#\\x00#\\x7f\r\n",
+    "#\\newline#\\x00#\\x7f\r\n",
   ],
   [
     "DISPLAYP.SK8",
     "(display (list #\\A #\\B))",
-    "(#\\x41 #\\x42)",
+    "(A B)",
   ],
   [
     "DISPZERO.SK8",
@@ -132,7 +132,7 @@ const cases = [
   [
     "BININ.SK8",
     '(let ((p (open-input-binary-file "INPUT.BIN"))) (write (read-char p)) (write (read-char p)) (write (read-char p)) (write (read-char p)) (newline))',
-    "#\\x00#\\x1a#\\x0d#\\x0a\r\n",
+    "#\\x00#\\x1a#\\x0d#\\newline\r\n",
   ],
   [
     "BINOUT.SK8",
@@ -235,13 +235,13 @@ const cases = [
   [
     "CRONLY.SK8",
     "(begin (write (read-char)) (newline))",
-    "\r#\\x0a\r\n",
+    "\r#\\newline\r\n",
     "\r",
   ],
   [
     "CRPORT.SK8",
     "(begin (write (read-char (current-input-port))) (newline))",
-    "\r#\\x0a\r\n",
+    "\r#\\newline\r\n",
     "\r",
   ],
   [
@@ -330,6 +330,17 @@ const cases = [
     "PRINTESC.SK8",
     "(begin (call/ec (lambda (k) (display k))) (newline))",
     "#<procedure>\r\n",
+  ],
+  [
+    "WRITESTR.SK8",
+    String
+      .raw`(begin (write "q\"b\\n\nt\tr\r") (write (string #\x01 #\x7f)) (display "q\"b") (newline))`,
+    String.raw`"q\"b\\n\nt\tr\r""\x01;\x7f;"q"b` + "\r\n",
+  ],
+  [
+    "DISPLIST.SK8",
+    '(begin (display (list #\\a "b c" \'d #\\space)) (write (list #\\a "b c" \'d #\\space)) (newline))',
+    '(a b c d  )(#\\a "b c" d #\\space)\r\n',
   ],
   [
     "ADVENTUR.SK8",

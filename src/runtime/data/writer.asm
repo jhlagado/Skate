@@ -99,20 +99,31 @@ SRTWEOFV:
         LD DE,SRTWEOF
         JP SRTTEXT
 
-; Print a character raw for display or as a hexadecimal reader spelling.
+; Print a character raw for display, or in write mode as #\c, #\space,
+; #\newline or #\xHH so the datum reader accepts the spelling again.
 SRTWCHAR:
-        LD A,(SRTWMODE)
+        LD A,(SRTWMODE)            ; Zero selects display's raw byte output.
         OR A
         JR Z,SRTWOUT
         LD A,35                    ; Prefix the readable character spelling with '#'.
-        CALL SRTCH                  ; Send the hash byte through the BDOS-safe writer.
+        CALL SRTCH                 ; SRTCH preserves the character payload in HL.
         LD A,92                    ; The second prefix byte is a backslash.
-        CALL SRTCH                  ; Send the backslash through the BDOS-safe writer.
-        LD A,'x'                    ; Hexadecimal spelling is valid for every byte.
-        CALL SRTCH                  ; Send the hexadecimal marker.
-        LD A,L                      ; Load the byte payload for hexadecimal output.
-        CALL SRTWBYTE               ; Emit its two lower-case hexadecimal digits.
-        RET                         ; The complete reader spelling is now emitted.
+        CALL SRTCH
+        LD A,L                     ; Classify the character byte.
+        LD DE,SRTWCNLT             ; Line feed has the reader name newline.
+        CP 10
+        JP Z,SRTTEXT
+        LD DE,SRTWCSPT             ; Space has the reader name space.
+        CP 32
+        JP Z,SRTTEXT
+        JR C,SRTWCHEX              ; Other controls use the hexadecimal spelling.
+        CP 127                     ; Printable ASCII is spelled as itself.
+        JP C,SRTCH
+SRTWCHEX:
+        LD A,'x'                   ; Hexadecimal spelling is valid for every byte.
+        CALL SRTCH                 ; Send the hexadecimal marker.
+        LD A,L                     ; Load the byte payload for hexadecimal output.
+        JP SRTWBYTE                ; Emit its two lower-case hexadecimal digits.
 SRTWOUT:
         LD A,L                     ; Emit the byte payload itself.
         JP SRTCH
@@ -284,13 +295,66 @@ SRTWVCLS:
         LD A,')'                   ; Close the vector spelling.
         JP SRTCH
 
+; Print a string: display sends its bytes unchanged, while write quotes it
+; and escapes quote, backslash and control bytes with the reader's spellings.
 SRTWRSTR:
-        PUSH HL                     ; Preserve the literal pointer across BDOS.
-        LD A,'"'
+        LD A,(SRTWMODE)            ; Zero selects display's raw contents.
+        OR A
+        JR Z,SRTWRLIT
+        LD A,34                    ; Open the readable string spelling.
+        CALL SRTCH                 ; SRTCH preserves the string pointer.
+        LD B,(HL)                  ; B counts the remaining string bytes.
+        INC HL                     ; HL addresses the first string byte.
+        LD A,B                     ; An empty string closes immediately.
+        OR A
+        JR Z,SRTWSEND
+SRTWSLP:
+        LD A,(HL)                  ; Fetch the next string byte.
+        INC HL                     ; Advance before the formatter clobbers HL.
+        PUSH HL                    ; Keep the string cursor across escapes.
+        PUSH BC                    ; Keep the remaining count across escapes.
+        CALL SRTWSCH               ; Emit the byte or its escape spelling.
+        POP BC                     ; Recover the remaining count.
+        POP HL                     ; Recover the string cursor.
+        DJNZ SRTWSLP               ; Continue until every byte is written.
+SRTWSEND:
+        LD A,34                    ; Close the readable string spelling.
+        JP SRTCH
+
+; Emit one string byte from A using the reader's escape spellings.
+SRTWSCH:
+        LD C,A                     ; Quote and backslash follow a backslash.
+        CP 34
+        JR Z,SRTWSNAM
+        CP 92
+        JR Z,SRTWSNAM
+        LD C,'n'                   ; Line feed is spelled \n.
+        CP 10
+        JR Z,SRTWSNAM
+        LD C,'r'                   ; Carriage return is spelled \r.
+        CP 13
+        JR Z,SRTWSNAM
+        LD C,'t'                   ; Tab is spelled \t.
+        CP 9
+        JR Z,SRTWSNAM
+        CP 32                      ; Other controls use the \xHH; escape.
+        JR C,SRTWSHEX
+        CP 127                     ; Printable ASCII is emitted unchanged.
+        JP C,SRTCH
+SRTWSHEX:
+        LD C,A                     ; Keep the byte while emitting the prefix.
+        LD A,92                    ; Begin the byte escape with a backslash.
+        CALL SRTCH                 ; SRTCH preserves C.
+        LD A,'x'                   ; Select the hexadecimal byte escape.
         CALL SRTCH
-        POP HL
-        CALL SRTWRLIT
-        LD A,'"'
+        LD A,C                     ; Emit the byte as two hexadecimal digits.
+        CALL SRTWBYTE
+        LD A,59                    ; A semicolon terminates the byte escape.
+        JP SRTCH
+SRTWSNAM:
+        LD A,92                    ; Emit the escape introducer.
+        CALL SRTCH                 ; SRTCH preserves the selector in C.
+        LD A,C                     ; Emit the escaped byte or selector letter.
         JP SRTCH
 SRTWRLIT:
         LD B,(HL)
@@ -406,3 +470,5 @@ SRTIN:
 
 SRTWPRCT:  DB "#<procedure>$"
 SRTWPRTT:  DB "#<port>$"
+SRTWCSPT:  DB "space$"
+SRTWCNLT:  DB "newline$"
