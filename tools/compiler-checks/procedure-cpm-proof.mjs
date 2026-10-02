@@ -623,6 +623,19 @@ const integerRuntimeErrorCases = [
 // references from procedures, formal shadowing, if nesting capacity and
 // control bytes inside tokens.
 const regressionCases = [
+  // A nested procedure body must not overwrite the enclosing body's pending
+  // tail-call records: a non-final named let or a lambda after a tail call
+  // once returned from the enclosing procedure.
+  [
+    "TAILNLET.SK8",
+    "(define (g) (let loop ((i 0)) (if (< i 3) (loop (+ i 1)) i)) 7) (g)",
+    "7",
+  ],
+  [
+    "TAILLAM.SK8",
+    "(define (k) 1) (define (f c) (if c (k) (lambda () (k))) 2) (f #t)",
+    "2",
+  ],
   [
     "TAILIFIF.SK8",
     "(define (loop n) (if (if (= n 0) #f #t) (loop (- n 1)) 0)) (loop 4000)",

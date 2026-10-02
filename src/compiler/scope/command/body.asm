@@ -56,11 +56,11 @@ SCBODY:
 SCBKEEPR:
         LD A,(SCBMODE)              ; Only a procedure-owned body accepts defines.
         LD (SCBDEFIN),A             ; Nested begin and cond bodies leave it clear.
-        LD A,(SCBMODE)
-        CP 1
-        JR NZ,SCBKEEP              ; Shared and let bodies retain outer candidates.
-        XOR A                      ; A procedure body starts a private candidate list.
-        LD (SCTTOP),A
+        ; A procedure body's tail records stack above the enclosing body's
+        ; pending records rather than restarting at zero.  The enclosing
+        ; expression may still have to rewrite its own records once its
+        ; finality is known, so they must survive the nested body.  SCBREST
+        ; discards this body's records by restoring the saved top.
 SCBKEEP:
         XOR A                      ; Start with no expressions in this body.
         LD (SCBODYN),A             ; Empty bodies remain a syntax error.
