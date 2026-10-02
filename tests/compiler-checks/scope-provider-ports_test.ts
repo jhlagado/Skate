@@ -29,7 +29,8 @@ function runWithProvider(
   const stopAddress = expectError ? 0xef10 : 0xef00;
   const errorAddress = assembled.address("SRTERROR");
   let enteredError = false;
-  let diagnosticCall = false;
+  let bdosTextCall = false;
+  let diagnosticWrites = 0;
   writeWord(memory, assembled.address("SRTIOPUT"), putHook);
   writeWord(memory, assembled.address("SRTIOGET"), getHook);
   setup();
@@ -50,7 +51,7 @@ function runWithProvider(
     assert.ok(++steps < 2_000_000, `${label} did not return`);
     if (cpu.pc === errorAddress) enteredError = true;
     if (cpu.pc === 5) {
-      diagnosticCall ||= cpu.c === 9;
+      bdosTextCall ||= cpu.c === 9;
       const returnAddress = readWord(memory, cpu.sp);
       cpu.sp += 2;
       cpu.pc = returnAddress;
@@ -60,6 +61,7 @@ function runWithProvider(
       const returnAddress = readWord(memory, cpu.sp);
       cpu.sp += 2;
       if (cpu.pc === putHook) {
+        if (enteredError) diagnosticWrites += 1;
         try {
           provider.write(2, Uint8Array.of(cpu.a));
           cpu.flags.C = 0;
@@ -84,7 +86,11 @@ function runWithProvider(
   if (expectBalancedStack) assert.equal(cpu.sp, 0xdff2, `${label} stack`);
   if (expectError) {
     assert.ok(enteredError, `${label} did not enter SRTERROR`);
-    assert.ok(diagnosticCall, `${label} did not call BDOS diagnostics`);
+    assert.ok(
+      diagnosticWrites > 0,
+      `${label} did not send diagnostics through the provider`,
+    );
+    assert.ok(!bdosTextCall, `${label} bypassed the provider with BDOS 9`);
   }
   return { tag: cpu.a, payload: (cpu.h << 8) | cpu.l };
 }
@@ -163,5 +169,28 @@ Deno.test("provider carry failures use the checked runtime path", async () => {
     () => {},
     false,
     true,
+  );
+});
+
+Deno.test("runtime error messages use the selected output provider", async () => {
+  const { assembled, memory, cpu } = await managedRuntime();
+  const effects = new RecordingEffectProvider();
+  const client = new EffectClient(new ProviderTransport(effects));
+  const provider = new EffectPortProvider(client);
+  runWithProvider(
+    assembled,
+    memory,
+    cpu,
+    provider,
+    "SRTERROR",
+    () => {},
+    false,
+    true,
+  );
+  assert.equal(
+    new TextDecoder().decode(
+      Uint8Array.from(effects.textWrites.flatMap((bytes) => [...bytes])),
+    ),
+    "RUNTIME ERROR\r\n",
   );
 });
