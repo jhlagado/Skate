@@ -147,7 +147,6 @@ SCIDPDOT:
         JP C,SCIDUNW
         CP 2
         JP NZ,SCIDUNW
-        JR SCIDPEND
 SCIDPEND:
         CALL SCRMETA                ; Publish the rest policy and its local slot.
         JP C,SCIDUNW

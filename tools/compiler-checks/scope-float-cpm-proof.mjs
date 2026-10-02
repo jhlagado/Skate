@@ -93,6 +93,12 @@ const cases = [
     "(begin (display 1.5) (display 2.0) (newline))",
     "1.52.0\r\n",
   ],
+  ["LETRECFL.SK8", "(letrec ((a 1.5)) (display a) (newline))", "1.5\r\n"],
+  [
+    "IDEFFLT.SK8",
+    "((lambda () (define a 2.5) (define b (list 0.5 a)) (display b) (newline)))",
+    "(0.5 2.5)\r\n",
+  ],
 ];
 const errorCases = [
   ["NODIV.SK8", "(/)"],

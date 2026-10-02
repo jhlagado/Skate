@@ -1,0 +1,18 @@
+; Release package root: sixteen parts included in order.
+; Each part is independent source text so include order is checked.
+(include "PART01.SK8")
+(include "PART02.SK8")
+(include "PART03.SK8")
+(include "PART04.SK8")
+(include "PART05.SK8")
+(include "PART06.SK8")
+(include "PART07.SK8")
+(include "PART08.SK8")
+(include "PART09.SK8")
+(include "PART10.SK8")
+(include "PART11.SK8")
+(include "PART12.SK8")
+(include "PART13.SK8")
+(include "PART14.SK8")
+(include "PART15.SK8")
+(include "PART16.SK8")

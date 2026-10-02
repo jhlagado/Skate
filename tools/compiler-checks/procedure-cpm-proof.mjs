@@ -580,10 +580,46 @@ const integerRuntimeErrorCases = [
   ["MINUS0.SK8", "(-)", "RUNTIME ERROR\r\n"],
   ["CMPARITY.SK8", "(< 1)", "RUNTIME ERROR\r\n"],
 ];
+// Compiler regressions: tail context across nested ifs, forward global
+// references from procedures, formal shadowing, if nesting capacity and
+// control bytes inside tokens.
+const regressionCases = [
+  [
+    "TAILIFIF.SK8",
+    "(define (loop n) (if (if (= n 0) #f #t) (loop (- n 1)) 0)) (loop 4000)",
+    "0",
+  ],
+  [
+    "TAILIFLM.SK8",
+    "(define (g) 10) (+ 1 (if ((lambda () (if #t #t #f))) (g) 0))",
+    "11",
+  ],
+  [
+    "FWDREC.SK8",
+    "(define (f) (letrec ((a (lambda () (g)))) (a))) (define (g) 5) (f)",
+    "5",
+  ],
+  [
+    "SHADOWQ.SK8",
+    "(define (f q) (let ((a 1)) (lambda () a)) ((lambda (x) (define q 3) (+ q x)) 1)) (f 9)",
+    "4",
+  ],
+  [
+    "FWDLET.SK8",
+    "(define (f) (letrec ((a (let ((t 1)) (+ t (g))))) a)) (define (g) 5) (f)",
+    "6",
+  ],
+];
+const regressionErrorCases = [
+  ["IF33.SK8", "(if #t ".repeat(33) + "1" + " 2)".repeat(33), "CAP\r\n"],
+  ["CTLTOKEN.SK8", "(quote ab\x01c)", "COMPILE ERROR\r\n"],
+  ["NULTOKEN.SK8", "(write +inf.0\x00-inf.0)", "COMPILE ERROR\r\n"],
+];
 // Each mode flag selects one proof group.  Several flags may be combined so a
 // single run (and a single assembly of the compiler and runtime) covers them.
 const modeFlags = [
   "runtime-errors",
+  "regressions",
   "integers",
   "apply",
   "ec",
@@ -612,6 +648,8 @@ function programCasesFor(mode) {
   switch (mode) {
     case "runtime-errors":
       return [];
+    case "regressions":
+      return regressionCases;
     case "integers":
       return integerCases;
     case "apply":
@@ -761,6 +799,8 @@ const dataRuntimeErrorCases = [
 ];
 function errorCasesFor(mode) {
   switch (mode) {
+    case "regressions":
+      return regressionErrorCases;
     case "runtime-errors":
     case "apply":
     case "integers":
@@ -775,6 +815,8 @@ function errorCasesFor(mode) {
 }
 function runtimeErrorCasesFor(mode) {
   switch (mode) {
+    case "regressions":
+      return [];
     case "runtime-errors":
       // The call/ec runtime errors belong to the --ec group.
       return runtimeErrorCases.filter(([name]) => !name.startsWith("EC"));

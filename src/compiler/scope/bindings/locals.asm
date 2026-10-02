@@ -57,7 +57,8 @@ SCNSDONE:
         LD A,(SCRECMOD)             ; Recursive checking ignores ordinary lambda locals.
         OR A
         JR Z,SCRNOFL
-        LD L,B
+        LD A,(SCMSLOT)              ; SCBITSET consumed B; SCOWNSET kept the slot here.
+        LD L,A
         LD H,0
         LD DE,SCRECBND
         ADD HL,DE
@@ -174,7 +175,6 @@ SCRECDEC:
         CP B
         JR C,SCRECNEW
         JR Z,SCRECNEW
-        JR SCRECIN
 SCRECIN:
         LD L,B                     ; Address this slot's declaration flag.
         LD H,0
@@ -411,10 +411,8 @@ SCLOCLP:
         JR SCLOCHI                 ; Advance from this record's high byte.
 SCLOCNX:
         INC HL                     ; The low-byte mismatch has not reached high yet.
-        JR SCLOCHI                 ; Skip the high byte and advance.
 SCLOCHI:
         INC HL                     ; Advance from the high byte to the next record.
-SCLOCADV:
         INC DE                     ; Advance to the next active slot.
         DJNZ SCLOCLP            ; Inspect all active locals without wrapping.
         LD A,(SCFOUNDK)            ; Check whether a match was recorded.

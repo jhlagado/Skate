@@ -18,25 +18,20 @@ output file open at a time. Text input treats Control-Z as EOF. Decimal points a
 binary16 values, and mixed arithmetic retains fractional results.
 
 The compiler and runtime are written in Z80 assembly using the ATOM assembler.
-The repository contains the Deno build commands, source-preparation tools and
-CP/M checks needed to assemble the compiler, publish a checked program and run
+The repository contains the Deno build commands and CP/M checks needed to assemble the compiler, publish a checked program and run
 it on the target.
 
 The optional provider tools carry terminal, input, video, sound and bounded
 file requests over a byte protocol. Ordinary console text remains ordinary
 console text; a host supplies the hardware-specific provider.
 
-The native compiler accepts leading `(include "LIB.SK8")` forms with up to
-31 direct includes on the current drive. For nested source trees, the host
-resolver prepares an ordered `.SKM` package accepted by the CP/M compiler:
-
-```sh
-deno task prepare:source path/to/sources MAIN.SK8 path/to/staged-sources
-```
-
-The output contains the included source parts and a manifest. Include forms
-must come before ordinary source, and the resolver rejects cycles, paths outside
-the source tree and names that cannot be represented on a CP/M disk.
+A source file may begin with `(include "LIB.SK8")` forms, each naming one or
+more CP/M 8.3 files on the current drive. Included files may begin with their
+own include forms. The compiler reads every file's dependencies before the
+file itself, includes a file only once however many files name it, and
+rejects cycles, missing files, more than 32 files in one program and
+include chains more than eight files deep. Include forms must come before
+ordinary source; diagnostics report the file, line and column of the error.
 
 ```scheme
 (define make-counter
@@ -67,7 +62,7 @@ The main tasks are:
 
 | Task | What it runs |
 | --- | --- |
-| `deno task check` | Formatting, lint, type checks, the compiler budget and source-inclusion tests |
+| `deno task check` | Formatting, lint, type checks and the compiler budget |
 | `deno task test` | `check` plus the host-side unit tests: effects, the CP/M byte bridge, ASO, ports and the runtime fixtures (`test:runtime`) |
 | `deno task test:cpm` | The CP/M proofs: each compiles programs with the native compiler on an emulated CP/M 2.2 machine and runs them |
 | `deno task test:cpm:stress` | Capacity, large-source and full 65,280-byte image proofs |

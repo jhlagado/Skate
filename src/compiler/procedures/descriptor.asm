@@ -171,17 +171,6 @@ SCSETERR:
         SCF                       ; Preserve the nested expression diagnostic.
         RET
 
-; Compile zero? as a checked unary runtime operation.
-SCZEROF:
-        XOR A                      ; The predicate operand is consumed by the helper.
-        LD (SCTCTX),A              ; It cannot transfer the caller's continuation.
-        CALL SCEXPR                ; Compile the one predicate operand.
-        RET C                      ; Preserve nested syntax and capacity errors.
-        CALL SCEXPECT              ; Reject a missing or extra operand.
-        RET C                      ; Preserve the closing delimiter diagnostic.
-        LD HL,SRTZERO              ; The runtime returns a canonical boolean.
-        JP SCCALL                  ; Emit the helper call after the operand code.
-
 ; Resolve a mutation target without emitting a load.  SCDESTK records its kind.
 SCDEST:
         CALL SCLOCF                ; Prefer an active local binding.

@@ -98,7 +98,7 @@ A source program travels through these boundaries:
 ```text
 .SK8 source
     │
-    ├─ optional leading (include "LIB.SK8") preparation
+    ├─ leading (include "LIB.SK8") forms, resolved depth first
     │
     ▼
 CP/M source stream
@@ -162,7 +162,7 @@ unless they start with `src/runtime/`.
 | `scope/publication.asm` and `scope/publication/` | Lay out the image, patch descriptors and write the publication stream |
 | `scope/aso-materializer.asm` | Replay the stream through bounded windows into the COM file |
 | `scope/publication-recovery.asm` | Recover an interrupted replacement |
-| `cpm-source.asm`, `cpm-source-includes.asm`, `cpm-source-include-parser.asm` and `source/` | Open the CP/M source, stream leading includes and track source positions |
+| `cpm-source.asm`, `cpm-source-include-parser.asm` and `source/` | Resolve the include tree, stream the ordered source files and track source positions |
 | `cpm-transport.asm` | CP/M binary record transport for compiler stages; the runtime image also includes it for file ports |
 | `src/runtime/loader.asm` | Load the checked `SKATE.RT` runtime into the staged output image; part of the compiler, not the runtime image |
 | `lexer.asm` and `lexer/` | Classify characters and produce tokens |
@@ -285,11 +285,10 @@ proofs; `deno task test:all` runs both plus `test:cpm:stress`.
 
 | Command | What it checks |
 | --- | --- |
-| `deno task check` | Formatting, lint, types, compiler budget and source inclusion |
+| `deno task check` | Formatting, lint, types and compiler budget |
 | `deno task test` | `check`, `test:effects`, `test:effects:cpm`, `test:aso`, `test:ports` and `test:runtime` |
 | `deno task test:all` | `test`, `test:cpm` and `test:cpm:stress` |
 | `deno task measure` | Compiler and runtime size budget report |
-| `deno task test:source-inclusion` | Include ordering, path rules and source-package preparation |
 | `deno task test:effects` | Host provider, terminal and bounded file tests |
 | `deno task test:effects:cpm` | CP/M byte bridge tests (`tests/cpm-effects.asm`) |
 | `deno task test:aso` | Stream validation and window-boundary patches |
@@ -302,12 +301,13 @@ proofs; `deno task test:all` runs both plus `test:cpm:stress`.
 | `deno task test:cpm:data` | Pairs, lists, strings, quoted data and the list libraries |
 | `deno task test:cpm:features` | Vectors, bounded `apply` and one-shot `call/ec` in one run |
 | `deno task test:cpm:integers` | Exact integer arithmetic and its runtime errors |
+| `deno task test:cpm:regressions` | Regression cases for fixed compiler defects |
 | `deno task test:cpm:edge` | Named `let`, captures and internal-definition edge cases |
 | `deno task test:cpm:console` | Standard and file ports, datum input and source I/O helpers |
 | `deno task test:cpm:examples` | The terminal demo with its included library and the house adventure |
 | `deno task test:cpm:generated-effects` | Provider-facing generated effect bytes |
 | `deno task test:cpm:float` | Binary16 literals, arithmetic and printing |
-| `deno task test:cpm:includes` | Leading `include` forms on the CP/M compiler |
+| `deno task test:cpm:includes` | Nested, import-once, cyclic, missing and bounded include trees |
 | `deno task test:cpm:release` | Release disk, examples and publication checks |
 | `deno task test:cpm:recovery` | Replacement failure and preservation of prior output |
 | `deno task test:cpm:stress` | `test:cpm:capacity`, `test:cpm:large` and `test:cpm:full-image` |
@@ -329,7 +329,7 @@ CP/M, but they do not replace the target proof.
 
 | Term | Meaning in the public tree |
 | --- | --- |
-| source package | Ordered source parts prepared for the CP/M compiler |
+| source part | One file of a program; included parts precede the files that include them |
 | reader | The datum reader that turns the byte stream into structural events |
 | scope compiler | The native compiler that resolves definitions, bindings, control flow and emitted calls |
 | runtime image | The assembled provider image loaded by the compiler and used by generated programs |
