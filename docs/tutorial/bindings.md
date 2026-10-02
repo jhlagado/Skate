@@ -115,22 +115,23 @@ path at `SCSTFIX`. The beginning of that path is:
 
 ```asm
         LD A,11H
-        CALL SCBYTE
+        CALL SINKBYTE
         LD HL,(SCPC)
         CALL SCFIX
         RET C
         XOR A
-        CALL SCBYTE
+        CALL SINKBYTE
         RET C
-        CALL SCBYTE
+        CALL SINKBYTE
         RET C
 ```
 
-The byte `11H` is the Z80 opcode for `LD DE,nn`. `SCBYTE` appends it to the
-output. The next two bytes will hold the destination address, but the final
-slot address is not available yet. `SCFIX` records the location that needs
-patching and the emitter writes two zero placeholders. Later publication
-resolves that address. The rest of the store path emits a call to the runtime
+The byte `11H` is the Z80 opcode for `LD DE,nn`. `SINKBYTE` appends it to the
+output; `scope/output-sink.asm` also gives that routine the older label
+`SCBYTE`, which some comments still use. The next two bytes will hold the
+destination address, but the final slot address is not available yet. `SCFIX`
+records the location that needs patching and the emitter writes two zero
+placeholders. Later publication resolves that address. The rest of the store path emits a call to the runtime
 store service.
 
 This is the point where reading assembly as compiler code can be deceptive.
