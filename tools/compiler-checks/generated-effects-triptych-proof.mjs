@@ -51,7 +51,7 @@ disk = installCpm22File(disk, {
   name: "TRACE.SK8",
   bytes: new TextEncoder().encode(
     `${await Deno.readTextFile(
-      "examples/applications/provider-trace.sk8",
+      "tests/fixtures/provider-trace.sk8",
     )}\x1a`,
   ),
   padByte: 0x1a,
