@@ -416,6 +416,11 @@ const cases = [
     "Q",
   ],
   [
+    "FILEPRED.SK8",
+    '(let ((p (open-input-file "INPUT.TXT")) (q (open-output-file "PRED.TXT"))) (write (output-port? p)) (write (input-port? p)) (write (output-port? q)) (write (input-port? q)) (close-port p) (close-port q) (newline))',
+    "#f#t#t#f\r\n",
+  ],
+  [
     "ADVENTUR.SK8",
     await Deno.readTextFile("examples/applications/advent.sk8"),
     "You are at a fork. Choose left or right: l\r\nYou take the left path.",

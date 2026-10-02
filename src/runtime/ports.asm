@@ -241,15 +241,12 @@ SRTOUTPQ:
         CALL SRTONE
         CALL SRTVPORT
         JP C,SRTBNO
-        LD A,H
-        CP 0F0H
-        JP NZ,SRTBNO
-        LD A,L
-        CP 9
-        JP C,SRTBNO
-        CP 0DH
-        JP NC,SRTBNO
-        JP SRTBYES
+        LD A,L                     ; SRTVPORT left a token in F008H..F00CH.
+        CP 8                       ; Standard input is not an output port.
+        JP Z,SRTBNO
+        CP 0BH                     ; Neither is the file input token.
+        JP Z,SRTBNO
+        JP SRTBYES                 ; Output, error and file output remain.
 
 ; Standard records are owned by the runtime and cannot be closed. File records
 ; call the matching CP/M adapter and then become unavailable.
