@@ -41,6 +41,7 @@ SRTSTART:
         JP C,SRTTPAL              ; A smaller TPA would let the stack overwrite BDOS.
 SRTTPAOK:
         LD SP,SRTMTOP             ; Use the full four-kilobyte guarded stack band.
+        CALL RST_SET              ; Install the RST vectors generated code uses.
         LD HL,SRTMTOP             ; The native stack begins at the fixed ceiling.
         LD (SRTLOWSP),HL          ; Record its low-water mark for qualification.
         LD HL,0                    ; Reset the runtime counters for this program.

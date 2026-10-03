@@ -2,6 +2,33 @@
 ; Entry points: SRTOPINV, SRTDISP, SRTAPPLY, SRTTAIL and SRTTCALL.
 ; Included in runtime order by ../core.asm.
 
+; Generated code calls the six most frequent helpers with RST 08H..30H, one
+; byte instead of three.  CP/M leaves these page-zero vectors to the program;
+; RST 38H stays free for a debugger.  The compiler's SCRSTT lists the same
+; helpers in the same order.
+RST_SET:
+        LD HL,RST_TAB
+        LD DE,0008H
+        LD B,6
+.VECTOR:
+        LD A,0C3H                  ; JP nn.
+        LD (DE),A
+        INC DE
+        LD A,(HL)
+        LD (DE),A
+        INC HL
+        INC DE
+        LD A,(HL)
+        LD (DE),A
+        INC HL
+        LD A,E
+        ADD A,6                    ; The next vector is eight bytes on.
+        LD E,A
+        DJNZ .VECTOR
+        RET
+RST_TAB:
+        DW ARG_PUSH,L_LOAD,PRIM_OP,SRTQPUT,G_OPSH,SRTOPINV
+
 ; Generated code pushes each argument with CALL ARG_PUSH: the value in A:HL is
 ; recorded as an exact root and pushed as PUSH AF, PUSH HL below the return.
 ; A and HL are kept.

@@ -19,11 +19,32 @@ SCWORD:
 ; Emit CALL address in HL.
 SCCALL:
         LD (SCWTMP),HL            ; Preserve the target while writing the opcode.
+        LD DE,SCRSTT              ; The runtime installs these as RST 08H..30H.
+        LD BC,06CFH               ; Six vectors; RST 08H is opcode CFH.
+.FIND:
+        LD A,(DE)
+        INC DE
+        CP L
+        JR NZ,.SKIP
+        LD A,(DE)
+        CP H
+        JR NZ,.SKIP
+        LD A,C                    ; A one-byte RST replaces the CALL.
+        JP SINKBYTE
+.SKIP:
+        INC DE
+        LD A,C
+        ADD A,8                   ; The next RST opcode.
+        LD C,A
+        DJNZ .FIND
         LD A,0CDH                 ; Z80 CALL has opcode CDH.
         CALL SINKBYTE               ; Append the opcode.
         RET C                     ; Preserve a staged-output capacity failure.
         LD HL,(SCWTMP)            ; Restore the target word.
         JP SCWORD                 ; Append it and return.
+
+; Runtime helpers reached by RST 08H..30H, in vector order (see RST_SET).
+SCRSTT: DW ARG_PUSH,L_LOAD,PRIM_OP,SRTQPUT,G_OPSH,SRTOPINV
 
 ; Emit a literal exact integer in HL.
 SCLIT:
