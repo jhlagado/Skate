@@ -2,17 +2,18 @@
 ; Entry points: SRTCOPYM, SRTCLSC and SRTCLNSE.
 SRTCOPYM:
         LD HL,(SRTDESC)
-        LD DE,SRTCAPOF
-        ADD HL,DE
+        CALL DESC_CAP
         LD (SRTMASKP),HL
+        LD (SRTMASKN),A
         LD HL,(SRTOBJ)
         LD DE,2
         ADD HL,DE
         LD (SRTSRC),HL
         XOR A
         LD (SRTSLOTI),A
-        LD A,SRTMASKB
-        LD (SRTMASKN),A
+        LD A,(SRTMASKN)
+        OR A
+        RET Z                      ; Nothing is captured.
 SRTCPMB:
         LD HL,(SRTMASKP)
         LD A,(HL)
@@ -84,17 +85,18 @@ SRTCPMN:
 ; The closure block is cleared before this pass, so uncaptured entries stay zero.
 SRTCLSC:
         LD HL,(SRTNEWD)
-        LD DE,SRTCAPOF
-        ADD HL,DE
+        CALL DESC_CAP
         LD (SRTMASKP),HL
+        LD (SRTMASKN),A
         LD HL,(SRTENV)
         LD (SRTSRC),HL
         LD HL,(SRTNENV)
         LD (SRTSVAL),HL
         XOR A
         LD (SRTSLOTI),A
-        LD A,SRTMASKB
-        LD (SRTMASKN),A
+        LD A,(SRTMASKN)
+        OR A
+        RET Z                      ; Nothing is captured.
 SRTCLSB:
         LD HL,(SRTMASKP)
         LD A,(HL)
@@ -148,18 +150,23 @@ SRTCLSN:
 ; This prevents an old tail frame from retaining roots outside its shape.
 SRTCLNSE:
         LD HL,(SRTDESC)
-        LD DE,SRTOWNOF
-        ADD HL,DE
+        CALL DESC_OWN
         LD (SRTMASKP),HL
-        LD HL,(SRTDESC)
-        LD DE,SRTCAPOF
+        LD (SRTMASKR),A            ; Mask bytes beyond the width read as zero.
+        LD E,A
+        LD D,0
         ADD HL,DE
         LD (SRTSRC),HL
         XOR A
         LD (SRTSLOTI),A
-        LD A,SRTMASKB
+        LD A,SRTMASKB              ; Every slot below SRTSLOTS is examined.
         LD (SRTMASKN),A
 SRTCLNB:
+        LD A,(SRTMASKR)
+        OR A
+        JR Z,SRTCLNZ               ; Neither owned nor captured.
+        DEC A
+        LD (SRTMASKR),A
         LD HL,(SRTMASKP)
         LD A,(HL)
         INC HL
@@ -170,6 +177,11 @@ SRTCLNB:
         INC HL
         LD (SRTSRC),HL
         LD (SRTSVTAG),A
+        JR SRTCLN8
+SRTCLNZ:
+        LD (SRTMASKV),A
+        LD (SRTSVTAG),A
+SRTCLN8:
         LD A,8
         LD (SRTBITN),A
 SRTCLNT:

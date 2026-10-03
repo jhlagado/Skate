@@ -1,8 +1,6 @@
 ; Scope runtime startup, scalar slots and checked arithmetic.
-; Entry points: SRTSTART, SRTLOAD/SRTSTORE and SRTADD/SRTSUB/SRTMUL.
+; Entry points: SRTBOOT, SRTLOAD/SRTSTORE and SRTADD/SRTSUB/SRTMUL.
 ; Included in runtime order by ../core.asm.
-
-ORG 0100H
 
 SRTHEAP    EQU 03000H              ; Base used by the full-pool allocation maps.
 SRTLOEND EQU 09000H              ; Low pages end before the external mark maps.
@@ -25,12 +23,14 @@ SRTSTKRS  EQU 00100H              ; Reserve one page for calls below a frame.
 SRTSTKGU  EQU SRTMKBE+SRTSTKRS    ; Keep native stack work above the mark queue.
 SRTMHIGH EQU 0                   ; The external map band needs no extra pool pages.
 SRTMTOP   EQU 0E400H              ; Stack ceiling: the TPA must extend at least this far.
-SRTOWNOF   EQU 12                  ; Descriptor offset of the owned-slot mask.
-SRTCAPOF   EQU 28                  ; Descriptor offset of the capture mask.
-SRTMASKB   EQU 16                  ; Sixteen bytes cover 128 local slots.
+; A descriptor's owned and capture masks are each W bytes, where the width W
+; at offset SRTDWID covers that procedure's highest owned or captured slot.
+; The owned mask follows the width; the capture mask follows the owned mask.
+SRTDWID    EQU 12                  ; Descriptor offset of the mask width.
+SRTOWNOF   EQU 13                  ; Descriptor offset of the owned-slot mask.
+SRTMASKB   EQU 16                  ; At most sixteen bytes cover 128 local slots.
 
-SRTSTART:
-        LD SP,SRTBOOTE            ; Use a private boot stack until the TPA is known.
+SRTBOOT:                          ; SRTSTART in entry.asm set the boot stack.
         LD A,(0005H)              ; CP/M places JP BDOS at its 0005H entry.
         CP 0C3H
         JR NZ,SRTTPAOK            ; A bare provider host has no BDOS to protect.

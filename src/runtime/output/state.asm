@@ -73,6 +73,7 @@ SRTNEXT:      DW 0                 ; Descriptor cursor during argument transfer.
 SRTSRC:       DW 0                 ; Target closure map during a tail transfer.
 SRTMASKV:     DB 0                 ; Current owned-mask byte.
 SRTMASKN:     DB 0                 ; Capture-mask bytes left in a tail transfer.
+SRTMASKR:     DB 0                 ; Mask bytes left before the width runs out.
 SRTBITN:      DB 0                 ; Capture-mask bits left in the current byte.
 SRTSLOTI:     DB 0                 ; Slot number represented by the mask cursor.
 SRTSLOTS:     DB 0                 ; Number of pointer slots in the current shape.

@@ -1,5 +1,14 @@
 ; Scope-control runtime image assembled at the CP/M load origin.
 %INCLUDE "storage/cell-contract.asm"
+%INCLUDE "core/entry.asm"
+; State follows the entry so that code refers back to it; see entry.asm.
+%INCLUDE "output/state.asm"
+%INCLUDE "data/state.asm"
+%INCLUDE "strings/state.asm"
+%INCLUDE "vectors/state.asm"
+%INCLUDE "numeric/state.asm"
+%INCLUDE "binary16/state.asm"
+%INCLUDE "storage/page/state.asm"
 %INCLUDE "core.asm"
 %INCLUDE "storage/stack-slots.asm"
 %INCLUDE "storage/managed.asm"

@@ -195,16 +195,27 @@ SCPFIN:
         POP HL
         CALL SINKPTCH              ; Point the closure creation at the descriptor.
         RET C
+        CALL SCPREC                ; Body, arity, extent and formal fields.
+        LD A,SCOWNOF
+        CALL SCPFEMB
+        RET C
+        CALL SCPREC                ; The masks are only as wide as needed.
+        CALL SCPFWID
+        LD (SCPWID),A
+        CALL SINKBYTE
+        RET C
         CALL SCPREC
-        LD B,SCPRSZ                ; Emit the record bytes as the descriptor.
-SCPFEMIT:
-        LD A,(HL)
-        PUSH HL
-        CALL SINKBYTE               ; SINKBYTE preserves BC.
-        POP HL
-        RET C                      ; Preserve staged-output exhaustion.
-        INC HL
-        DJNZ SCPFEMIT
+        LD DE,SCOWNOF
+        ADD HL,DE
+        LD A,(SCPWID)
+        CALL SCPFEMB               ; The owned mask.
+        RET C
+        CALL SCPREC
+        LD DE,SCCAPOF
+        ADD HL,DE
+        LD A,(SCPWID)
+        CALL SCPFEMB               ; The capture mask.
+        RET C
         LD A,(SCPDEPTH)            ; Release the innermost open record.
         DEC A
         LD (SCPDEPTH),A
@@ -213,6 +224,44 @@ SCPFEMIT:
         EX DE,HL                   ; SCPATCH takes the patch address in HL.
         LD HL,(SCSKIP)             ; Recover the jump-over patch location.
         JP SINKPTCH                 ; Patch the closure creation jump.
+
+; Emit A bytes from HL.  Carry reports staged-output exhaustion.
+SCPFEMB:
+        OR A
+        RET Z
+        LD B,A
+.BYTE:
+        LD A,(HL)
+        PUSH HL
+        CALL SINKBYTE              ; SINKBYTE preserves BC.
+        POP HL
+        RET C
+        INC HL
+        DJNZ .BYTE
+        OR A
+        RET
+
+; HL = metadata record: return in A the number of mask bytes up to the last
+; nonzero byte of either the owned or the capture mask.
+SCPFWID:
+        LD DE,SCOWNOF+SCMASKB-1    ; The last owned-mask byte.
+        ADD HL,DE
+        LD B,SCMASKB
+.SCAN:
+        LD A,(HL)
+        PUSH HL
+        LD DE,SCCAPOF-SCOWNOF
+        ADD HL,DE
+        OR (HL)                    ; The matching capture-mask byte.
+        POP HL
+        JR NZ,.FOUND
+        DEC HL
+        DJNZ .SCAN
+.FOUND:
+        LD A,B
+        RET
+
+SCPWID: DB 0                       ; Mask width of the descriptor being emitted.
 
 ; Compile set!, preserving the selected slot while the value expression runs.
 SCSETF:

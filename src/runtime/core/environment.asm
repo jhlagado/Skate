@@ -53,15 +53,32 @@ SRTLOWDN:
         PUSH HL
         RET
 
+; HL = descriptor: return HL = its owned mask and A = the mask width.
+DESC_OWN:
+        LD DE,SRTDWID
+        ADD HL,DE
+        LD A,(HL)
+        INC HL
+        RET
+
+; HL = descriptor: return HL = its capture mask and A = the mask width.
+DESC_CAP:
+        CALL DESC_OWN
+        LD E,A
+        LD D,0
+        ADD HL,DE
+        RET
+
 ; Prepare the active four-byte slots named by the descriptor's owned mask.
 SRTOWN:
         LD HL,(SRTDESC)            ; Owned mask follows the formal index fields.
-        LD DE,SRTOWNOF
-        ADD HL,DE
+        CALL DESC_OWN
         LD (SRTMASKP),HL           ; The outer loop consumes one mask byte at a time.
+        OR A
+        RET Z                      ; A zero-width mask owns no slots.
+        LD B,A                     ; Scan the descriptor's mask bytes.
         XOR A
         LD (SRTSLOTI),A            ; Slot zero is the first mask bit.
-        LD B,SRTMASKB              ; Always scan the fixed 128-slot mask.
 SRTOWNB:
         LD HL,(SRTMASKP)
         LD A,(HL)                  ; Read the next eight ownership bits.
@@ -161,13 +178,13 @@ SRTCOPYC:
 ; high bit of the cell's initialized byte and keeps tail-frame reuse safe.
 SRTMARKC:
         LD HL,(SRTNEWD)            ; The new descriptor owns the capture mask.
-        LD DE,SRTCAPOF
-        ADD HL,DE
+        CALL DESC_CAP
         LD (SRTMASKP),HL           ; The outer loop consumes one mask byte.
+        OR A
+        RET Z                      ; Nothing is captured.
+        LD (SRTMASKN),A            ; The descriptor's mask bytes.
         XOR A
         LD (SRTSLOTI),A            ; Slot zero is the first capture bit.
-        LD A,SRTMASKB
-        LD (SRTMASKN),A            ; The mask always covers 128 slots.
 SRTMARKB:
         LD HL,(SRTMASKP)
         LD A,(HL)                  ; Read the next eight capture bits.

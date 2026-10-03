@@ -310,7 +310,9 @@ Deno.test("a captured closure traces only its declared binding slots", async () 
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 2] = 0;
   memory[descriptor + 3] = 1;
-  memory[descriptor + 28] = 1;
+  memory[descriptor + 12] = 1; // One mask byte each:
+  memory[descriptor + 13] = 0; // owned slots,
+  memory[descriptor + 14] = 1; // captured slots.
   writeWord(memory, closure, descriptor);
   writeWord(memory, closure + 2, binding);
   writeWord(memory, binding, pairBase);
@@ -384,7 +386,9 @@ Deno.test("closure overflow fallback stays within the native stack", async () =>
   const emptyCount = 511;
   writeWord(memory, branchDescriptor, 0x4000);
   memory[branchDescriptor + 3] = 2;
-  memory[branchDescriptor + 28] = 3;
+  memory[branchDescriptor + 12] = 1; // One mask byte each:
+  memory[branchDescriptor + 13] = 0; // owned slots,
+  memory[branchDescriptor + 14] = 3; // captured slots.
   writeWord(memory, emptyDescriptor, 0x4000);
   memory[emptyDescriptor + 3] = 0;
   // Closure starts are four-byte aligned, so six-byte closures use eight-byte

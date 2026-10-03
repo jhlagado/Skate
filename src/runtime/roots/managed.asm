@@ -109,9 +109,17 @@ SRTCLHDR:
         SBC HL,DE
         JR C,SRTCLBAD
         LD HL,(SRTCLDSC)
-        LD DE,SRTCAPOF+SRTMASKB
+        LD DE,SRTOWNOF
         ADD HL,DE
         JR C,SRTCLBAD              ; The descriptor extent must fit in 16 bits.
+        DEC HL
+        LD E,(HL)                  ; The mask width.
+        INC HL
+        LD D,0
+        ADD HL,DE
+        JR C,SRTCLBAD
+        ADD HL,DE                  ; The end of both masks.
+        JR C,SRTCLBAD
         LD DE,(SRTIMGE)
         OR A
         SBC HL,DE
@@ -274,12 +282,13 @@ SRTMCLOS:
         CALL SRTCLVLD
         RET C
         LD HL,(SRTCLDSC)
-        LD DE,SRTCAPOF
-        ADD HL,DE
+        CALL DESC_CAP
         LD (SRTCLMP),HL
+        OR A
+        RET Z                      ; Nothing is captured.
+        LD B,A
         XOR A
         LD (SRTCLSLT),A
-        LD B,SRTMASKB
 SRTCLMSK:
         LD HL,(SRTCLMP)
         LD A,(HL)

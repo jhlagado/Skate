@@ -52,13 +52,13 @@ SRTPROUN:
 ; Promote every slot selected by the descriptor in SRTNEWD's capture mask.
 SRTPRALL:
         LD HL,(SRTNEWD)
-        LD DE,SRTCAPOF
-        ADD HL,DE
+        CALL DESC_CAP
         LD (SRTMASKP),HL
+        OR A
+        RET Z                      ; Nothing is captured.
+        LD (SRTMASKN),A
         XOR A
         LD (SRTSLOTI),A
-        LD A,SRTMASKB
-        LD (SRTMASKN),A
 SRTPRLB:
         LD HL,(SRTMASKP)
         LD A,(HL)

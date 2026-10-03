@@ -149,7 +149,9 @@ Deno.test("tail-owned cells clear their old value and initialization state", asy
   writeWord(memory, assembled.address("SRTENV"), map);
   writeWord(memory, assembled.address("SRTDESC"), descriptor);
   memory[assembled.address("SRTSLOTS")] = 1;
-  memory[descriptor + 12] = 1;
+  memory[descriptor + 12] = 1; // One mask byte each:
+  memory[descriptor + 13] = 1; // owned slots,
+  memory[descriptor + 14] = 0; // captured slots.
   memory[binding] = 0x34;
   memory[binding + 1] = 0x12;
   memory[binding + 3] = 0x2b;
@@ -258,7 +260,7 @@ Deno.test("closure creation clears every uncaptured environment byte", async () 
   const descriptor = 0xc100;
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 3] = 3;
-  memory[descriptor + 28] = 0;
+  memory[descriptor + 12] = 0; // No mask bytes.
 
   const closure = call("SRTMAKE", descriptor);
   assert.equal(closure.tag, 2);
@@ -279,8 +281,7 @@ Deno.test("activation maps keep helper calls above the collector worklist", asyn
   memory.fill(0xa5, 0xd000, worklistEnd);
   const descriptor = 0xc100;
   writeWord(memory, assembled.address("SRTDESC"), descriptor);
-  memory[descriptor + 12] = 0;
-  memory[descriptor + 28] = 0;
+  memory[descriptor + 12] = 0; // No mask bytes.
   memory[assembled.address("SRTSLOTS")] = 1;
   writeWord(memory, assembled.address("SRTENV"), 0);
 
@@ -340,7 +341,7 @@ Deno.test("dead closures are reclaimed by class and live closures remain publish
   const descriptor = 0xc100;
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 3] = 1;
-  memory[descriptor + 28] = 0;
+  memory[descriptor + 12] = 0; // No mask bytes.
 
   const dead = call("SRTMAKE", descriptor);
   const live = call("SRTMAKE", descriptor);
@@ -507,7 +508,9 @@ Deno.test("a closure capture keeps a pair alive and releases both together", asy
   const root = 0xd800;
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 3] = 1;
-  memory[descriptor + 28] = 1;
+  memory[descriptor + 12] = 1; // One mask byte each:
+  memory[descriptor + 13] = 0; // owned slots,
+  memory[descriptor + 14] = 1; // captured slots.
 
   const pair = call("SRTMAKEP");
   assert.equal(pair.tag, 1);
