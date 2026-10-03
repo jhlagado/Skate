@@ -183,7 +183,7 @@ function rewriteAsm(text: string): string {
 
 function rewriteOther(file: string, text: string): string {
   return text.replace(
-    /(?<![A-Za-z0-9_.$])[A-Z_][A-Z0-9_]*(?![A-Za-z0-9_])/g,
+    /(?<![A-Za-z0-9_.$])[A-Z_][A-Z0-9_]*(?![A-Za-z0-9_]|\.[A-Za-z])/g,
     (tok, off) => {
       const r = globals.get(tok);
       if (!r || r.startsWith(".")) return tok;
