@@ -207,8 +207,8 @@ Deno.test("datum reader keeps vector elements live through a collection", async 
   memory[discarded.payload] = 0;
   const root = 0xd700;
   writeWord(memory, root, retained.payload);
-  memory[root + 2] = 7;
-  memory[root + 3] = 1;
+  memory[root + 2] = 0; // Clear extension byte.
+  memory[root + 3] = 0x17;
   writeWord(memory, assembled.address("SRTGBASE"), root);
   writeWord(memory, assembled.address("SRTGEND"), root + 4);
   const classIndex = memory[assembled.address("SRTCLIDX")];

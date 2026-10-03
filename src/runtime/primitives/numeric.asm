@@ -52,9 +52,10 @@ SRTNVLP:
         INC HL
         LD D,(HL)                   ; Recover the payload high byte.
         INC HL
-        LD A,(HL)                   ; Recover the logical value tag.
-        INC HL
-        INC HL                      ; Skip the record flag before preserving the next address.
+        INC HL                      ; Skip the extension byte.
+        LD A,(HL)
+        AND 0FH                     ; Recover the logical value tag.
+        INC HL                      ; Step to the next record.
         PUSH HL                     ; Preserve the next packet address.
         EX DE,HL                    ; NCLASS receives the payload in HL.
         CALL SRTNCHK                ; Accept exact integers and valid numeric scalars.

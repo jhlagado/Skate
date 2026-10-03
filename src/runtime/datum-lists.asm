@@ -28,10 +28,10 @@ SRTDRPUS:
         INC HL
         LD (HL),D
         INC HL
-        LD A,(SRTDRTAG)
-        LD (HL),A
-        INC HL
         XOR A
+        LD (HL),A                   ; The extension byte stays clear.
+        INC HL
+        LD A,(SRTDRTAG)
         LD (HL),A
         INC HL
         LD (SRTDRVP),HL
@@ -59,9 +59,10 @@ SRTDRPOP:
         INC HL
         LD D,(HL)
         INC HL
+        INC HL
         LD A,(HL)
+        AND 0FH                    ; Clears carry: a successful pop.
         EX DE,HL
-        OR A                       ; A successful pop must clear carry.
         RET
 
 ; Fold the current frame's values into a proper or dotted list.

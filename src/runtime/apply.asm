@@ -68,11 +68,12 @@ SRTAPPR:
         LD A,H
         LD (DE),A
         INC DE
-        LD A,(SRTQCTAG)
-        LD (DE),A
+        XOR A
+        LD (DE),A                   ; The extension byte stays clear.
         INC DE
-        LD A,1
-        LD (DE),A                   ; Publish the appended value as initialized.
+        LD A,(SRTQCTAG)
+        OR SRTCLIVE
+        LD (DE),A                   ; Publish the appended value as live.
         LD A,(SRTLCN)
         INC A
         LD (SRTLCN),A

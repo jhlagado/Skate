@@ -37,7 +37,9 @@ SRTPVAL:
         INC HL
         LD D,(HL)                  ; Read payload high.
         INC HL
-        LD A,(HL)                  ; Read the logical value tag.
+        INC HL                     ; Skip the extension byte.
+        LD A,(HL)
+        AND 0FH                    ; The logical value tag.
         EX DE,HL                   ; Return the payload while discarding the cursor.
         RET
 

@@ -5,6 +5,13 @@
 ; ABI and argument-packet format are unchanged; see docs/four-byte-cells.md.
 
 SRTCELW        EQU 4                ; One value cell occupies four bytes.
+
+; Static slots, argument packets, operand roots and the operator, quoted-data
+; and reader stacks use the cell layout: payload bytes 0 and 1, byte 2 clear
+; (the future third payload byte) and byte 3 holding the tag in its low nibble
+; and the record's flags in its high nibble.  Bit 4 marks a live or
+; initialized record; static slots keep their escape mark in bit 7.
+SRTCLIVE       EQU 10H              ; Live or initialized record.
 SRTPAIRW       EQU 8                ; A pair is two adjacent cells.
 SRTBCAP        EQU 64               ; A 256-byte binding page holds 64 cells.
 SRTCP0         EQU 0                ; Payload low byte.

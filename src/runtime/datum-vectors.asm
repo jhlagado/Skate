@@ -105,9 +105,10 @@ SRTDVPLP:
         INC HL
         LD D,(HL)
         INC HL
+        INC HL                      ; Skip the extension byte.
         LD A,(HL)
+        AND 0FH
         LD (SRTVFTAG),A
-        INC HL
         INC HL
         LD (SRTVPKT),HL
         LD HL,(SRTVPTR)             ; Write the corresponding vector element.

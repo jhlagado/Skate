@@ -162,9 +162,11 @@ Deno.test("packet cons preserves both scalar inputs through collection", async (
       cpu.ix = 0xef00;
       memory[assembled.address("SRTARGC")] = 2;
       writeWord(memory, packet, 0x1234);
-      memory[packet + 2] = 3;
+      memory[packet + 2] = 0; // Clear extension byte.
+      memory[packet + 3] = 3;
       writeWord(memory, packet + 4, 0x5678);
-      memory[packet + 6] = 3;
+      memory[packet + 6] = 0; // Clear extension byte.
+      memory[packet + 7] = 3;
     },
     () => fillSinglePairPage(assembled, memory, pairPage),
   );
@@ -193,9 +195,11 @@ Deno.test("quoted list construction survives collection at both allocations", as
     cpu,
     () => {
       writeWord(memory, quoted, 41);
-      memory[quoted + 2] = 3;
+      memory[quoted + 2] = 0; // Clear extension byte.
+      memory[quoted + 3] = 3;
       writeWord(memory, quoted + 4, 42);
-      memory[quoted + 6] = 3;
+      memory[quoted + 6] = 0; // Clear extension byte.
+      memory[quoted + 7] = 3;
       writeWord(memory, assembled.address("SRTQSP"), quoted + 8);
       cpu.a = 2;
       cpu.b = 0;
@@ -251,8 +255,8 @@ Deno.test("tracing preserves a linked list of more than one thousand pairs", asy
     }
   }
   writeWord(memory, 0xd700, records[0]);
-  memory[0xd702] = 1;
-  memory[0xd703] = 1;
+  memory[0xd702] = 0; // Clear extension byte.
+  memory[0xd703] = 0x11;
   writeWord(memory, assembled.address("SRTGBASE"), 0xd700);
   writeWord(memory, assembled.address("SRTGEND"), 0xd704);
   const result = callRoutine(assembled, "SRTGC", memory, cpu, 50_000_000);

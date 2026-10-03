@@ -30,10 +30,10 @@ SRTQPUT:
         INC HL
         LD (HL),D
         INC HL
-        LD A,(SRTQATAG)
-        LD (HL),A
-        INC HL
         XOR A
+        LD (HL),A                  ; The extension byte stays clear.
+        INC HL
+        LD A,(SRTQATAG)
         LD (HL),A
         INC HL
         LD (SRTQSP),HL
@@ -57,7 +57,9 @@ SRTQPOP:
         INC HL
         LD D,(HL)
         INC HL
+        INC HL
         LD A,(HL)
+        AND 0FH
         EX DE,HL
         RET
 

@@ -23,10 +23,10 @@ SRTSMCHK:
         INC HL
         LD D,(HL)
         INC HL
-        LD A,(HL)                  ; Characters use the scalar tag.
+        INC HL                     ; Skip the extension byte.
+        LD A,(HL)
         INC HL
-        INC HL                     ; Skip the packet publication flag.
-        OR A
+        AND 0FH                    ; Characters use the scalar tag.
         JP NZ,SRTERROR             ; A string constructor accepts characters only.
         LD A,D
         CP 0FFH

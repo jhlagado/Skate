@@ -28,8 +28,8 @@ Deno.test("vector overflow fallback preserves every rooted pair", async () => {
   for (let index = 0; index < count; index++) {
     const root = roots + index * 4;
     writeWord(memory, root, vectors[index]);
-    memory[root + 2] = 7;
-    memory[root + 3] = 1;
+    memory[root + 2] = 0; // Clear extension byte.
+    memory[root + 3] = 0x17;
   }
   writeWord(memory, assembled.address("SRTGBASE"), roots);
   writeWord(memory, assembled.address("SRTGEND"), roots + count * 4);

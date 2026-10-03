@@ -821,6 +821,8 @@ OPS_PUT:
         INC HL
         LD (HL),D
         INC HL
+        LD (HL),0                  ; The extension byte stays clear.
+        INC HL
         LD (HL),A
         RET
 OPS_GET:
@@ -828,7 +830,9 @@ OPS_GET:
         INC HL
         LD D,(HL)
         INC HL
+        INC HL
         LD A,(HL)
+        AND 0FH
         EX DE,HL
         RET
 
@@ -1090,11 +1094,14 @@ SUBSTR:
 ; each datum into A:HL and calls here.  Z means the datum is eqv? to the key.
 CASE_EQ:
         EX DE,HL                   ; DE is the datum payload.
+        LD C,A
         LD HL,(SRTOPS)
-        DEC HL
-        DEC HL                     ; The key record's tag byte.
-        CP (HL)
+        DEC HL                     ; The key record's flags and tag.
+        LD A,(HL)
+        AND 0FH
+        CP C
         RET NZ
+        DEC HL                     ; Skip the extension byte.
         DEC HL
         LD A,(HL)
         CP D

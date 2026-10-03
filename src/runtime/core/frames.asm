@@ -27,11 +27,12 @@ SRTPACKL:
         LD (HL),E                 ; Store payload low.
         INC HL                    ; Advance to payload high.
         LD (HL),D                 ; Store payload high.
-        INC HL                    ; Advance to the tag byte.
-        LD A,(SRTATMP)            ; Restore the value tag.
-        LD (HL),A                 ; Store the logical tag.
-        INC HL                    ; Advance to the packet initialized byte.
-        LD A,1                    ; Packet values are always initialized.
+        INC HL                    ; Advance to the extension byte.
+        XOR A
+        LD (HL),A                 ; It stays clear.
+        INC HL                    ; Advance to the flags and tag.
+        LD A,(SRTATMP)            ; Packet values are always live.
+        OR SRTCLIVE
         LD (HL),A                 ; Publish the complete argument record.
         DEC C                     ; The preceding source argument has a lower index.
         DJNZ SRTPACKL             ; Consume every staged argument.

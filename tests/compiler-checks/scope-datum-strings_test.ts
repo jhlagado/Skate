@@ -169,8 +169,8 @@ Deno.test("managed strings survive collection while a 255-byte value is rooted",
     memory[longString.payload + 1 + index] = index;
   }
   writeWord(memory, rooted, longString.payload);
-  memory[rooted + 2] = 6;
-  memory[rooted + 3] = 1;
+  memory[rooted + 2] = 0; // Clear extension byte.
+  memory[rooted + 3] = 0x16;
   writeWord(memory, assembled.address("SRTGBASE"), rooted);
   writeWord(memory, assembled.address("SRTGEND"), rooted + 4);
 

@@ -59,10 +59,11 @@ SRTNROOT:
         INC HL
         LD (HL),D
         INC HL
-        LD A,(SRTNRTAG)
-        LD (HL),A
+        XOR A
+        LD (HL),A                  ; The extension byte stays clear.
         INC HL
-        LD A,1
+        LD A,(SRTNRTAG)
+        OR SRTCLIVE                ; A live record and its tag.
         LD (HL),A
         LD A,(SRTNCT)
         INC A
@@ -140,12 +141,13 @@ SRTROREC:
         LD (SRTROOTV),HL
         INC HL
         INC HL
-        LD A,(HL)
-        LD (SRTROOTT),A
         INC HL
         LD A,(HL)
-        AND 1
+        AND SRTCLIVE
         RET Z
+        LD A,(HL)
+        AND 0FH
+        LD (SRTROOTT),A
         LD A,(SRTROOTT)
         LD HL,(SRTROOTV)
         LD E,(HL)
@@ -160,7 +162,9 @@ SRTROWR:
         LD (SRTROOTV),HL
         INC HL
         INC HL
+        INC HL
         LD A,(HL)
+        AND 0FH
         LD (SRTROOTT),A
         LD A,(SRTROOTT)
         LD HL,(SRTROOTV)

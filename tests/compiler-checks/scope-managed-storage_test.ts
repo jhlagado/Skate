@@ -321,8 +321,8 @@ Deno.test("large closures own and release a contiguous two-page run", async () =
 
   const root = 0xd800;
   writeWord(memory, root, closure.payload);
-  memory[root + 2] = 2;
-  memory[root + 3] = 1;
+  memory[root + 2] = 0; // Clear extension byte.
+  memory[root + 3] = 0x12;
   writeWord(memory, assembled.address("SRTGBASE"), root);
   writeWord(memory, assembled.address("SRTGEND"), root + 4);
   call("SRTGC");
@@ -351,8 +351,8 @@ Deno.test("dead closures are reclaimed by class and live closures remain publish
 
   const root = 0x7000;
   writeWord(memory, root, live.payload);
-  memory[root + 2] = 2;
-  memory[root + 3] = 1;
+  memory[root + 2] = 0; // Clear extension byte.
+  memory[root + 3] = 0x12;
   writeWord(memory, assembled.address("SRTGBASE"), root);
   writeWord(memory, assembled.address("SRTGEND"), root + 4);
   call("SRTGC");
@@ -416,8 +416,8 @@ Deno.test("a live two-page closure does not hide a later dead page", async () =>
   assert.equal(narrow.payload, wideBase + 0x200);
   const root = 0xd800;
   writeWord(memory, root, wide.payload);
-  memory[root + 2] = 2;
-  memory[root + 3] = 1;
+  memory[root + 2] = 0; // Clear extension byte.
+  memory[root + 3] = 0x12;
   writeWord(memory, assembled.address("SRTGBASE"), root);
   writeWord(memory, assembled.address("SRTGEND"), root + 4);
   call("SRTGC");
@@ -446,8 +446,8 @@ Deno.test("a partial closure slab can refill every freed slot", async () => {
     allocated.push(call("SRTMAKE", descriptor).payload);
   }
   writeWord(memory, root, allocated[0]);
-  memory[root + 2] = 2;
-  memory[root + 3] = 1;
+  memory[root + 2] = 0; // Clear extension byte.
+  memory[root + 3] = 0x12;
   writeWord(memory, assembled.address("SRTGBASE"), root);
   writeWord(memory, assembled.address("SRTGEND"), root + 4);
   call("SRTGC");
@@ -480,8 +480,8 @@ Deno.test("closure churn beyond sixteen kilobytes reuses a bounded live set", as
       if (batch === 0 && index === 0) firstBase = live;
     }
     writeWord(memory, root, live);
-    memory[root + 2] = 2;
-    memory[root + 3] = 1;
+    memory[root + 2] = 0; // Clear extension byte.
+    memory[root + 3] = 0x12;
     writeWord(memory, assembled.address("SRTGBASE"), root);
     writeWord(memory, assembled.address("SRTGEND"), root + 4);
     call("SRTGC");
@@ -534,8 +534,8 @@ Deno.test("a closure capture keeps a pair alive and releases both together", asy
   memory[pair.payload + 7] = 2;
 
   writeWord(memory, root, closure.payload);
-  memory[root + 2] = 2;
-  memory[root + 3] = 1;
+  memory[root + 2] = 0; // Clear extension byte.
+  memory[root + 3] = 0x12;
   writeWord(memory, assembled.address("SRTGBASE"), root);
   writeWord(memory, assembled.address("SRTGEND"), root + 4);
   call("SRTGC");

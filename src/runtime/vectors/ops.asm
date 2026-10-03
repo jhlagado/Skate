@@ -257,10 +257,11 @@ SRTVPLP:
         INC HL
         LD D,(HL)                  ; Read its payload high byte.
         INC HL
-        LD A,(HL)                  ; Read its logical tag.
+        INC HL                     ; Skip the extension byte.
+        LD A,(HL)
+        AND 0FH                    ; Its logical tag.
         LD (SRTVFTAG),A            ; Preserve it while clearing the extension.
         INC HL
-        INC HL                     ; Skip the packet publication flag.
         LD (SRTVPKT),HL            ; Advance the source cursor by four bytes.
         LD HL,(SRTVPTR)            ; Recover the destination element address.
         LD (HL),E                  ; Store the payload low byte.

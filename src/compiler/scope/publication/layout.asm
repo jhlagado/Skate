@@ -84,7 +84,7 @@ SCGINIT:
         RET C
         INC HL
         INC HL
-        LD DE,0100H               ; Tag zero, and the value is initialized.
+        LD DE,1000H               ; Clear extension; initialized, tag zero.
         JP SINKPTCH
 
 SCGDATA:

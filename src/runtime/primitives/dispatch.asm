@@ -33,10 +33,11 @@ SRTPKGL:
         INC HL
         LD (HL),D
         INC HL
-        LD A,(SRTATMP)
-        LD (HL),A
+        XOR A
+        LD (HL),A                ; The extension byte stays clear.
         INC HL
-        LD A,1
+        LD A,(SRTATMP)
+        OR SRTCLIVE              ; A live record and its tag.
         LD (HL),A
         DEC C
         DJNZ SRTPKGL
@@ -69,11 +70,11 @@ SRTOPUSH:
         INC HL
         LD (HL),D
         INC HL
-        LD A,(SRTATMP)
-        LD (HL),A
-        INC HL
         XOR A
-        LD (HL),A                 ; The fourth byte keeps the record fixed-width.
+        LD (HL),A                 ; The extension byte stays clear.
+        INC HL
+        LD A,(SRTATMP)
+        LD (HL),A                 ; The tag; the cursor, not a flag, marks it live.
         INC HL
         LD (SRTOPS),HL
         RET
@@ -94,7 +95,9 @@ SRTOPPOP:
         INC HL
         LD D,(HL)
         INC HL
+        INC HL
         LD A,(HL)
+        AND 0FH
         EX DE,HL
         RET
 

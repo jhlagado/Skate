@@ -150,8 +150,8 @@ function preserveStaticPair(
 ) {
   const { assembled, memory, call } = fixture;
   writeWord(memory, 0x6e00, pairAddress);
-  memory[0x6e02] = 1;
-  memory[0x6e03] = 1;
+  memory[0x6e02] = 0; // Clear extension byte.
+  memory[0x6e03] = 0x11;
   writeWord(memory, assembled.address("SRTGBASE"), 0x6e00);
   writeWord(memory, assembled.address("SRTGEND"), 0x6e04);
   call("SRTGC");
@@ -164,7 +164,7 @@ Deno.test("exact roots preserve a published global pair and ignore inactive byte
   pair(pairBase + PAIR_BYTES);
   memory[0x6e00] = pairBase & 255;
   memory[0x6e01] = pairBase >>> 8;
-  memory[0x6e02] = 1;
+  memory[0x6e02] = 0;
   preserveStaticPair(fixture, pairBase);
   assert.equal(memory[pairBase + CAR_META], 0x43);
   assert.equal(memory[pairBase + PAIR_BYTES + CAR_META], 0);
@@ -176,8 +176,8 @@ Deno.test("exact roots preserve an active argument packet", async () => {
   pair(pairBase);
   const packet = assembled.address("SRTARGPK");
   writeWord(memory, packet, pairBase);
-  memory[packet + 2] = 1;
-  memory[packet + 3] = 1;
+  memory[packet + 2] = 0; // Clear extension byte.
+  memory[packet + 3] = 0x11;
   memory[assembled.address("SRTARGC")] = 1;
   call("SRTGC");
   assert.equal(memory[pairBase + CAR_META], 0x43);
@@ -189,8 +189,8 @@ Deno.test("exact roots preserve generated operands", async () => {
   pair(pairBase);
   const roots = assembled.address("SRTNRTAB");
   writeWord(memory, roots, pairBase);
-  memory[roots + 2] = 1;
-  memory[roots + 3] = 1;
+  memory[roots + 2] = 0; // Clear extension byte.
+  memory[roots + 3] = 0x11;
   memory[assembled.address("SRTNCT")] = 1;
   call("SRTGC");
   assert.equal(memory[pairBase + CAR_META], 0x43);
@@ -203,8 +203,8 @@ Deno.test("exact roots preserve operator and quoted stack entries", async () => 
     pair(pairBase);
     const base = assembled.address(stack);
     writeWord(memory, base, pairBase);
-    memory[base + 2] = 1;
-    memory[base + 3] = 0;
+    memory[base + 2] = 0; // Clear extension byte.
+    memory[base + 3] = 1;
     writeWord(
       memory,
       assembled.address(stack === "SRTOPB" ? "SRTOPS" : "SRTQSP"),
@@ -318,8 +318,8 @@ Deno.test("a captured closure traces only its declared binding slots", async () 
   writeWord(memory, binding, pairBase);
   memory[binding + 3] = 0x29;
   writeWord(memory, 0x6e00, closure);
-  memory[0x6e02] = 2;
-  memory[0x6e03] = 1;
+  memory[0x6e02] = 0; // Clear extension byte.
+  memory[0x6e03] = 0x12;
   writeWord(memory, assembled.address("SRTGBASE"), 0x6e00);
   writeWord(memory, assembled.address("SRTGEND"), 0x6e04);
   call("SRTGC");
@@ -350,8 +350,8 @@ Deno.test("closure roots drain a full worklist without reporting an error", asyn
     memory[bit] |= 1 << (unit & 7);
     const root = roots + index * 4;
     writeWord(memory, root, closure);
-    memory[root + 2] = 2;
-    memory[root + 3] = 1;
+    memory[root + 2] = 0; // Clear extension byte.
+    memory[root + 3] = 0x12;
   }
   call("SRTGC");
   for (let index = 0; index < count; index++) {
@@ -423,13 +423,13 @@ Deno.test("closure overflow fallback stays within the native stack", async () =>
   for (let index = 0; index < emptyCount; index++) {
     const root = roots + index * 4;
     writeWord(memory, root, emptyBase + index * 4);
-    memory[root + 2] = 2;
-    memory[root + 3] = 1;
+    memory[root + 2] = 0; // Clear extension byte.
+    memory[root + 3] = 0x12;
   }
   const chainRoot = roots + emptyCount * 4;
   writeWord(memory, chainRoot, chainBase);
-  memory[chainRoot + 2] = 2;
-  memory[chainRoot + 3] = 1;
+  memory[chainRoot + 2] = 0; // Clear extension byte.
+  memory[chainRoot + 3] = 0x12;
   writeWord(memory, assembled.address("SRTGBASE"), roots);
   writeWord(memory, assembled.address("SRTGEND"), roots + 512 * 4);
   writeWord(memory, assembled.address("SRTHEAPP"), 0xc000);
@@ -449,8 +449,8 @@ Deno.test("an interior pair pointer is rejected without touching the canary", as
   pair(pairBase);
   memory[0x7f00] = 0xa5;
   writeWord(memory, 0x7000, pairBase + 1);
-  memory[0x7002] = 1;
-  memory[0x7003] = 1;
+  memory[0x7002] = 0; // Clear extension byte.
+  memory[0x7003] = 0x11;
   writeWord(memory, assembled.address("SRTGBASE"), 0x7000);
   writeWord(memory, assembled.address("SRTGEND"), 0x7004);
   call("SRTGC");

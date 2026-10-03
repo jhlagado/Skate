@@ -410,8 +410,8 @@ Deno.test("datum reader clears roots when pair allocation fails", async () => {
   for (const [index, payload] of pairs.entries()) {
     const root = roots + index * 4;
     writeWord(memory, root, payload);
-    memory[root + 2] = 1;
-    memory[root + 3] = 1;
+    memory[root + 2] = 0; // Clear extension byte.
+    memory[root + 3] = 0x11;
   }
   writeWord(memory, assembled.address("SRTGBASE"), roots);
   writeWord(memory, assembled.address("SRTGEND"), roots + pairs.length * 4);

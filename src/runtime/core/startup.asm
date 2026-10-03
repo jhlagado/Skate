@@ -157,15 +157,15 @@ SRTLOAD:
         LD E,(HL)                 ; Read the value's low byte.
         INC HL                    ; Advance to the high value byte.
         LD D,(HL)                 ; Read the value's high byte.
-        INC HL                    ; Advance to the stored value tag.
-        LD A,(HL)                 ; Recover the stored scalar tag.
-        LD (SRTTAG),A             ; Preserve it while testing initialization.
-        INC HL                    ; Advance to the initialized flag.
-        LD A,(HL)                 ; Bit zero records whether the binding is ready.
-        AND 1                     ; Ignore the high escape mark kept for closures.
+        INC HL                    ; Skip the clear extension byte.
+        INC HL                    ; Advance to the flags and tag.
+        LD A,(HL)                 ; Bit four records whether the binding is ready.
+        AND SRTCLIVE              ; Ignore the high escape mark kept for closures.
         JP Z,SRTUNBD           ; Never return a fabricated value.
+        LD A,(HL)
+        AND 0FH                   ; The stored tag.
+        LD (SRTTAG),A
         EX DE,HL                  ; Return the stored payload in HL.
-        LD A,(SRTTAG)             ; Restore the stored value tag.
         RET                       ; Return the value to generated code.
 
 ; Probe one quoted-list cache cell.  Carry set means the compiler has not
@@ -174,16 +174,18 @@ SRTQGET:
         PUSH HL                   ; Keep the cell base while reading its flag.
         INC HL                    ; Skip the payload low byte.
         INC HL                    ; Skip the payload high byte.
-        INC HL                    ; Skip the value tag.
-        LD A,(HL)                 ; A zero flag means the cache is empty.
-        OR A
+        INC HL                    ; Skip the extension byte.
+        LD A,(HL)                 ; A clear live bit means the cache is empty.
+        AND SRTCLIVE
         POP HL                    ; Restore the cell base for a cache hit.
         JR Z,SRTQMISS             ; The caller falls through to list creation.
         LD E,(HL)                 ; Recover the cached payload low byte.
         INC HL
         LD D,(HL)                 ; Recover the cached payload high byte.
         INC HL
-        LD A,(HL)                 ; Recover the cached value tag.
+        INC HL
+        LD A,(HL)
+        AND 0FH                   ; The cached value tag; carry is clear.
         EX DE,HL                  ; Return the payload in HL.
         RET
 SRTQMISS:
@@ -198,13 +200,18 @@ SRTSTORE:
         INC DE                    ; Advance to the high payload byte.
         LD A,H                    ; Copy the payload high byte.
         LD (DE),A                 ; Publish the complete payload.
-        INC DE                    ; Advance to the stored value tag.
-        LD A,(SRTTAG)             ; Copy the caller's tag into the slot.
-        LD (DE),A                 ; Publish the tag after both payload bytes.
-        INC DE                    ; Advance to the initialized flag.
-        LD A,(DE)                 ; Preserve allocation, capture and mark bits.
-        AND 0FEH
-        OR 1                       ; Mark the slot initialized after all value bytes.
+        INC DE                    ; Advance to the extension byte.
+        XOR A
+        LD (DE),A                 ; It stays clear.
+        INC DE                    ; Advance to the flags and tag.
+        PUSH BC
+        LD A,(SRTTAG)
+        OR SRTCLIVE               ; Initialized, with the caller's tag.
+        LD B,A
+        LD A,(DE)                 ; Preserve the escape mark and other flags.
+        AND 0E0H
+        OR B
+        POP BC
         LD (DE),A                 ; A later load can now observe the value.
         LD A,(SRTTAG)             ; Return the stored value tag to generated code.
         RET                       ; Return with the stored value still in HL.
@@ -216,9 +223,9 @@ SRTSET:
         LD (SRTCELLP),DE          ; Preserve the destination while checking it.
         INC DE                    ; Skip the payload low byte.
         INC DE                    ; Skip the payload high byte.
-        INC DE                    ; Skip the stored value tag.
-        LD A,(DE)                  ; The low flag bit records initialization.
-        AND 1
+        INC DE                    ; Skip the extension byte.
+        LD A,(DE)                  ; Bit four records initialization.
+        AND SRTCLIVE
         JP Z,SRTUNBD               ; A missing binding cannot be mutated.
         LD DE,(SRTCELLP)           ; Restore the cell base for the normal store.
         LD A,(SRTATMP)             ; Restore the caller's tag before storing.

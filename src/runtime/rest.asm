@@ -73,8 +73,10 @@ SRTSETLP:
         LD E,(HL)                ; Read payload low.
         INC HL                   ; Advance to payload high.
         LD D,(HL)                ; DE now contains the payload value.
-        INC HL                   ; Advance to the packet tag.
-        LD A,(HL)                ; A contains the logical value tag.
+        INC HL                   ; Skip the extension byte.
+        INC HL                   ; Advance to the flags and tag.
+        LD A,(HL)
+        AND 0FH                  ; A contains the logical value tag.
         LD (SRTSVTAG),A          ; Keep the tag while selecting the active slot.
         EX DE,HL                 ; HL receives the payload expected by SRTSSTOR.
         PUSH BC                   ; Preserve the formal and packet cursors.
@@ -145,7 +147,9 @@ SRTRREAD:
         INC HL
         LD D,(HL)
         INC HL
+        INC HL
         LD A,(HL)
+        AND 0FH
         EX DE,HL
         RET
 
