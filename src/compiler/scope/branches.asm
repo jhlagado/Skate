@@ -16,13 +16,13 @@ SCEXPSYN:
 
 ; Compare the current lexer spelling with a length-prefixed static name.
 SCMATCH:
-        LD A,(LBUFLEN)             ; Read the current symbol's byte count.
+        LD A,(LX_LEN)              ; Read the current symbol's byte count.
         LD B,A                     ; B counts the bytes to compare.
         LD A,(DE)                  ; The static name stores its length first.
         CP B                       ; A different length cannot match.
         JR NZ,SCMNO                ; A different length cannot match.
         INC DE                     ; Advance to the first static name byte.
-        LD HL,LBUFFER              ; The lexer buffer holds the current spelling.
+        LD HL,LX_BUF               ; The lexer buffer holds the current spelling.
         LD A,B                     ; Recover the equal byte count.
         OR A                       ; An empty name is not produced for symbols.
         JR Z,SCMYES                ; Keep the comparison total for completeness.

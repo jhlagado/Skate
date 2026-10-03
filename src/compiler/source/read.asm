@@ -1,20 +1,20 @@
 ; CP/M source byte delivery and source-location marks.
-; Entry points: CSBYTE, CSRAW, CSFAIL, CSMARKB and CSMARKI.
+; Entry points: SRC_BYTE, SRC_RAW, SRC_FAIL, SRC_MARK and SRC_EDGE.
 ; ----------------------------------------------------------------------------
-; CSBYTE -- byte callback for RINIT / LEXINIT
+; SRC_BYTE -- byte callback for RD_INIT / LX_INIT
 ;
 ; Out:      carry clear, A = source byte; carry set = terminal stream.
 ; Preserves IX, IY and balances SP. BC, DE, HL are scratch.
-; Parts are streamed in CSORDER.  A part's leading include region is delivered
+; Parts are streamed in SRC_LIST.  A part's leading include region is delivered
 ; as spaces with its line breaks intact, so positions after it stay exact.
 ; One LF separates parts that do not already end in a line break.  EOF and
-; errors are sticky until CSOPEN; CSCLOSE reports any recorded error.
+; errors are sticky until SRC_OPEN; SRC_END reports any recorded error.
 ; ----------------------------------------------------------------------------
-CSBYTE: LD A,(CSDONE)
+SRC_BYTE: LD A,(SRC_DONE)
         OR A
         SCF
         RET NZ                   ; A terminal stream never asks BDOS for another record.
-        LD HL,CSSEP              ; A pending separator is returned first.
+        LD HL,SRC_SEP            ; A pending separator is returned first.
         LD A,(HL)
         OR A
         JR Z,.ACTIVE
@@ -23,104 +23,104 @@ CSBYTE: LD A,(CSDONE)
         OR A                     ; Carry clear: this is an ordinary byte.
         RET
 .ACTIVE:
-        LD A,(CSOPENF)           ; Is a source part already open?
+        LD A,(SRC_LIVE)          ; Is a source part already open?
         OR A
         JR Z,.NEXT               ; No part means select the next ordered entry.
-        CALL CSRAW               ; Read one byte from the private DMA record.
-        JR C,.PEND               ; End of part, or a sticky read failure.
-        LD HL,(CSHEAD)           ; Blank the part's include region.
+        CALL SRC_RAW             ; Read one byte from the private DMA record.
+        JR C,.PART_END           ; End of part, or a sticky read failure.
+        LD HL,(SRC_HEAD)         ; Blank the part's include region.
         LD B,A                   ; Keep the byte while testing the count.
         LD A,H
         OR L
         LD A,B
         JR Z,.KEEP               ; Past the header every byte is delivered.
         DEC HL
-        LD (CSHEAD),HL           ; One fewer header byte remains.
+        LD (SRC_HEAD),HL         ; One fewer header byte remains.
         CP 13                    ; Line breaks keep line numbers exact.
         JR Z,.KEEP
         CP 10
         JR Z,.KEEP
         LD A,' '                 ; Other header bytes read as whitespace.
-.KEEP:  CALL CSMARKB             ; Reset coordinates before a part's first byte.
-        LD (CILAST),A            ; Remember whether a boundary needs LF.
+.KEEP:  CALL SRC_MARK            ; Reset coordinates before a part's first byte.
+        LD (SRC_LAST),A          ; Remember whether a boundary needs LF.
         OR A                     ; Carry clear: A is a source byte.
         RET
-.PEND:  LD A,(CSERROR)           ; A failed read must not look like clean EOF.
+.PART_END:  LD A,(SRC_ERR)       ; A failed read must not look like clean EOF.
         OR A
         SCF
-        RET NZ                   ; CSFAIL already made the stream terminal.
-        CALL CSMARKI             ; Empty parts still have a stable location.
-        CALL CICLOSE             ; Close the finished part before the next open.
+        RET NZ                   ; SRC_FAIL already made the stream terminal.
+        CALL SRC_EDGE            ; Empty parts still have a stable location.
+        CALL SRC_SHUT            ; Close the finished part before the next open.
         RET C                    ; A close failure is terminal.
-        LD A,(CILAST)            ; Separate parts unless a line break ended this one.
+        LD A,(SRC_LAST)          ; Separate parts unless a line break ended this one.
         CP 10
         JR Z,.NEXT
         CP 13
         JR Z,.NEXT
         LD A,1
-        LD (CSSEP),A             ; The LF is delivered before the next part.
-.NEXT:  LD HL,CSOUT              ; Select the next part in dependency order.
-        LD A,(CSCOUNT)
+        LD (SRC_SEP),A           ; The LF is delivered before the next part.
+.NEXT:  LD HL,SRC_POS            ; Select the next part in dependency order.
+        LD A,(SRC_CNT)
         CP (HL)
-        JR Z,.ENDALL             ; Every part, ending with the root, was streamed.
+        JR Z,.ALL_DONE           ; Every part, ending with the root, was streamed.
         LD E,(HL)
         INC (HL)                 ; Advance the order cursor.
         LD D,0
-        LD HL,CSORDER
+        LD HL,SRC_LIST
         ADD HL,DE
         LD A,(HL)                ; A = source-table index of the next part.
         PUSH AF
-        CALL CIOPEN              ; Reopen it; the scan proved it exists.
+        CALL SRC_LOAD            ; Reopen it; the scan proved it exists.
         POP BC                   ; B = the part index.
         RET C                    ; A failed reopen is terminal.
         LD A,B
-        CALL CIHEADP             ; Load the part's include-region length.
+        CALL INC_SLOT            ; Load the part's include-region length.
         LD E,(HL)
         INC HL
         LD D,(HL)
-        LD (CSHEAD),DE
+        LD (SRC_HEAD),DE
         LD A,1
-        LD (CSPEND),A            ; The next real byte starts the part.
+        LD (SRC_PEND),A          ; The next real byte starts the part.
         XOR A
-        LD (CILAST),A            ; The part has not emitted a byte yet.
-        JP CSBYTE                ; Return the separator or the part's first byte.
-.ENDALL:
+        LD (SRC_LAST),A          ; The part has not emitted a byte yet.
+        JP SRC_BYTE              ; Return the separator or the part's first byte.
+.ALL_DONE:
         LD A,1
-        LD (CSDONE),A            ; The complete source stream is finished.
+        LD (SRC_DONE),A          ; The complete source stream is finished.
         SCF
         RET
 
 ; ----------------------------------------------------------------------------
-; CSRAW -- read one byte from the open part
+; SRC_RAW -- read one byte from the open part
 ;
 ; Out: carry clear, A = byte; carry set at EOF or Ctrl-Z, or after a read
-; failure recorded as CSERROR 2.  No source location is touched.
+; failure recorded as SRC_ERR 2.  No source location is touched.
 ; ----------------------------------------------------------------------------
-CSRAW:  LD A,(CSPEOF)            ; A completed part stays at EOF.
+SRC_RAW:  LD A,(SRC_EOF)         ; A completed part stays at EOF.
         OR A
         SCF
         RET NZ
-        LD A,(CSRIDX)            ; Index 128 requests another BDOS record.
+        LD A,(SRC_IDX)           ; Index 128 requests another BDOS record.
         CP 128
         JR C,.FETCH
-        LD DE,CSBUFFER           ; Select the private 128-byte DMA record.
+        LD DE,SRC_BUF            ; Select the private 128-byte DMA record.
         LD C,26
-        CALL CSBDOS
-        LD DE,CSFCB              ; Read the next sequential source record.
+        CALL SRC_BDOS
+        LD DE,SRC_FCB            ; Read the next sequential source record.
         LD C,20
-        CALL CSBDOS
+        CALL SRC_BDOS
         OR A
         JR Z,.RECORD
         DEC A                    ; CP/M status one is physical EOF.
         JR Z,.END
         LD A,2                   ; Other statuses are read failures.
-        JR CSFAIL
+        JR SRC_FAIL
 .RECORD: XOR A                   ; The first byte in a fresh record is zero.
 .FETCH: LD E,A
         LD D,0
         INC A
-        LD (CSRIDX),A            ; Consume exactly one cached byte.
-        LD HL,CSBUFFER
+        LD (SRC_IDX),A           ; Consume exactly one cached byte.
+        LD HL,SRC_BUF
         ADD HL,DE
         LD A,(HL)
         CP 26                    ; Ctrl-Z terminates a CP/M text part.
@@ -128,37 +128,37 @@ CSRAW:  LD A,(CSPEOF)            ; A completed part stays at EOF.
         OR A                     ; Carry clear: A is a part byte.
         RET
 .END:   LD A,1
-        LD (CSPEOF),A            ; Report a clean part boundary.
+        LD (SRC_EOF),A           ; Report a clean part boundary.
         SCF
         RET
 
 ; Record source error A unless an earlier error is already recorded, make the
 ; stream terminal and return carry.  HL and C are clobbered.
-CSFAIL: LD HL,CSERROR
+SRC_FAIL: LD HL,SRC_ERR
         LD C,A
         LD A,(HL)
         OR A
         JR NZ,.KEEP              ; The first failure is the one reported.
         LD (HL),C
 .KEEP:  LD A,1
-        LD (CSDONE),A            ; Further byte requests return EOF.
+        LD (SRC_DONE),A          ; Further byte requests return EOF.
         SCF
         RET
 
 ; Stamp the first byte of a source part before the lexer can consume it.
 ; A is preserved.  The callback remains responsible for clearing carry.
-CSMARKB:
+SRC_MARK:
         EX AF,AF'          ; Preserve the source byte in the alternate pair.
-        CALL CSMARKI
+        CALL SRC_EDGE
         EX AF,AF'
         RET
 
 ; Common part-boundary work for byte and EOF callbacks.
-CSMARKI:
-        LD A,(CSPEND)
+SRC_EDGE:
+        LD A,(SRC_PEND)
         OR A
         RET Z                    ; The part has already reset the coordinates.
         XOR A
-        LD (CSPEND),A
-        LD A,(CSPARTNO)
-        JP LNEWPART              ; Line one, column one of this part.
+        LD (SRC_PEND),A
+        LD A,(SRC_PART)
+        JP LX_RESET              ; Line one, column one of this part.

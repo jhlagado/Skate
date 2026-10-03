@@ -1,6 +1,6 @@
 ; Close the source and choose a positioned diagnostic for parse failures.
 SCDIAG:
-        CALL CSCLOSE               ; Close any open part and read its sticky error.
+        CALL SRC_END               ; Close any open part and read its sticky error.
         JR NC,.SRCOK               ; The source itself did not fail.
         CP 5                       ; Error 5 is a missing, malformed or cyclic include.
         LD HL,SCINCTXT
@@ -9,21 +9,21 @@ SCDIAG:
 .SRCMSG:
         LD (SCERRPTR),HL           ; A source failure replaces a later parse symptom.
 .SRCOK:
-        CALL CTCLOSER              ; Close a transport stream left open by a failure.
+        CALL CPM_ENDR              ; Close a transport stream left open by a failure.
         CALL SINKABRT              ; Delete the spool after the input FCBs are closed.
         LD A,(SCPHASE)             ; Finalisation errors no longer have source text.
         OR A
         JR NZ,.PLAINC
-        LD A,(CSPEND)              ; Zero means a byte or terminal EOF was observed.
+        LD A,(SRC_PEND)            ; Zero means a byte or terminal EOF was observed.
         OR A
         JR NZ,.PLAINC
-        LD A,(LTOKPART)            ; Snapshot the location of the failing token.
+        LD A,(LX_TPART)            ; Snapshot the location of the failing token.
         LD (SCERRPT),A
-        LD HL,(LTOKOFF)
+        LD HL,(LX_TPOS)
         LD (SCERROFF),HL
-        LD HL,(LTOKLIN)
+        LD HL,(LX_TLINE)
         LD (SCERRLIN),HL
-        LD HL,(LTOKCOL)
+        LD HL,(LX_TCOL)
         LD (SCERRCOL),HL
         JP SCPRLOC                  ; Prefix the existing diagnostic with its source.
 .PLAINC:
@@ -59,7 +59,7 @@ SCPRLOC:
 
 ; Print one source-table FCB prefix as NAME.EXT, omitting CP/M padding spaces.
 SCPARTNM:
-        CALL CSENTRY                  ; HL addresses the part's 12-byte FCB prefix.
+        CALL SRC_SLOT                 ; HL addresses the part's 12-byte FCB prefix.
         INC HL                        ; FCB byte zero is the drive number.
         LD B,8
         CALL SCPRSEG                 ; Print the padded base name without spaces.

@@ -34,7 +34,7 @@ SCBINDSL EQU 09F00H              ; Pending let binding slot numbers.
 SCFIXTAB EQU 09F80H              ; Four-byte address/kind/slot fixup records.
 SCNAMEDS EQU 0A480H              ; Symbol descriptor table for the reader.
 SCNAMEPL EQU 0A840H              ; 4,800-byte symbol spelling pool.
-SCSTRDS  EQU 0BB00H              ; String descriptor table required by RINIT.
+SCSTRDS  EQU 0BB00H              ; String descriptor table required by RD_INIT.
 SCSTRPL  EQU 0BC00H              ; String pool leaves room below procedure tables.
 SCPMETA  EQU 0C000H              ; Procedure tables stay outside reader tables.
 SCPADDR  EQU 0C000H              ; Emitted descriptor address for each procedure.
@@ -176,7 +176,7 @@ SCSETPR:
         LD HL,SCERRTXT            ; Use the ordinary diagnostic by default.
         LD (SCERRPTR),HL          ; Body diagnostics may replace this pointer.
         LD A,1
-        LD (CSPEND),A              ; No source cursor exists before CSOPEN.
+        LD (SRC_PEND),A            ; No source cursor exists before SRC_OPEN.
         XOR A
         LD (SCPHASE),A            ; Parse phase remains active through SCPACK.
         LD A,0FFH                 ; Top-level locals have no procedure owner.
@@ -188,10 +188,10 @@ SCSETPR:
         CALL SINKOPEN              ; Open SPL before the runtime and source streams.
         RET C                      ; A failed spool setup is a setup failure.
         LD IX,SCNCTX              ; Select the symbol interner context.
-        CALL IINIT                ; Validate and clear its descriptor counters.
+        CALL SYM_INIT             ; Validate and clear its descriptor counters.
         RET C                     ; A bad high-memory table is a setup failure.
-        LD IX,SCSCTX              ; Select the string context required by RINIT.
-        CALL IINIT                ; The current language rejects string events.
+        LD IX,SCSCTX              ; Select the string context required by RD_INIT.
+        CALL SYM_INIT             ; The current language rejects string events.
         RET C                     ; Preserve the reader's ordinary setup diagnostic.
         CALL SCSCAN                ; Choose how much of the runtime to load.
         CALL RT_COPY               ; Stream the provider into the ASO image records.
@@ -221,15 +221,15 @@ SCSCAN:
         LD HL,SRTLCORE
         LD (SCRTLEN),HL
         LD HL,005CH                ; The same source the compiling pass opens.
-        CALL CSOPEN
+        CALL SRC_OPEN
         JR C,.FULL
-        LD HL,CSBYTE
+        LD HL,SRC_BYTE
         LD DE,SCNCTX
         LD BC,SCSCTX
-        CALL RINIT
+        CALL RD_INIT
         JR C,.FULL
 .NEXT:
-        CALL RNEXT
+        CALL RD_NEXT
         JR C,.FULL
         OR A
         JR Z,.DONE                 ; The end of the source.
@@ -257,7 +257,7 @@ SCSCAN:
         LD (SCRTLEN),HL
         JR .NEXT                   ; Keep looking for the I/O module.
 .DONE:
-        CALL CSCLOSE               ; The compiling pass opens the source again.
+        CALL SRC_END               ; The compiling pass opens the source again.
         LD HL,SCERRTXT             ; A scan error must not select a diagnostic.
         LD (SCERRPTR),HL
         RET
@@ -265,15 +265,15 @@ SCSCAN:
 ; Open the source FCB, attach the production reader and consume top-level forms.
 SCPACK:
         LD HL,005CH               ; CCP places the command-tail FCB here.
-        CALL CSOPEN               ; Install the source stream callback.
+        CALL SRC_OPEN             ; Install the source stream callback.
         JR NC,SCOPENOK            ; Continue only when the source opened cleanly.
         SCF                       ; Preserve the source-I/O failure for SCFAIL.
         RET                       ; No generated output exists yet.
 SCOPENOK:
-        LD HL,CSBYTE               ; Reader callback returns one source byte.
+        LD HL,SRC_BYTE             ; Reader callback returns one source byte.
         LD DE,SCNCTX               ; Reader owns the symbol context.
         LD BC,SCSCTX               ; Reader owns the string context.
-        CALL RINIT                 ; Reset lexer and structural reader state.
+        CALL RD_INIT               ; Reset lexer and structural reader state.
         RET C                      ; Treat a reader setup fault as a parse failure.
 SCTOPLP:
         CALL SCNEXT                ; Read the next complete top-level event.
@@ -295,7 +295,7 @@ SCEVGOOD:
 
 ; Finish a nonempty package with the return instruction used by RT_CALL.
 SCENDPK:
-        CALL CSCLOSE               ; A missing, unreadable or bad part is an error.
+        CALL SRC_END               ; A missing, unreadable or bad part is an error.
         RET C                      ; SCDIAG selects the source diagnostic.
         LD HL,(SCFORMN)            ; Reject an empty source before publication.
         LD A,H                     ; Test both bytes of the form count.
@@ -303,7 +303,7 @@ SCENDPK:
         JP Z,SCENDSYN              ; Report the same syntax error as other empties.
         JP SCRET                   ; Append RET and return to the command driver.
 
-; Parse one event already returned in A; literal payloads remain in RTAG:HL.
+; Parse one event already returned in A; literal payloads remain in RD_TAG:HL.
 SCEXPE:
         CP 7                       ; Numeric events use the scalar payload contract.
         JR Z,SCNUM                 ; Emit an exact integer literal.
@@ -326,7 +326,7 @@ SCEXPR:
         JP SCEXPE                  ; Dispatch the returned event.
 
 SCNUM:
-        LD A,(RTAG)                ; Reader tag zero is the boolean scalar form.
+        LD A,(RD_TAG)              ; Reader tag zero is the boolean scalar form.
         OR A                       ; A zero tag selects the boolean emitter.
         JR NZ,SCNUMTAG              ; Exact integers carry their own logical tag.
         LD A,H                      ; Character scalars retain FFxx in their payload.

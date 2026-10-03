@@ -104,7 +104,7 @@ SCLOGOP:
         JP Z,SCLOGDN
         PUSH AF                    ; Keep the next operand's first event.
         PUSH HL
-        LD A,(RTAG)
+        LD A,(RD_TAG)
         PUSH AF
         CALL SCTFIX                ; Not final: its tail calls must return.
         JP C,SCLOGE3
@@ -125,7 +125,7 @@ SCLOGBR:
         CALL SCBRPUSH
         JP C,SCLOGE3
         POP AF
-        LD (RTAG),A
+        LD (RD_TAG),A
         POP HL
         POP AF
         JP SCLOGOP
@@ -350,7 +350,7 @@ SCCNCLA:
         JP C,SCCNERR
         LD (SCBEV),A               ; Save the event while checking the else spelling.
         LD (SCBVAL),HL
-        LD A,(RTAG)
+        LD A,(RD_TAG)
         LD (SCBTAG),A
         LD A,(SCBEV)
         CP 5
@@ -363,7 +363,7 @@ SCCNTEST:
         XOR A                      ; The test itself is never in tail position.
         LD (SCTCTX),A
         LD A,(SCBTAG)
-        LD (RTAG),A
+        LD (RD_TAG),A
         LD A,(SCBEV)
         LD HL,(SCBVAL)
         CALL SCEXPE                ; Compile the test expression already read.

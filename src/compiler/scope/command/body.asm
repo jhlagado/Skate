@@ -85,7 +85,7 @@ SCBRNCL:
 SCBRNEOF:
         LD (SCBEV),A               ; Preserve the event until SCEXPE dispatches it.
         LD (SCBVAL),HL             ; Preserve the event payload.
-        LD A,(RTAG)                ; Preserve its scalar tag.
+        LD A,(RD_TAG)              ; Preserve its scalar tag.
         LD (SCBTAG),A              ; Structural events ignore this field.
 SCBEXPR:
         XOR A                      ; A definition marker belongs only to SCIDEF.
@@ -95,7 +95,7 @@ SCBEXPR:
         LD A,(SCBTAIL)             ; Give the expression the body's incoming context.
         LD (SCTCTX),A              ; Tail candidates use a wrapper until finality is known.
         LD A,(SCBTAG)              ; Restore the event's reader tag.
-        LD (RTAG),A
+        LD (RD_TAG),A
         LD A,(SCBEV)               ; Restore the event kind for SCEXPE.
         LD HL,(SCBVAL)             ; Restore its payload for SCEXPE.
         CALL SCEXPE                ; Compile this complete expression immediately.
@@ -124,7 +124,7 @@ SCBNXOK:
 SCBNXEOF:
         LD (SCBEV),A               ; Save the next expression while rewriting candidates.
         LD (SCBVAL),HL             ; Preserve its payload across SCTFIX.
-        LD A,(RTAG)                ; Preserve its logical scalar tag.
+        LD A,(RD_TAG)              ; Preserve its logical scalar tag.
         LD (SCBTAG),A
         CALL SCTFIX                ; Non-final tail calls become ordinary calls.
         JR NC,SCBTFOK

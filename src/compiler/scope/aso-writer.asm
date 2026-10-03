@@ -7,7 +7,7 @@
 ; Open the temporary ASO stage and write its fixed header.
 SINKOPEN:
         XOR A
-        LD (SCACTIV),A          ; No output owns the stage before CTOPENW.
+        LD (SCACTIV),A          ; No output owns the stage before CPM_MAKE.
         LD (SCARUNC),A            ; The pending IMAGE run starts empty.
         LD (SCPCET),A             ; The output cursor begins below $10000.
         LD (SCAETOP),A            ; The ASO high-water endpoint begins at origin.
@@ -16,7 +16,7 @@ SINKOPEN:
         LD (SCAHIGH),HL          ; No byte has advanced the high-water mark yet.
         CALL SCSPL                ; Build the private SPL stage name.
         LD HL,SCFCB
-        CALL CTOPENW              ; Create the tentative ASO file.
+        CALL CPM_MAKE             ; Create the tentative ASO file.
         JP C,SCAERR
         LD A,1
         LD (SCACTIV),A          ; Cleanup now owns the open stage.
@@ -32,7 +32,7 @@ SCAHLP:
         LD A,(HL)
         INC HL
         LD (SCAHPTR),HL
-        CALL CTWRITE
+        CALL CPM_PUT
         JR C,SCAHFAIL
         LD HL,SCACHUNK
         DEC (HL)
@@ -50,13 +50,13 @@ SCARUNFL:
         OR A
         RET Z
         LD A,1                    ; ASO record kind one denotes IMAGE.
-        CALL CTWRITE
+        CALL CPM_PUT
         RET C
         LD HL,(SCARADD)
         CALL SCAWORD
         RET C
         LD A,(SCARUNC)
-        CALL CTWRITE
+        CALL CPM_PUT
         RET C
         LD A,(SCARUNC)
         LD (SCACHUNK),A
@@ -70,7 +70,7 @@ SCARLP:
         LD A,(HL)
         INC HL
         LD (SCAWPTR),HL
-        CALL CTWRITE
+        CALL CPM_PUT
         RET C
         LD HL,SCACHUNK
         DEC (HL)
@@ -80,35 +80,35 @@ SCARDONE:
         LD (SCARUNC),A
         RET
 
-; Write a little-endian word held in HL through the CTWRITE byte sink.
+; Write a little-endian word held in HL through the CPM_PUT byte sink.
 SCAWORD:
         LD (SCAWORDV),HL
         LD A,(SCAWORDV)
-        CALL CTWRITE
+        CALL CPM_PUT
         RET C
         LD A,(SCAWORDV+1)
-        JP CTWRITE
+        JP CPM_PUT
 
 ; Finish the ASO stream with matching high-water and final-cursor endpoints.
 SINKEND:
         CALL SCARUNFL
         RET C
         XOR A                    ; ASO record kind zero denotes END.
-        CALL CTWRITE
+        CALL CPM_PUT
         RET C
         LD HL,(SCAHIGH)
         CALL SCAWORD
         RET C
         LD A,(SCAETOP)           ; Preserve an exact $10000 exclusive endpoint.
-        CALL CTWRITE
+        CALL CPM_PUT
         RET C
         LD HL,(SCPC)
         CALL SCAWORD
         RET C
         LD A,(SCPCET)
-        CALL CTWRITE
+        CALL CPM_PUT
         RET C
-        CALL CTCLOSEW
+        CALL CPM_ENDW
         JR C,SINKECFL
         LD A,0
         LD (SCACTIV),A
@@ -122,10 +122,10 @@ SINKABRT:
         LD A,(SCACTIV)
         OR A
         RET Z
-        CALL CTCLOSEW
+        CALL CPM_ENDW
         CALL SCSPL
         LD HL,SCFCB
-        CALL CTDELETE
+        CALL CPM_ERA
         XOR A
         LD (SCACTIV),A
         RET

@@ -2,7 +2,7 @@
 ; Entry points: SCSTREAM, SCAWRITE, SCOUT, SCBASE, SCCBS and SCSPL.
 ; Stream a COM image or ASO record through the CP/M transport.
 SCSTREAM:
-        LD (SCPTR),HL              ; Save the stream pointer while CTWRITE runs.
+        LD (SCPTR),HL              ; Save the stream pointer while CPM_PUT runs.
         LD (SCLEFT),BC             ; Save the remaining byte count.
 SCSTRLP:
         LD BC,(SCLEFT)             ; Test for the end of this stream.
@@ -13,7 +13,7 @@ SCSTRLP:
         LD A,(HL)                  ; Pass that byte to the CP/M output adapter.
         INC HL                     ; Advance the saved pointer before the call.
         LD (SCPTR),HL              ; Preserve the advanced pointer.
-        CALL CTWRITE               ; Write one byte through the private record cache.
+        CALL CPM_PUT               ; Write one byte through the private record cache.
         RET C                      ; A transport failure aborts publication.
         LD HL,(SCLEFT)             ; Reload the remaining count.
         DEC HL                     ; Account for the byte just written.
@@ -34,16 +34,16 @@ SCOUT:
         CALL SCAWRITE              ; Build and close the temporary ASO stage.
         JP C,SCOUTER               ; Preserve the old outputs on ASO failure.
         CALL SCCBS                 ; Build the temporary COM FCB name.
-        LD HL,SCFCB                ; Point CTOPENW at the temporary COM.
-        CALL CTOPENW               ; Create a fresh stage file.
+        LD HL,SCFCB                ; Point CPM_MAKE at the temporary COM.
+        CALL CPM_MAKE              ; Create a fresh stage file.
         JP C,SCOUTER               ; Leave the completed ASO stage untouched.
         CALL SCAMULTI               ; Replay every ASO window into the COM stage.
         JP C,SCOUTER               ; Close and abandon a failed replay.
-        CALL CTCLOSEW              ; Flush and close the COM stage.
+        CALL CPM_ENDW              ; Flush and close the COM stage.
         JP C,SCOUTER               ; A close failure prevents replacement.
         JP SCPUB                   ; Replace the COM and ASO outputs through recovery names.
 SCOUTER:
-        CALL CTCLOSEW              ; Close any open stage and flush no bad bytes.
+        CALL CPM_ENDW              ; Close any open stage and flush no bad bytes.
         CALL SCPROLL               ; Remove partial stages and restore moved outputs.
         LD HL,(SCERRPTR)           ; Materializer capacity is still a compiler bound.
         LD DE,SCCAPTXT
@@ -58,7 +58,7 @@ SCOUTCAP:
         SCF                        ; The rollback is complete; retain the CAP pointer.
         RET
 SCPRECER:
-        CALL CTCLOSER              ; Recovery did not open a new writable stage.
+        CALL CPM_ENDR              ; Recovery did not open a new writable stage.
         LD HL,SCOUTTXT             ; Preserve the output diagnostic for the caller.
         LD (SCERRPTR),HL           ; The next command reports the unresolved recovery.
         SCF                       ; Carry prevents a second rollback with empty masks.
@@ -80,7 +80,7 @@ SCCBS:
         LD (HL),'B'                ; Store the stage marker.
         INC HL                     ; Advance to the third extension character.
         LD (HL),'S'                ; Store the stage suffix.
-        RET                        ; Return with SCFCB ready for CTOPENW.
+        RET                        ; Return with SCFCB ready for CPM_MAKE.
 
 ; Build the temporary ASO stage FCB.
 SCSPL:
@@ -91,4 +91,4 @@ SCSPL:
         LD (HL),'P'                ; Mark the spool file explicitly.
         INC HL                     ; Advance to the third extension character.
         LD (HL),'L'                ; Complete SPL.
-        RET                        ; Return with SCFCB ready for CTOPENW.
+        RET                        ; Return with SCFCB ready for CPM_MAKE.

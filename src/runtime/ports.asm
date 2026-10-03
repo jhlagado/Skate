@@ -311,7 +311,7 @@ IN_CHAR:
         RET
 
 IN_EOF:
-        LD A,(CTREERR)
+        LD A,(CPM_RERR)
         OR A
         JP NZ,ERROR                   ; A BDOS read failure is not a clean EOF.
         LD A,2

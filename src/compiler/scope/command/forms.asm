@@ -23,7 +23,7 @@ SCFORM:
         XOR A                       ; Clear the per-expression definition marker.
         LD (SCISDEF),A
         LD DE,SCDEF                ; Compare the spelling with the define keyword.
-        CALL SCMATCH               ; The lexer buffer remains valid until RNEXT.
+        CALL SCMATCH               ; The lexer buffer remains valid until RD_NEXT.
         JP Z,SCDEFSEL              ; Select a package or leading internal definition.
         LD DE,SCIF                 ; Compare with the conditional form.
         CALL SCMATCH               ; Match only complete identifier spellings.

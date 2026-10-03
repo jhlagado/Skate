@@ -16,7 +16,7 @@ SCRECSCN:
         RET C                      ; Preserve source I/O or syntax failure.
         LD (SCBEV),A              ; Save the event while it is copied.
         LD (SCBVAL),HL
-        LD A,(RTAG)
+        LD A,(RD_TAG)
         LD (SCBTAG),A
         CALL SCRECPUT              ; Store kind, tag and payload as four bytes.
         RET C

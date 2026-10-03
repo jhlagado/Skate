@@ -45,7 +45,7 @@ FILE_OP:
         CALL FILE_ARG
         JP C,ERROR
         LD HL,FILE_FCB
-        CALL CTOPENR
+        CALL CPM_OPEN
         JP C,ERROR
         LD A,1
         LD (IN_FILE),A
@@ -82,7 +82,7 @@ FILE_OP:
         OR A
         JR Z,.CREATE
         LD HL,FILE_FCB+1           ; Compare the new name with the input FCB name.
-        LD DE,CTINFCB+1
+        LD DE,CPM_RFCB+1
         LD B,11                    ; Eight name bytes and three extension bytes.
 .COMPARE:
         LD A,(DE)                  ; BDOS may set attribute bits in the input FCB.
@@ -95,7 +95,7 @@ FILE_OP:
         JP ERROR                   ; Replacing the file being read would delete it.
 .CREATE:
         LD HL,FILE_FCB
-        CALL CTOPENW
+        CALL CPM_MAKE
         JP C,ERROR
         LD A,1
         LD (OUT_FILE),A
@@ -116,7 +116,7 @@ FILE_GET:
         SCF
         RET
 .OPEN:
-        JP CTREAD
+        JP CPM_READ
 
 ; Close the input stream.  A closed stream is left alone; a failed close
 ; poisons the logical port.
@@ -127,7 +127,7 @@ IN_SHUT:
         XOR A
         LD (IN_FILE),A
         CALL IN_RESET              ; Restore console state and drop the file's state.
-        JP CTCLOSER
+        JP CPM_ENDR
 
 ; Close the output stream and flush its final record.
 OUT_SHUT:
@@ -137,7 +137,7 @@ OUT_SHUT:
         XOR A
         LD (OUT_FILE),A
         LD (OUT_SEL),A
-        JP CTCLOSEW
+        JP CPM_ENDW
 
 FILE_NOP:
         XOR A                      ; Closing a closed port is a no-op, as in R7RS.
@@ -186,7 +186,7 @@ FILE_PUT:
         JP .RAW
 .RAW:
         LD A,(OUT_BYTE)
-        JP CTWRITE
+        JP CPM_PUT
 
 ; Build a current-drive CP/M FCB prefix from one literal or managed string.
 ; The parser accepts NAME or NAME.EXT with an eight-character name and a

@@ -61,15 +61,15 @@ SCPFAIL:
 ; Save one existing final output under its recovery name.
 SCSAVE:
         CALL SCFINALT              ; Build the selected final FCB in SCFCB.
-        LD HL,SCFCB                ; Point CTOPENR at the final output.
-        CALL CTOPENR               ; A carry means that this output is absent.
+        LD HL,SCFCB                ; Point CPM_OPEN at the final output.
+        CALL CPM_OPEN              ; A carry means that this output is absent.
         JP C,SCSAVMIS            ; An absent old output needs no recovery record.
-        CALL CTCLOSER              ; Close the successful existence probe.
+        CALL CPM_ENDR              ; Close the successful existence probe.
         JP C,SCSAVBAD             ; Do not rename when the probe close failed.
         CALL SCRECFB              ; Copy the final basename and choose a recovery suffix.
         LD HL,SCFCB                ; The old final remains the rename source.
         LD DE,SCF2                 ; SCF2 contains the recovery destination.
-        CALL CTRENAME               ; Move the old output out of the final name.
+        CALL CPM_REN                ; Move the old output out of the final name.
         JP C,SCSAVBAD             ; The caller rolls back earlier moves.
         LD A,(SCMASK)              ; Recover the bit assigned to this output class.
         LD B,A                     ; Keep that bit while loading the old mask.
@@ -86,10 +86,10 @@ SCSAVBAD:
 ; Restore one recovery output, or discard a stale recovery after a committed run.
 SCRESTOR:
         CALL SCRECT                ; Build the selected recovery FCB in SCFCB.
-        LD HL,SCFCB                ; Point CTOPENR at the recovery output.
-        CALL CTOPENR               ; A carry means that there is nothing to restore.
+        LD HL,SCFCB                ; Point CPM_OPEN at the recovery output.
+        CALL CPM_OPEN              ; A carry means that there is nothing to restore.
         JP C,SCRESMIS            ; Continue when this class has no recovery file.
-        CALL CTCLOSER              ; Close the successful recovery existence probe.
+        CALL CPM_ENDR              ; Close the successful recovery existence probe.
         JP C,SCRESBAD             ; Keep the recovery file when close fails.
         LD A,(SCTYPE)              ; Preserve the selected class across stage probes.
         PUSH AF                    ; SCANY selects each class while probing.
@@ -104,24 +104,24 @@ SCRESTOR:
         JP NZ,SCRESTR               ; Restore the old file before staging a new one.
         CALL SCFDEST            ; Build the selected final FCB in SCF2.
         LD HL,SCF2                 ; Probe the final installed by a completed run.
-        CALL CTOPENR               ; A missing final means that restoration is required.
+        CALL CPM_OPEN              ; A missing final means that restoration is required.
         JP C,SCRESTR                 ; Restore the recovery file into its missing final.
-        CALL CTCLOSER              ; Close the final existence probe.
+        CALL CPM_ENDR              ; Close the final existence probe.
         JP C,SCRESBAD             ; Preserve both files when the close failed.
-        CALL SCRECT                ; Rebuild the recovery name after CTOPENR changed it.
-        LD HL,SCFCB                ; Point CTDELETE at the stale recovery file.
-        CALL CTDELETE              ; The new final is already the committed generation.
+        CALL SCRECT                ; Rebuild the recovery name after CPM_OPEN changed it.
+        LD HL,SCFCB                ; Point CPM_ERA at the stale recovery file.
+        CALL CPM_ERA               ; The new final is already the committed generation.
         RET                        ; Carry reports a cleanup error to the next compile.
 SCRESTR:
         CALL SCFDEST            ; Build the final destination in SCF2.
-        LD HL,SCF2                 ; Point CTDELETE at any partial new final.
-        CALL CTDELETE              ; CP/M treats an absent final as a successful delete.
+        LD HL,SCF2                 ; Point CPM_ERA at any partial new final.
+        CALL CPM_ERA               ; CP/M treats an absent final as a successful delete.
         JP C,SCRESBAD             ; Do not overwrite an uncertain directory entry.
         CALL SCRECT                ; Rebuild the recovery source in SCFCB.
         CALL SCFDEST            ; Rebuild the final destination in SCF2.
-        LD HL,SCFCB                ; Point CTRENAME at the recovery source.
-        LD DE,SCF2                 ; Point CTRENAME at the final destination.
-        CALL CTRENAME               ; Restore the previous generation by name.
+        LD HL,SCFCB                ; Point CPM_REN at the recovery source.
+        LD DE,SCF2                 ; Point CPM_REN at the final destination.
+        CALL CPM_REN                ; Restore the previous generation by name.
         JP C,SCRESBAD             ; Leave recovery in place when restoration fails.
 SCRESMIS:
         XOR A                      ; A missing recovery file is normal.
@@ -151,9 +151,9 @@ SCPRECOV:
 SCINSTAL:
         CALL SCSTAGET              ; Build NBS, CBS or SPL in SCFCB.
         CALL SCFDEST            ; Build NOB, COM or ASO in SCF2.
-        LD HL,SCFCB                ; Point CTRENAME at the stage source.
-        LD DE,SCF2                 ; Point CTRENAME at the final destination.
-        JP CTRENAME                ; Return the CP/M rename result directly.
+        LD HL,SCFCB                ; Point CPM_REN at the stage source.
+        LD DE,SCF2                 ; Point CPM_REN at the final destination.
+        JP CPM_REN                 ; Return the CP/M rename result directly.
 
 ; Add the mask in A to the set of newly installed output files.
 SCMARKIN:
@@ -169,18 +169,18 @@ SCPDREC:
         LD A,'N'                   ; Select the legacy-object recovery name.
         LD (SCTYPE),A              ; Name helpers read the class here.
         CALL SCRECT                ; Build NPR in SCFCB.
-        LD HL,SCFCB                ; Point CTDELETE at the legacy-object recovery.
-        CALL CTDELETE              ; Ignore cleanup carry; the final is committed.
+        LD HL,SCFCB                ; Point CPM_ERA at the legacy-object recovery.
+        CALL CPM_ERA               ; Ignore cleanup carry; the final is committed.
         LD A,'C'                   ; Select the COM recovery name.
         LD (SCTYPE),A              ; Keep the class explicit for the next helper.
         CALL SCRECT                ; Build CPR in SCFCB.
-        LD HL,SCFCB                ; Point CTDELETE at the recovery COM.
-        CALL CTDELETE              ; A later SCPRECOV can retry a failed deletion.
+        LD HL,SCFCB                ; Point CPM_ERA at the recovery COM.
+        CALL CPM_ERA               ; A later SCPRECOV can retry a failed deletion.
         LD A,'A'                   ; Select the ASO recovery name.
         LD (SCTYPE),A              ; Keep the class explicit for the last helper.
         CALL SCRECT                ; Build APR in SCFCB.
-        LD HL,SCFCB                ; Point CTDELETE at the recovery ASO.
-        JP CTDELETE                ; Return the last cleanup result.
+        LD HL,SCFCB                ; Point CPM_ERA at the recovery ASO.
+        JP CPM_ERA                 ; Return the last cleanup result.
 
 ; Delete newly installed files, remove stages, and restore the old generation.
 SCPROLL:
@@ -225,8 +225,8 @@ SCPDINS:
         LD A,'N'                   ; Select the legacy-object final name.
         LD (SCTYPE),A              ; Name helpers read the class here.
         CALL SCFINALT              ; Build NOB in SCFCB.
-        LD HL,SCFCB                ; Point CTDELETE at the new legacy object.
-        CALL CTDELETE              ; Best-effort cleanup precedes restoration.
+        LD HL,SCFCB                ; Point CPM_ERA at the new legacy object.
+        CALL CPM_ERA               ; Best-effort cleanup precedes restoration.
         RET C                      ; Leave the remaining stages as transaction proof.
 SCPDINOC:
         LD A,(SCINST)              ; Read the installation mask again.
@@ -235,8 +235,8 @@ SCPDINOC:
         LD A,'C'                   ; Select the COM final name.
         LD (SCTYPE),A              ; Name helpers read the class here.
         CALL SCFINALT              ; Build COM in SCFCB.
-        LD HL,SCFCB                ; Point CTDELETE at the new COM.
-        CALL CTDELETE              ; Best-effort cleanup precedes restoration.
+        LD HL,SCFCB                ; Point CPM_ERA at the new COM.
+        CALL CPM_ERA               ; Best-effort cleanup precedes restoration.
         RET C                      ; Leave the remaining stages as transaction proof.
 SCPDINOA:
         LD A,(SCINST)              ; Read the installation mask for the last class.
@@ -245,28 +245,28 @@ SCPDINOA:
         LD A,'A'                   ; Select the ASO final name.
         LD (SCTYPE),A              ; Name helpers read the class here.
         CALL SCFINALT              ; Build ASO in SCFCB.
-        LD HL,SCFCB                ; Point CTDELETE at the new ASO.
-        JP CTDELETE                ; Return the last cleanup result.
+        LD HL,SCFCB                ; Point CPM_ERA at the new ASO.
+        JP CPM_ERA                 ; Return the last cleanup result.
 
 ; Remove all three temporary stage names.
 SCPDSTA:
         LD A,'N'                   ; Select the legacy-object stage.
         LD (SCTYPE),A              ; Build NBS in SCFCB.
         CALL SCSTAGET              ; Build the selected stage FCB.
-        LD HL,SCFCB                ; Point CTDELETE at the legacy-object stage.
-        CALL CTDELETE              ; Continue after a best-effort delete.
+        LD HL,SCFCB                ; Point CPM_ERA at the legacy-object stage.
+        CALL CPM_ERA               ; Continue after a best-effort delete.
         RET C                      ; Preserve the failed stage as transaction proof.
         LD A,'C'                   ; Select the COM stage.
         LD (SCTYPE),A              ; Build CBS in SCFCB.
         CALL SCSTAGET              ; Build the selected stage FCB.
-        LD HL,SCFCB                ; Point CTDELETE at the COM stage.
-        CALL CTDELETE              ; Continue after a best-effort delete.
+        LD HL,SCFCB                ; Point CPM_ERA at the COM stage.
+        CALL CPM_ERA               ; Continue after a best-effort delete.
         RET C                      ; Preserve the failed stage as transaction proof.
         LD A,'A'                   ; Select the ASO stage.
         LD (SCTYPE),A              ; Build SPL in SCFCB.
         CALL SCSTAGET              ; Build the selected stage FCB.
-        LD HL,SCFCB                ; Point CTDELETE at the ASO stage.
-        JP CTDELETE                ; Return the last cleanup result.
+        LD HL,SCFCB                ; Point CPM_ERA at the ASO stage.
+        JP CPM_ERA                 ; Return the last cleanup result.
 
 ; Build the selected final name in SCFCB from the command basename.
 SCFINALT:
@@ -388,12 +388,12 @@ SCANY:
 ; Set SCSTGF when the selected stage can be opened for reading.
 SCTEST:
         CALL SCSTAGET              ; Build the selected temporary stage FCB.
-        LD HL,SCFCB                ; Point CTOPENR at that stage.
-        CALL CTOPENR               ; A carry denotes an absent stage.
+        LD HL,SCFCB                ; Point CPM_OPEN at that stage.
+        CALL CPM_OPEN              ; A carry denotes an absent stage.
         RET C                      ; Leave the marker clear for an absent stage.
         LD A,1                     ; An open stage proves an incomplete transaction.
         LD (SCSTGF),A         ; Publish that fact before closing the probe.
-        CALL CTCLOSER              ; Close the successful probe.
+        CALL CPM_ENDR              ; Close the successful probe.
         XOR A                      ; Probe cleanup does not decide recovery policy.
         RET                        ; The stage marker remains set after this call.
 

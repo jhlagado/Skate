@@ -23,7 +23,7 @@ SCAPLOOP:
         JP Z,SCAPSY                ; Report an incomplete call.
         LD (SCAPEV),A              ; Preserve the event kind across SCEXPE.
         LD (SCAPVAL),HL            ; Save the reader payload before SCEXPE reads it.
-        LD A,(RTAG)                ; The scalar tag is one byte in the reader state.
+        LD A,(RD_TAG)              ; The scalar tag is one byte in the reader state.
         LD (SCAPTAG),A             ; Preserve it while SCEXPE reads the argument.
         LD A,(SCARGN)              ; The packet has a deliberately small bound.
         CP 8                       ; Eight values cover the first procedure tests.
@@ -31,7 +31,7 @@ SCAPLOOP:
         XOR A                      ; The argument expression is not tail-position.
         LD (SCTCTX),A              ; Nested calls therefore retain their return.
         LD A,(SCAPTAG)             ; Restore the reader's scalar tag byte.
-        LD (RTAG),A                ; Symbol and list events ignore this field.
+        LD (RD_TAG),A              ; Symbol and list events ignore this field.
         LD A,(SCAPEV)              ; Restore the event kind for SCEXPE.
         LD HL,(SCAPVAL)            ; Restore its interned ID or numeric payload.
         LD A,(SCARGN)              ; Preserve this application's count across recursion.
@@ -43,7 +43,7 @@ SCAPLOOP:
         LD A,(SCAPGSL)             ; Preserve this application's global slot as well.
         PUSH AF                     ; Nested operators may select a different slot.
         LD A,(SCAPTAG)             ; Restore the reader's scalar tag after saving state.
-        LD (RTAG),A                ; Symbol and list events ignore this field.
+        LD (RD_TAG),A              ; Symbol and list events ignore this field.
         LD A,(SCAPEV)              ; Restore the event kind for SCEXPE.
         LD HL,(SCAPVAL)            ; Restore its interned ID or numeric payload.
         CALL SCEXPE                ; Compile the argument expression.

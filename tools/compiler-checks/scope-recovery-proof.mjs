@@ -90,7 +90,7 @@ function installFaultBridge(target) {
   ]);
   // The first five deletes belong to recovery's stale-stage cleanup and stage
   // creation.  The sixth delete is the rollback of the newly installed COM.
-  // A nonzero, non-FF result exercises CTDELETE's transport-error branch once
+  // A nonzero, non-FF result exercises CPM_ERA's transport-error branch once
   // rollback begins while leaving the recovery evidence in place for the next
   // run.
   put(0x20, [

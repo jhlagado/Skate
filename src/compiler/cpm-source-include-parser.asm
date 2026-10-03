@@ -1,76 +1,76 @@
 ; -----------------------------------------------------------------------------
-; CIPARSE -- scan the open part's leading `(include "...")` forms
+; INC_SCAN -- scan the open part's leading `(include "...")` forms
 ;
 ; Out: carry set for a malformed form, a bad or excess name, a cycle or a read
 ; error.  Otherwise A = the index of the first name not yet in the source
-; table (just added), or FFH when every name is already ordered; then CIEND
+; table (just added), or FFH when every name is already ordered; then INC_END
 ; holds the length of the include region.
 ; -----------------------------------------------------------------------------
-CIPARSE:
+INC_SCAN:
         LD HL,0
-        LD (CIPOS),HL                  ; Count bytes from the start of the part.
-        LD (CIEND),HL                  ; No include region has been seen yet.
-.FORM:  CALL CISKIPV                   ; Leading comments and whitespace are free.
+        LD (INC_POS),HL                ; Count bytes from the start of the part.
+        LD (INC_END),HL                ; No include region has been seen yet.
+.FORM:  CALL INC_SKIP                  ; Leading comments and whitespace are free.
         JR C,.EMPTY                    ; An all-directive file has no body.
         CP '('
         JR NZ,.ORDINARY                ; Any other datum starts ordinary source.
-        CALL CISKIPV                   ; Skip trivia before the directive name.
-        JR C,.PSBAD
-        CALL CIHEAD                    ; Match the seven-byte word `include`.
-        JR NC,.HEADOK                  ; A valid directive has a delimiter.
+        CALL INC_SKIP                  ; Skip trivia before the directive name.
+        JR C,.BAD
+        CALL INC_WORD                  ; Match the seven-byte word `include`.
+        JR NC,.HEAD_OK                 ; A valid directive has a delimiter.
         OR A
-        JR NZ,.PSBAD                   ; A matched empty directive is malformed.
+        JR NZ,.BAD                     ; A matched empty directive is malformed.
         JR .ORDINARY                   ; A different list is ordinary source.
-.HEADOK:
-        LD (CIARG),A                   ; One means CIHEAD consumed an opening quote.
-.ARGS:  LD A,(CIARG)
+.HEAD_OK:
+        LD (INC_ARG),A                 ; One means INC_WORD consumed an opening quote.
+.ARGS:  LD A,(INC_ARG)
         CP 1
-        JR Z,.INLINE                   ; CIHEAD already consumed the opening quote.
-        CALL CISKIPV                   ; Each argument must be a quoted filename.
-        JR C,.ARGEND
+        JR Z,.INLINE                   ; INC_WORD already consumed the opening quote.
+        CALL INC_SKIP                  ; Each argument must be a quoted filename.
+        JR C,.ARG_END
         CP ')'
-        JR Z,.ENDINC                   ; Finish a nonempty include form.
+        JR Z,.CLOSE                    ; Finish a nonempty include form.
         CP '"'
-        JR NZ,.PSBAD                   ; Reject symbols and computed arguments.
+        JR NZ,.BAD                     ; Reject symbols and computed arguments.
 .INLINE: XOR A
-        LD (CIARG),A                   ; Clear the pending-quote state.
-        CALL CISTRING                   ; Copy one bounded filename to CSPART.
-        JR C,.PSBAD
-        CALL CIADD                      ; Validate the name and find or add its entry.
-        JR C,.PSBAD
+        LD (INC_ARG),A                 ; Clear the pending-quote state.
+        CALL INC_READ                   ; Copy one bounded filename to INC_NAME.
+        JR C,.BAD
+        CALL INC_ADD                    ; Validate the name and find or add its entry.
+        JR C,.BAD
         RET NZ                          ; A new dependency is visited before this part.
-        CALL CIHEADP                    ; An ordered part has its header length;
+        CALL INC_SLOT                   ; An ordered part has its header length;
         LD A,(HL)                       ; a part still on the path holds FFFFH.
         INC HL
         AND (HL)
         INC A
-        JR Z,.PSBAD                     ; Including a part on the path is a cycle.
+        JR Z,.BAD                       ; Including a part on the path is a cycle.
         LD A,2
-        LD (CIARG),A                   ; Two means at least one name is complete.
+        LD (INC_ARG),A                 ; Two means at least one name is complete.
         JR .ARGS                       ; More filenames may follow in this form.
-.ARGEND:
-        JP .PSBAD                       ; EOF or a physical read failure is malformed.
-.ENDINC:
-        LD A,(CIARG)
+.ARG_END:
+        JP .BAD                         ; EOF or a physical read failure is malformed.
+.CLOSE:
+        LD A,(INC_ARG)
         OR A
-        JR Z,.PSBAD                    ; Empty include forms are not accepted.
-        LD HL,(CIPOS)
-        LD (CIEND),HL                  ; Blank this form when the part is streamed.
+        JR Z,.BAD                      ; Empty include forms are not accepted.
+        LD HL,(INC_POS)
+        LD (INC_END),HL                ; Blank this form when the part is streamed.
         JP .FORM
-.EMPTY: LD A,(CSERROR)                ; A read error is not a clean empty source.
+.EMPTY: LD A,(SRC_ERR)                ; A read error is not a clean empty source.
         OR A
-        JR NZ,.PSBAD
+        JR NZ,.BAD
 .ORDINARY:
         LD A,0FFH                      ; Every leading include is already ordered.
         OR A                           ; Carry clear with the complete marker.
         RET
-.PSBAD: SCF                            ; The caller assigns the source error code.
+.BAD: SCF                              ; The caller assigns the source error code.
         RET
 
 ; Skip spaces, tabs, CR/LF and semicolon comments.  The first non-trivia byte
-; is returned in A; CIPOS counts every byte consumed from the physical source.
-CISKIPV:
-.NEXT:  CALL CINRAW
+; is returned in A; INC_POS counts every byte consumed from the physical source.
+INC_SKIP:
+.NEXT:  CALL INC_BYTE
         RET C
         CP ' '
         JR Z,.NEXT
@@ -81,30 +81,30 @@ CISKIPV:
         CP 13
         JR Z,.NEXT
         CP ';'
-        JR NZ,.VRET
+        JR NZ,.FOUND
 .COMMENT:
-        CALL CINRAW
+        CALL INC_BYTE
         RET C
         CP 10
         JR Z,.NEXT
         CP 13
         JR NZ,.COMMENT
         JR .NEXT
-.VRET:  OR A
+.FOUND:  OR A
         RET
 
 ; Match `include` and require a delimiter after the final e.  The delimiter is
 ; consumed as trivia; that makes a following quote immediately usable by ARGS.
-CIHEAD: LD DE,CIHEADS
-        LD C,A                         ; CISKIPV already consumed the first byte.
+INC_WORD: LD DE,INC_TEXT
+        LD C,A                         ; INC_SKIP already consumed the first byte.
         LD A,(DE)
         CP C
         JR NZ,.NO
         INC DE
         LD B,6
 .CHAR:  PUSH BC                       ; BDOS may clobber the loop counter.
-        PUSH DE                       ; CINRAW uses DE for its DMA address.
-        CALL CINRAW
+        PUSH DE                       ; INC_BYTE uses DE for its DMA address.
+        CALL INC_BYTE
         POP DE
         POP BC
         RET C
@@ -114,7 +114,7 @@ CIHEAD: LD DE,CIHEADS
         CP C
         JR NZ,.NO
         DJNZ .CHAR
-        CALL CINRAW
+        CALL INC_BYTE
         RET C
         CP ' '
         JR Z,.YES
@@ -136,71 +136,71 @@ CIHEAD: LD DE,CIHEADS
 .EMPTY: LD A,1                         ; Mark `(include)` as a malformed directive.
         SCF
         RET
-.QUOTE: LD A,1                         ; Tell CIPARSE that the quote was consumed.
+.QUOTE: LD A,1                         ; Tell INC_SCAN that the quote was consumed.
         OR A
         RET
 .YES:   XOR A                          ; Whitespace remains available to ARGS.
         RET
 .COMMENT:
-        CALL CINRAW                    ; Discard a comment after the directive word.
-        JR NC,.HCOMBYTE
-        LD A,(CSERROR)
+        CALL INC_BYTE                  ; Discard a comment after the directive word.
+        JR NC,.LINE_END
+        LD A,(SRC_ERR)
         OR A
         JR NZ,.NO
         XOR A                           ; Clean EOF lets ARGS report a missing name.
         RET
-.HCOMBYTE:
+.LINE_END:
         CP 10
         JR Z,.YES
         CP 13
         JR NZ,.COMMENT
         JR .YES
 
-; Read a quoted filename into CSPART.  Escapes and control bytes are rejected;
+; Read a quoted filename into INC_NAME.  Escapes and control bytes are rejected;
 ; CP/M names are ASCII and the table builder enforces the 8.3 component sizes.
-CISTRING:
+INC_READ:
         XOR A
-        LD (CIPLEN),A
-.BYTE:  CALL CINRAW
+        LD (INC_LEN),A
+.BYTE:  CALL INC_BYTE
         RET C
         CP '"'
-        JR Z,.STRDONE
+        JR Z,.DONE
         CP 92                           ; Backslash escapes are not CP/M names.
-        JR Z,.STRBAD
+        JR Z,.BAD
         CP 32
-        JR C,.STRBAD
+        JR C,.BAD
         CP 127
-        JR Z,.STRBAD
+        JR Z,.BAD
         LD C,A
-        LD A,(CIPLEN)
+        LD A,(INC_LEN)
         CP 12
-        JR NC,.STRBAD
+        JR NC,.BAD
         LD L,A
         LD H,0
-        LD DE,CSPART
+        LD DE,INC_NAME
         ADD HL,DE
         LD A,C
         LD (HL),A
-        LD A,(CIPLEN)
+        LD A,(INC_LEN)
         INC A
-        LD (CIPLEN),A
+        LD (INC_LEN),A
         JR .BYTE
-.STRDONE: LD A,(CIPLEN)
+.DONE: LD A,(INC_LEN)
         OR A
-        JR Z,.STRBAD
+        JR Z,.BAD
         OR A
         RET
-.STRBAD: SCF
+.BAD: SCF
         RET
 
-; Find or add CSPART as a normalised CP/M FCB prefix in CSSEEN.  The drive
+; Find or add INC_NAME as a normalised CP/M FCB prefix in SRC_SEEN.  The drive
 ; comes from the root; base and extension are upper-cased and space padded.
 ; Out: carry for a bad name or a full table; otherwise A = entry index with Z
 ; for a known name and NZ for a new one (a new index is never zero).
-CIADD:  LD A,(CSCOUNT)                 ; Build the candidate in the next slot;
-        CALL CSENTRY                    ; CSSEEN has one spare slot past the limit.
-        LD (CITGT),HL                   ; Retain the destination for component writes.
-        LD A,(CSSEEN)                   ; Copy the root drive byte.
+INC_ADD:  LD A,(SRC_CNT)               ; Build the candidate in the next slot;
+        CALL SRC_SLOT                   ; SRC_SEEN has one spare slot past the limit.
+        LD (INC_DST),HL                 ; Retain the destination for component writes.
+        LD A,(SRC_SEEN)                 ; Copy the root drive byte.
         LD (HL),A
         INC HL
         LD B,11
@@ -208,60 +208,60 @@ CIADD:  LD A,(CSCOUNT)                 ; Build the candidate in the next slot;
 .PAD:   LD (HL),A
         INC HL
         DJNZ .PAD
-        LD A,(CIPLEN)
+        LD A,(INC_LEN)
         LD B,A                          ; B counts source characters.
-        LD HL,CSPART                    ; HL walks the quoted filename.
+        LD HL,INC_NAME                  ; HL walks the quoted filename.
         LD A,0                          ; Base component is selected initially.
-        LD (CIPDOT),A
-        LD (CIBASE),A
-        LD (CIEXT),A
+        LD (INC_DOT),A
+        LD (INC_BASE),A
+        LD (INC_EXT),A
 .NAME:  LD A,(HL)
         INC HL
         CP '.'
-        JR NZ,.NODOT
-        LD A,(CIPDOT)
+        JR NZ,.LETTER
+        LD A,(INC_DOT)
         OR A
-        JP NZ,.ADDBAD                  ; Only one extension separator is valid.
-        LD A,(CIBASE)
+        JP NZ,.BAD                     ; Only one extension separator is valid.
+        LD A,(INC_BASE)
         OR A
-        JP Z,.ADDBAD
+        JP Z,.BAD
         LD A,1
-        LD (CIPDOT),A
-        JR .NEXTNAME
-.NODOT:
-        CALL CIUPPER                    ; Return the checked uppercase byte in A.
-        JP C,.ADDBAD
+        LD (INC_DOT),A
+        JR .NEXT
+.LETTER:
+        CALL .UPPER                     ; Return the checked uppercase byte in A.
+        JP C,.BAD
         LD C,A                          ; Preserve the character during indexing.
-        LD A,(CIPDOT)
+        LD A,(INC_DOT)
         OR A
         JR NZ,.EXT
-        LD A,(CIBASE)
+        LD A,(INC_BASE)
         INC A
         CP 9
-        JP NC,.ADDBAD
-        LD (CIBASE),A
+        JP NC,.BAD
+        LD (INC_BASE),A
         LD E,A
         DEC E
         LD D,0
-        PUSH HL                       ; Preserve CSPART while addressing the slot.
-        LD HL,(CITGT)
+        PUSH HL                       ; Preserve INC_NAME while addressing the slot.
+        LD HL,(INC_DST)
         INC HL
         ADD HL,DE
         LD A,C
         LD (HL),A
         POP HL
-        JR .NEXTNAME
-.EXT:   LD A,(CIEXT)
+        JR .NEXT
+.EXT:   LD A,(INC_EXT)
         INC A
         CP 4
-        JP NC,.ADDBAD
-        LD (CIEXT),A
+        JP NC,.BAD
+        LD (INC_EXT),A
         LD E,A
         DEC E
         LD D,0
-        PUSH HL                       ; Preserve CSPART while addressing the slot.
+        PUSH HL                       ; Preserve INC_NAME while addressing the slot.
         PUSH DE
-        LD HL,(CITGT)
+        LD HL,(INC_DST)
         LD DE,9
         ADD HL,DE
         POP DE
@@ -269,53 +269,53 @@ CIADD:  LD A,(CSCOUNT)                 ; Build the candidate in the next slot;
         LD A,C
         LD (HL),A
         POP HL
-.NEXTNAME:
+.NEXT:
         DJNZ .NAME
-        LD A,(CIBASE)
+        LD A,(INC_BASE)
         OR A
-        JP Z,.ADDBAD
-        LD A,(CSCOUNT)
+        JP Z,.BAD
+        LD A,(SRC_CNT)
         LD B,A                          ; Compare against all prior prefixes.
-        LD HL,CSSEEN                    ; HL walks prior slots.
-.COMPARE:
+        LD HL,SRC_SEEN                  ; HL walks prior slots.
+.SLOT:
         PUSH BC                         ; Preserve the remaining slot count.
         PUSH HL                         ; Preserve this slot for the next one.
-        LD DE,(CITGT)                   ; DE walks the newly built candidate.
+        LD DE,(INC_DST)                 ; DE walks the newly built candidate.
         LD C,12
-.CBYTE: LD A,(DE)
+.BYTE: LD A,(DE)
         XOR (HL)
-        JR NZ,.CMISS
+        JR NZ,.MISS
         INC DE
         INC HL
         DEC C
-        JR NZ,.CBYTE
+        JR NZ,.BYTE
         POP HL
         POP BC
-        LD A,(CSCOUNT)                  ; B counted down from the table size.
+        LD A,(SRC_CNT)                  ; B counted down from the table size.
         SUB B                           ; A = index of the existing entry.
         LD C,A
         XOR A                           ; Z and no carry: the name is known.
         LD A,C
         RET
-.CMISS: POP HL
+.MISS: POP HL
         POP BC
         LD DE,12
         ADD HL,DE
-        DJNZ .COMPARE
-        LD HL,CSCOUNT                   ; Keep the candidate as a new entry.
+        DJNZ .SLOT
+        LD HL,SRC_CNT                   ; Keep the candidate as a new entry.
         LD A,(HL)
-        CP CSMAXP
-        JR NC,.ADDBAD                   ; Root plus 31 included parts maximum.
+        CP SRC_MAX
+        JR NC,.BAD                      ; Root plus 31 included parts maximum.
         INC (HL)
         OR A                            ; NZ and no carry: A is the new index.
         RET
-.ADDBAD: SCF
+.BAD: SCF
         RET
 
 ; Upper-case an allowed CP/M filename byte.  This first native increment keeps
 ; the accepted set intentionally small and predictable: letters, digits, '-'
 ; and '_'.  Other punctuation can be added with a measured contract later.
-CIUPPER:
+.UPPER:
         CP 'a'
         JR C,.CHECK
         CP 'z'+1
@@ -333,17 +333,17 @@ CIUPPER:
         CP '-'
         JR Z,.GOOD
         CP '_'
-        JR NZ,.UPBAD
+        JR NZ,.REJECT
 .GOOD:  OR A
         RET
-.UPBAD: SCF
+.REJECT: SCF
         RET
 
-; CINRAW reads a byte while a part is being scanned and advances CIPOS.
-CINRAW: CALL CSRAW
+; INC_BYTE reads a byte while a part is being scanned and advances INC_POS.
+INC_BYTE: CALL SRC_RAW
         RET C
         PUSH AF
-        LD HL,CIPOS
+        LD HL,INC_POS
         INC (HL)
         JR NZ,.COUNTED
         INC HL

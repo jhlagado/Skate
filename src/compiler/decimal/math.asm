@@ -1,29 +1,29 @@
 ; Decimal wide-integer helpers for scaling, shifting, comparison and subtraction.
-; Entry points: DGETBYTE, DMULTEN, DSHIFTL, DSHIFTR, DCOMPARE and DSUBVAL.
-DGETBYTE:   LD HL,(DPTRNEXT)         ; Recover the next input address.
+; Entry points: DEC_BYTE, DEC_MUL, DEC_SHL, DEC_SHR, DEC_CMP and DEC_SUB.
+DEC_BYTE:   LD HL,(DEC_SRCP)         ; Recover the next input address.
         LD A,(HL)
         INC HL
-        LD (DPTRNEXT),HL         ; Save the next input address.
-        LD HL,DREMAIN
+        LD (DEC_SRCP),HL         ; Save the next input address.
+        LD HL,DEC_LEFT
         DEC (HL)
         RET
 ; Compare the five remaining bytes with the chosen canonical special token.
-DMATCH: LD B,5
+DEC_SAME: LD B,5
 ; Compare all five bytes, stopping at the first difference; preserve its zero flag.
-DMATCHLP: LD A,(DE)
+.LOOP: LD A,(DE)
         CP (HL)
         RET NZ
         INC DE
         INC HL
-        DJNZ DMATCHLP
+        DJNZ .LOOP
         RET
 ; Multiply a 40-byte little-endian integer at HL by ten. Each limb product
 ; is at most 2550+9. C carries the next decimal multiplication carry;
 ; DE holds widened addends and HL temporarily holds the limb product.
-DMULTEN:   LD B,40
+DEC_MUL:   LD B,40
         LD C,0
 ; Widen one byte before multiplying, then store its low byte and retain carry in C.
-DMULTLP: LD A,(HL)
+.LOOP: LD A,(HL)
         PUSH HL             ; HL becomes the widened limb product temporarily.
         LD L,A
         LD H,0
@@ -41,51 +41,51 @@ DMULTLP: LD A,(HL)
         POP HL
         LD (HL),A
         INC HL
-        DJNZ DMULTLP
+        DJNZ .LOOP
         RET
 ; Wide shifts propagate each bit through carry; INC/DEC HL and DJNZ preserve it.
-DSHIFTL:   LD B,40
+DEC_SHL:   LD B,40
         OR A                ; Start with a zero incoming low bit.
 ; Carry transfers the previous limb’s top bit into this limb’s low bit.
-DSHFTLP: RL (HL)
+.LOOP: RL (HL)
         INC HL
-        DJNZ DSHFTLP
+        DJNZ .LOOP
         RET
-DSHIFTR:   LD B,40
+DEC_SHR:   LD B,40
         OR A
 ; Carry transfers the previous limb’s low bit into this limb’s top bit.
-DSHFTRP: RR (HL)
+.LOOP: RR (HL)
         DEC HL
-        DJNZ DSHFTRP
+        DJNZ .LOOP
         RET
 ; Compare numerator X with denominator Y, most-significant limb first.
 ; Carry means X<Y, zero means equality. No integer is modified.
-DCOMPARE:   LD HL,DNUMERAT+39
-        LD DE,DDENOMIN+39
+DEC_CMP:   LD HL,DEC_NUM+39
+        LD DE,DEC_DEN+39
         LD B,40
 ; The first unequal high limb decides the ordering of the complete integers.
-DCMPLOOP: LD A,(DE)
+.LOOP: LD A,(DE)
         LD C,A
         LD A,(HL)
         CP C
         RET NZ
         DEC HL
         DEC DE
-        DJNZ DCMPLOOP
+        DJNZ .LOOP
         RET
 ; X := X-Y after comparison proved X>=Y. Borrow crosses every byte intact.
-DSUBVAL:   LD HL,DNUMERAT           ; Select the numerator limbs for the wide operation.
-        LD DE,DDENOMIN
+DEC_SUB:   LD HL,DEC_NUM            ; Select the numerator limbs for the wide operation.
+        LD DE,DEC_DEN
         LD B,40
         OR A
 ; Subtract one denominator limb and the incoming borrow from the numerator limb.
-DSUBLOOP: LD A,(DE)
+.LOOP: LD A,(DE)
         LD C,A
         LD A,(HL)
         SBC A,C
         LD (HL),A
         INC HL
         INC DE
-        DJNZ DSUBLOOP
+        DJNZ .LOOP
         RET
-DINFSTR:  DB "inf.0"
+DEC_INF0:  DB "inf.0"

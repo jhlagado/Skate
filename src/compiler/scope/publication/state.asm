@@ -26,4 +26,4 @@ SCPDREM:  DB 0                   ; Descriptors still waiting for serialization.
 SCPDIDX:  DB 0                   ; Descriptor index being serialized.
 SCPDSLT: DB 0                  ; Formal slot fields left in one descriptor.
 SCFCB:    DS 36                  ; Working stage or final output FCB.
-SCF2:     DS 36                  ; Destination FCB used by CTRENAME.
+SCF2:     DS 36                  ; Destination FCB used by CPM_REN.

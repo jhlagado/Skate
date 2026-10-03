@@ -52,7 +52,7 @@ SCDEFPR:
 SCDEFPUT:
         LD (SCBEV),A
         LD (SCBVAL),HL
-        LD A,(RTAG)
+        LD A,(RD_TAG)
         LD (SCBTAG),A
         JP SCRECPUT
 

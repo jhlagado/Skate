@@ -84,8 +84,8 @@ SCAMDONE:
 ; Read and validate one complete ASO stream, retaining only this window's data.
 SCAMPASS:
         CALL SCSPL                 ; Select the private spool stage name.
-        LD HL,SCFCB                ; Point CTOPENR at the ASO stage.
-        CALL CTOPENR               ; A missing stage is a publication failure.
+        LD HL,SCFCB                ; Point CPM_OPEN at the ASO stage.
+        CALL CPM_OPEN              ; A missing stage is a publication failure.
         JP C,SCAMBAD               ; Do not publish a COM without ASO input.
         CALL SCAMHDR               ; Validate magic, version, origin and fill.
         JP C,SCAMBAD               ; A malformed header is not compiler output.
@@ -279,7 +279,7 @@ SCAMEND:
         LD A,(SCAETOP)
         CP B
         JP NZ,SCAMBAD
-        CALL CTCLOSER              ; A clean close completes this replay pass.
+        CALL CPM_ENDR              ; A clean close completes this replay pass.
         RET C
         XOR A
         RET
@@ -319,7 +319,7 @@ SCAMHDR:
 
 ; Read one header byte and compare it with the expected value in A.
 SCAMCHK:
-        LD (SCBTMP),A              ; Keep the expected byte across CTREAD.
+        LD (SCBTMP),A              ; Keep the expected byte across CPM_READ.
         CALL SCAMBYTE
         RET C
         LD B,A
@@ -343,11 +343,11 @@ SCAMWORD:
 
 ; Return one byte from the ASO input without changing the transport contract.
 SCAMBYTE:
-        JP CTREAD                  ; CTREAD sets carry at EOF or transport error.
+        JP CPM_READ                ; CPM_READ sets carry at EOF or transport error.
 
 ; Close a failed input and report a publication error to SCOUT.
 SCAMBAD:
-        CALL CTCLOSER              ; Preserve the transport's sticky error.
+        CALL CPM_ENDR              ; Preserve the transport's sticky error.
         LD HL,SCOUTTXT             ; A malformed stage is an output failure.
         LD (SCERRPTR),HL
         SCF

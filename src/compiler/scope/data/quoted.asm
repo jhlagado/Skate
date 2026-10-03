@@ -97,7 +97,7 @@ SCQNESTE:
         LD HL,SCQUOTE+1            ; Intern the reader's ordinary quote name.
         LD BC,5
         LD IX,SCNCTX
-        CALL INTERN
+        CALL SYM_ID
         RET C
         LD A,4                     ; The quote operator is a symbol literal.
         CALL SCLITADD
@@ -141,7 +141,7 @@ SCQDF16:
 ; code 4 with its payload and tag.
 SCQENUM:
         LD (SCVTMP),HL
-        LD A,(RTAG)
+        LD A,(RD_TAG)
         LD C,A
         OR A
         JR NZ,SCQETAG
@@ -197,12 +197,12 @@ SCQLIST:
 SCQLSOME:
         PUSH AF                    ; Keep the first event across the header.
         PUSH HL
-        LD A,(RTAG)
+        LD A,(RD_TAG)
         PUSH AF
         CALL SCQHEAD
         JR C,SCQLHERR
         POP AF
-        LD (RTAG),A
+        LD (RD_TAG),A
         POP HL
         POP AF
         CALL SCQLGIVN
@@ -223,13 +223,13 @@ SCQLBODY:
 SCQLGIVN:
         PUSH AF                    ; Keep the first event across code 1.
         PUSH HL
-        LD A,(RTAG)
+        LD A,(RD_TAG)
         PUSH AF
         LD A,QT_LIST
         CALL SINKBYTE
         JR C,SCQLGERR
         POP AF
-        LD (RTAG),A
+        LD (RD_TAG),A
         POP HL
         LD A,(SCQCOUNT)            ; Keep the enclosing list's element count
         EX (SP),HL                 ; below the first event.
