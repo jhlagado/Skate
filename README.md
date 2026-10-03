@@ -68,6 +68,7 @@ The main tasks are:
 | `deno task test:cpm:stress` | Capacity, large-source and full 65,280-byte image proofs |
 | `deno task test:all` | `test`, `test:cpm` and `test:cpm:stress` |
 | `deno task measure` | Compiler and runtime size budget report |
+| `deno task census` | Compiler and runtime bytes by directory and file |
 
 `test:cpm` and `test:cpm:stress` take tens of minutes; each `test:cpm:*` task
 can be run on its own. The [codebase guide](docs/codebase.md#tests-and-verification)
@@ -81,6 +82,29 @@ continuations and `eval` outside this small core. File names currently use
 current-drive CP/M 8.3 spelling; append, seeking and multiple handles per
 direction are not implemented. `libraries/io.sk8` provides line input, line
 output, prompting and stream copying with explicit ports.
+
+### Program limits
+
+The compiler works in fixed tables, so a program must stay within these
+bounds. Exceeding one stops compilation with `CAP` (a few report
+`COMPILE ERROR`).
+
+| Limit | Value |
+| --- | --- |
+| Procedures (`lambda`, procedure `define`, named `let`) | 128 per program, 13 nested |
+| Fixed parameters per procedure | 4, plus an optional rest parameter |
+| Arguments in one call | 8 |
+| Global names | 256 |
+| Simultaneous local bindings | 128 |
+| Address fixups (global references, literals in code and quoted data) | 320 |
+| Distinct string and symbol literals | 64 |
+| Pending elements while building one quoted datum | 64 |
+| Distinct symbols | 320 |
+
+The fixup table is usually the first limit a larger program reaches: every
+reference to a global and every symbol inside quoted data takes an entry.
+The programs in `examples/workloads` are measured against these limits by
+`deno task test:cpm:workloads`.
 
 The [0.5.11 release notes](release/v0.5.11/README.md) describe the checked image
 and measurements of that published release. Their limitations apply to 0.5.11

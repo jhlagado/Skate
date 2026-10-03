@@ -1,0 +1,16 @@
+1 queens: 1
+2 queens: 0
+3 queens: 0
+4 queens: 2
+5 queens: 10
+6 queens: 4
+7 queens: 40
+8 queens: 92
+Q.......
+....Q...
+.......Q
+.....Q..
+..Q.....
+......Q.
+.Q......
+...Q....

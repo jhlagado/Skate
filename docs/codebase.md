@@ -289,6 +289,7 @@ proofs; `deno task test:all` runs both plus `test:cpm:stress`.
 | `deno task test` | `check`, `test:effects`, `test:effects:cpm`, `test:aso`, `test:ports` and `test:runtime` |
 | `deno task test:all` | `test`, `test:cpm` and `test:cpm:stress` |
 | `deno task measure` | Compiler and runtime size budget report |
+| `deno task census` | Compiler and runtime bytes by directory and file |
 | `deno task test:effects` | Host provider, terminal and bounded file tests |
 | `deno task test:effects:cpm` | CP/M byte bridge tests (`tests/cpm-effects.asm`) |
 | `deno task test:aso` | Stream validation and window-boundary patches |
@@ -310,6 +311,7 @@ proofs; `deno task test:all` runs both plus `test:cpm:stress`.
 | `deno task test:cpm:includes` | Nested, import-once, cyclic, missing and bounded include trees |
 | `deno task test:cpm:release` | Release disk, examples and publication checks |
 | `deno task test:cpm:recovery` | Replacement failure and preservation of prior output |
+| `deno task test:cpm:workloads` | Larger programs in `examples/workloads`: output, COM size, heap use and collections |
 | `deno task test:cpm:stress` | `test:cpm:capacity`, `test:cpm:large` and `test:cpm:full-image` |
 | `deno task test:cpm:capacity` | Compiler capacity: 256 globals with short, long and string-valued definitions, and a 256-form `begin` |
 | `deno task test:cpm:large` | Compilation of a 6,200-form source file |

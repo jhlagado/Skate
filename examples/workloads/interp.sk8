@@ -1,0 +1,192 @@
+; A small interpreter for a subset of Scheme, written in Skate.  Programs
+; are quoted data: numbers, symbols and lists.  Environments are association
+; lists of frames, procedures are tagged lists and primitives are Skate
+; procedures stored in the global frame.  The interpreter exercises symbols,
+; quoted lists, closures, deep recursion and garbage collection.
+
+; ---- Association lists -------------------------------------------------
+
+(define (lookup-in-frame name frame)
+  (cond ((null? frame) #f)
+        ((eq? (car (car frame)) name) (car frame))
+        (else (lookup-in-frame name (cdr frame)))))
+
+(define (lookup-binding name env)
+  (if (null? env)
+      #f
+      (let ((binding (lookup-in-frame name (car env))))
+        (if binding binding (lookup-binding name (cdr env))))))
+
+(define (fail message item)
+  (display "error: ")
+  (display message)
+  (display " ")
+  (write item)
+  (newline)
+  #f)
+
+(define (lookup name env)
+  (let ((binding (lookup-binding name env)))
+    (if binding (cdr binding) (fail "unbound" name))))
+
+(define (bind-formals formals values)
+  (cond ((null? formals) '())
+        ((symbol? formals) (list (cons formals values)))
+        (else (cons (cons (car formals) (car values))
+                    (bind-formals (cdr formals) (cdr values))))))
+
+(define (define-name! name value env)
+  (set-frame! env (cons (cons name value) (car env))))
+
+; Frames are replaced rather than mutated because Skate has no set-car!.
+; The environment itself is a one-element box: (frames).
+(define global-box (list (list '())))
+
+(define (set-frame! env frame)
+  (if (eq? env (car global-box))
+      (set! global-box (list (cons frame (cdr env))))
+      (fail "define outside the global frame" frame)))
+
+; ---- Procedures --------------------------------------------------------
+
+(define (make-closure formals body env) (list 'closure formals body env))
+(define (closure? value) (and (pair? value) (eq? (car value) 'closure)))
+(define (closure-formals value) (car (cdr value)))
+(define (closure-body value) (car (cdr (cdr value))))
+(define (closure-env value) (car (cdr (cdr (cdr value)))))
+
+(define (make-primitive procedure) (list 'primitive procedure))
+(define (primitive? value) (and (pair? value) (eq? (car value) 'primitive)))
+(define (primitive-procedure value) (car (cdr value)))
+
+; ---- Evaluation ---------------------------------------------------------
+
+(define (current-env) (car global-box))
+
+(define (evaluate expression env)
+  (cond ((number? expression) expression)
+        ((boolean? expression) expression)
+        ((string? expression) expression)
+        ((symbol? expression) (lookup expression env))
+        ((pair? expression) (evaluate-form (car expression) expression env))
+        (else (fail "bad expression" expression))))
+
+(define (evaluate-form head expression env)
+  (cond ((eq? head 'quote) (car (cdr expression)))
+        ((eq? head 'if)
+         (if (evaluate (car (cdr expression)) env)
+             (evaluate (car (cdr (cdr expression))) env)
+             (let ((rest (cdr (cdr (cdr expression)))))
+               (if (null? rest) #f (evaluate (car rest) env)))))
+        ((eq? head 'lambda)
+         (make-closure (car (cdr expression)) (cdr (cdr expression)) env))
+        ((eq? head 'let)
+         (evaluate-let (car (cdr expression)) (cdr (cdr expression)) env))
+        ((eq? head 'begin) (evaluate-body (cdr expression) env))
+        ((eq? head 'define)
+         (define-name! (car (cdr expression))
+                       (evaluate (car (cdr (cdr expression))) env)
+                       env)
+         (car (cdr expression)))
+        (else
+         (apply-procedure (evaluate head env)
+                          (evaluate-list (cdr expression) env)))))
+
+(define (evaluate-list expressions env)
+  (if (null? expressions)
+      '()
+      (cons (evaluate (car expressions) env)
+            (evaluate-list (cdr expressions) env))))
+
+(define (evaluate-body body env)
+  (if (null? (cdr body))
+      (evaluate (car body) env)
+      (begin (evaluate (car body) env)
+             (evaluate-body (cdr body) env))))
+
+(define (let-names bindings)
+  (if (null? bindings) '() (cons (car (car bindings)) (let-names (cdr bindings)))))
+
+(define (let-values bindings env)
+  (if (null? bindings)
+      '()
+      (cons (evaluate (car (cdr (car bindings))) env)
+            (let-values (cdr bindings) env))))
+
+(define (evaluate-let bindings body env)
+  (evaluate-body body
+                 (cons (bind-formals (let-names bindings)
+                                     (let-values bindings env))
+                       env)))
+
+(define (apply-procedure procedure arguments)
+  (cond ((primitive? procedure)
+         (apply (primitive-procedure procedure) arguments))
+        ((closure? procedure)
+         (evaluate-body (closure-body procedure)
+                        (cons (bind-formals (closure-formals procedure)
+                                            arguments)
+                              (closure-env-now procedure))))
+        (else (fail "not a procedure" procedure))))
+
+; Closures created at top level see later global definitions, so a closure
+; whose environment is the old global frame list is redirected to the
+; current one.  Nested closures keep their own frames above it.
+(define (closure-env-now procedure)
+  (rebase (closure-env procedure)))
+
+(define (rebase env)
+  (if (null? (cdr env))
+      (current-env)
+      (cons (car env) (rebase (cdr env)))))
+
+; ---- Global environment and driver --------------------------------------
+
+(define (install name procedure)
+  (define-name! name (make-primitive procedure) (current-env)))
+
+(install '+ +)
+(install '- -)
+(install '* *)
+(install '= =)
+(install '< <)
+(install 'cons cons)
+(install 'car car)
+(install 'cdr cdr)
+(install 'null? null?)
+(install 'list list)
+
+(define (run expression)
+  (write expression)
+  (newline)
+  (display "  => ")
+  (write (evaluate expression (current-env)))
+  (newline))
+
+; Each program is evaluated in turn.  Holding them in quoted lists keeps the
+; number of compiled references small; a quoted datum may hold at most 64
+; pending elements, so the programs are split into several lists.  This file
+; sits close to the compiler's 320-entry fixup table: every global reference
+; and every symbol in quoted data takes an entry.
+(define (run-all programs)
+  (if (not (null? programs))
+      (begin (run (car programs)) (run-all (cdr programs)))))
+
+(run-all
+ '((+ 1 2 3)
+   (define square (lambda (x) (* x x)))
+   (square 12)
+   (define fact (lambda (n) (if (< n 2) 1 (* n (fact (- n 1))))))
+   (fact 7)))
+
+(run-all
+ '((define fib (lambda (n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))))
+   (fib 15)))
+
+(run-all
+ '((define map1 (lambda (f xs)
+                  (if (null? xs) (quote ())
+                      (cons (f (car xs)) (map1 f (cdr xs))))))
+   (map1 square (list 1 2 3 4 5))
+   (define adder (lambda (n) (lambda (x) (+ x n))))
+   ((adder 40) 2)))

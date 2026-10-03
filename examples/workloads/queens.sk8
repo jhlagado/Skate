@@ -1,0 +1,60 @@
+; N-queens: count every placement for boards of size 1 to 8 and print the
+; first solution for the 8 x 8 board.  Each placement is a list of column
+; numbers, most recent row first, so the search allocates many short lists
+; and keeps the collector busy.
+
+(define (safe? column placed)
+  (let loop ((rest placed) (distance 1))
+    (cond ((null? rest) #t)
+          ((= (car rest) column) #f)
+          ((= (car rest) (+ column distance)) #f)
+          ((= (car rest) (- column distance)) #f)
+          (else (loop (cdr rest) (+ distance 1))))))
+
+; Return a list of every complete placement extending PLACED.
+(define (extend size row placed found)
+  (if (= row size)
+      (cons placed found)
+      (let try ((column 0) (found found))
+        (if (= column size)
+            found
+            (try (+ column 1)
+                 (if (safe? column placed)
+                     (extend size (+ row 1) (cons column placed) found)
+                     found))))))
+
+(define (solutions size) (extend size 0 '() '()))
+
+(define (count items)
+  (let loop ((items items) (total 0))
+    (if (null? items) total (loop (cdr items) (+ total 1)))))
+
+(define (show-board placement size)
+  (for-each-row (reverse-list placement) size))
+
+(define (reverse-list items)
+  (let loop ((items items) (result '()))
+    (if (null? items) result (loop (cdr items) (cons (car items) result)))))
+
+(define (for-each-row rows size)
+  (if (not (null? rows))
+      (begin
+        (let cell ((column 0))
+          (if (< column size)
+              (begin
+                (write-char (if (= column (car rows)) #\Q #\.))
+                (cell (+ column 1)))))
+        (newline)
+        (for-each-row (cdr rows) size))))
+
+(let loop ((size 1))
+  (if (<= size 8)
+      (begin
+        (display size)
+        (display " queens: ")
+        (display (count (solutions size)))
+        (newline)
+        (loop (+ size 1)))))
+
+(define first (car (reverse-list (solutions 8))))
+(show-board first 8)
