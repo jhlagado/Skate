@@ -188,6 +188,30 @@ SCCLRS:
         LD HL,SRTCLRS
         JP SCCALL
 
+; Emit the address word of slot SCFSLOT of kind SCFKIND.  Globals live in the
+; fixed area after the runtime, so their address is known now; a static local
+; is placed after the code and records a fixup with a placeholder word.
+SCSLOTW:
+        LD A,(SCFKIND)
+        OR A
+        JR NZ,SCSLOTF
+        LD A,(SCFSLOT)
+        LD L,A
+        LD H,0
+        ADD HL,HL
+        ADD HL,HL
+        LD DE,SCGREG
+        ADD HL,DE
+        JP SCWORD
+SCSLOTF:
+        LD HL,(SCPC)              ; The next two bytes are the patch location.
+        CALL SCFIX                ; Record them before writing placeholder zeroes.
+        RET C                     ; A full fixup table aborts the current form.
+        XOR A                     ; Address bytes are filled after layout closes.
+        CALL SINKBYTE
+        RET C
+        JP SINKBYTE
+
 ; Emit a direct load from a compiler-assigned slot.  A=0 selects a global
 ; slot; A=1 selects a local slot.  L contains the slot number.
 SCLOAD:
@@ -208,16 +232,11 @@ SCLOAD:
         LD HL,SRTLOADI             ; Load through the active environment map.
         JP SCCALL
 SCLDFIX:
-        LD A,21H                  ; LD HL,nn will receive the slot address later.
+        LD A,21H                  ; LD HL,nn receives the slot address.
         CALL SINKBYTE               ; Append the load opcode.
-        LD HL,(SCPC)              ; The next two bytes are the patch location.
-        CALL SCFIX                ; Record them before writing placeholder zeroes.
-        RET C                     ; A full fixup table aborts the current form.
-        XOR A                     ; Address bytes are filled after layout closes.
-        CALL SINKBYTE               ; Append the placeholder low byte.
-        RET C                     ; Preserve a staged-output capacity failure.
-        CALL SINKBYTE               ; Append the placeholder high byte.
-        RET C                     ; Preserve a staged-output capacity failure.
+        RET C
+        CALL SCSLOTW              ; Emit the address or its fixup placeholder.
+        RET C
         LD HL,SRTLDA         ; Generated code calls the runtime slot loader.
         JP SCCALL                 ; Append the call and return.
 
@@ -247,16 +266,11 @@ SCSTORE:
 SCSTLOC:
         JP SCCALL
 SCSTFIX:
-        LD A,11H                  ; LD DE,nn will receive the slot address later.
+        LD A,11H                  ; LD DE,nn receives the slot address.
         CALL SINKBYTE               ; Append the store-address opcode.
-        LD HL,(SCPC)              ; The next two bytes are the patch location.
-        CALL SCFIX                ; Record them before writing placeholder zeroes.
-        RET C                     ; A full fixup table aborts the current form.
-        XOR A                     ; Address bytes are filled after layout closes.
-        CALL SINKBYTE               ; Append the placeholder low byte.
-        RET C                     ; Preserve a staged-output capacity failure.
-        CALL SINKBYTE               ; Append the placeholder high byte.
-        RET C                     ; Preserve a staged-output capacity failure.
+        RET C
+        CALL SCSLOTW              ; Emit the address or its fixup placeholder.
+        RET C
         LD HL,SRTSTA                ; Generated code calls the runtime slot store.
         LD A,(SCMUT)            ; Mutation selects the checked static helper.
         OR A
@@ -272,17 +286,11 @@ SCGMARK:
         LD A,21H                  ; LD HL,nn receives the global cell address.
         CALL SINKBYTE
         RET C
-        LD HL,(SCPC)              ; The following word is fixed after layout.
-        LD A,0                    ; Fixup kind zero selects global storage.
+        XOR A                     ; Kind zero selects global storage.
         LD (SCFKIND),A
         LD A,(SCAPGSL)            ; The marker carries the selected global slot.
         LD (SCFSLOT),A
-        CALL SCFIX
-        RET C
-        XOR A                     ; Leave both address bytes as placeholders.
-        CALL SINKBYTE
-        RET C
-        CALL SINKBYTE
+        CALL SCSLOTW              ; Globals have constant addresses.
         RET C
         LD HL,SRTLDA              ; Read the value while the operator is current.
         CALL SCCALL

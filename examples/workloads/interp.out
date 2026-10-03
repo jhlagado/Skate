@@ -20,3 +20,17 @@
   => adder
 ((adder 40) 2)
   => 42
+(let ((a 3) (b 4)) (+ (square a) (square b)))
+  => 25
+(define count (lambda (n acc) (if (= n 0) acc (count (- n 1) (+ acc 1)))))
+  => count
+(count 200 0)
+  => 200
+(begin (define twice (lambda (f) (lambda (x) (f (f x))))) ((twice square) 3))
+  => 81
+(quote (a b (c d)))
+  => (a b (c d))
+(undefined-name 1)
+  => error: unbound undefined-name
+error: not a procedure #f
+#f

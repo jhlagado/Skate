@@ -18,7 +18,9 @@
 ; addresses are logical COM addresses and are streamed to the ASO stage.
 SCSTAGE EQU 05800H               ; Replay window leaves a full page after compiler code.
 SCIMG   EQU SCSTAGE              ; Window storage is reused by the materializer.
-SCCODE  EQU 0100H+SRTLEN         ; Generated program follows the runtime image.
+SCGREG  EQU 0100H+SRTLEN         ; Global slots follow the runtime image.
+SCGRSZ  EQU 1024                 ; Four bytes for each of the 256 global slots.
+SCCODE  EQU SCGREG+SCGRSZ        ; Generated program follows the global area.
 SCEND   EQU 09980H               ; Replay window ends before compiler tables.
 SCRECFR  EQU 0CE00H               ; Nested binding-list replay frames.
 SCRECFSZ EQU 16                   ; One saved replay scope record.
@@ -186,6 +188,15 @@ SCSETPR:
         RET C                      ; A failed spool setup is a setup failure.
         CALL SCLOADRT              ; Stream the provider into the ASO image records.
         RET C                      ; A short, missing or unreadable provider is fatal.
+        LD BC,SCGRSZ               ; Reserve the global area before any code, so
+SCGRZERO:                          ; every global address is a constant.
+        XOR A                      ; Unused and ordinary slots stay unbound.
+        CALL SINKBYTE              ; SINKBYTE preserves BC.
+        RET C
+        DEC BC
+        LD A,B
+        OR C
+        JR NZ,SCGRZERO
         LD IX,SCNCTX              ; Select the symbol interner context.
         CALL IINIT                ; Validate and clear its descriptor counters.
         RET C                     ; A bad high-memory table is a setup failure.

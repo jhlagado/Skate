@@ -96,13 +96,13 @@ bounds. Exceeding one stops compilation with `CAP` (a few report
 | Arguments in one call | 8 |
 | Global names | 256 |
 | Simultaneous local bindings | 128 |
-| Address fixups (global references, literals in code and quoted data) | 320 |
+| Address fixups (literals in code and quoted data, top-level `let` locals) | 320 |
 | Distinct string and symbol literals | 64 |
 | Pending elements while building one quoted datum | 64 |
 | Distinct symbols | 320 |
 
-The fixup table is usually the first limit a larger program reaches: every
-reference to a global and every symbol inside quoted data takes an entry.
+Globals occupy a fixed 1 KB area straight after the runtime, so a reference
+to a global needs no fixup. Every symbol inside quoted data still takes one.
 The programs in `examples/workloads` are measured against these limits by
 `deno task test:cpm:workloads`.
 

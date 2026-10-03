@@ -126,8 +126,10 @@ Publication stream
     ▼
 CP/M .COM program
     │
-    ├─ native execution code
-    ├─ literal tables and roots
+    ├─ runtime image
+    ├─ fixed 1 KB global area
+    ├─ native execution code and procedure descriptors
+    ├─ static locals, quoted-list caches and literal tables
     └─ frames, managed storage, stack and heap
 ```
 

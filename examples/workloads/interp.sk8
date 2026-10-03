@@ -67,7 +67,7 @@
   (cond ((number? expression) expression)
         ((boolean? expression) expression)
         ((string? expression) expression)
-        ((symbol? expression) (lookup expression env))
+        ((symbol? expression) (lookup expression (rebase env)))
         ((pair? expression) (evaluate-form (car expression) expression env))
         (else (fail "bad expression" expression))))
 
@@ -165,9 +165,7 @@
 
 ; Each program is evaluated in turn.  Holding them in quoted lists keeps the
 ; number of compiled references small; a quoted datum may hold at most 64
-; pending elements, so the programs are split into several lists.  This file
-; sits close to the compiler's 320-entry fixup table: every global reference
-; and every symbol in quoted data takes an entry.
+; pending elements, so the programs are split into several lists.
 (define (run-all programs)
   (if (not (null? programs))
       (begin (run (car programs)) (run-all (cdr programs)))))
@@ -190,3 +188,13 @@
    (map1 square (list 1 2 3 4 5))
    (define adder (lambda (n) (lambda (x) (+ x n))))
    ((adder 40) 2)))
+
+(run-all
+ '((let ((a 3) (b 4)) (+ (square a) (square b)))
+   (define count (lambda (n acc) (if (= n 0) acc (count (- n 1) (+ acc 1)))))
+   (count 200 0)))
+
+(run-all
+ '((begin (define twice (lambda (f) (lambda (x) (f (f x))))) ((twice square) 3))
+   (quote (a b (c d)))
+   (undefined-name 1)))

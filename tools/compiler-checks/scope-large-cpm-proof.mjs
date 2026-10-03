@@ -65,6 +65,7 @@ assert.equal(runtimeBytes.length, compiler.address("SRTLEN"));
 // --fill-image=N sizes the program so the published image is exactly N bytes
 // whatever the runtime length: each top-level `1` emits FORM_BYTES and the
 // closing string literal adds one byte per character over a fixed overhead.
+// The fixed global area sits between the runtime and the generated code.
 const fillArgument = Deno.args.find((argument) =>
   argument.startsWith("--fill-image=")
 );
@@ -75,7 +76,8 @@ if (fillArgument !== undefined) {
     fillArgument.slice("--fill-image=".length),
     10,
   );
-  const free = target - runtimeBytes.length - FIXED_BYTES;
+  const free = target - runtimeBytes.length - compiler.address("SCGRSZ") -
+    FIXED_BYTES;
   count = Math.floor(free / FORM_BYTES);
   tailLength = free - count * FORM_BYTES;
 }

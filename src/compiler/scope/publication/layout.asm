@@ -9,23 +9,17 @@
 ;  their final names.
 ;=============================================================================
 
-; Append zeroed four-byte slots and resolve generated addresses.
+; Seed the fixed global area, append zeroed static slots and resolve generated
+; addresses.  Globals were reserved after the runtime before any code.
 SCFIN:
         LD HL,(SCPC)              ; Generated code ends at the current cursor.
         PUSH HL                    ; Keep the code end while sizing slot data.
-        LD HL,(SCGCOUNT)           ; Four bytes are needed for every global slot.
-        ADD HL,HL
-        ADD HL,HL
-        LD A,(SCLOCMAX)            ; Add four bytes for every local high-water slot.
-        PUSH HL                    ; Keep the global extent while scaling locals.
+        LD A,(SCLOCMAX)            ; Four bytes for every local high-water slot.
         LD L,A
         LD H,0
         ADD HL,HL
         ADD HL,HL
-        EX DE,HL                   ; DE now contains four times the local count.
-        POP HL                     ; Restore the four-times-global extent.
-        ADD HL,DE
-        PUSH HL                    ; Keep the combined user-slot extent.
+        PUSH HL                    ; Keep the static-slot extent.
         LD A,(SCQCNT)             ; Add one four-byte cache cell per quoted list.
         LD L,A
         LD H,0
@@ -52,15 +46,16 @@ SCFENDNC:
         OR L
         JP NZ,SCCAP                ; A nonempty extent follows the endpoint.
 SCFENDOK:
-        LD HL,(SCPC)               ; Restore the generated-code cursor for slot data.
-        LD (SCGBASE),HL           ; Globals follow the generated instruction bytes.
+        LD HL,SCGREG               ; Globals occupy the fixed area after the runtime.
+        LD (SCGBASE),HL
         LD BC,(SCGCOUNT)          ; One four-byte record is reserved per global.
         XOR A                     ; Global slot zero is the first primitive mark.
         LD (SCGIDX),A
         JP SCGDATA                 ; Skip the helper body before entering the loop.
 
-; Write one global value record, seeding predefined names with their procedure
-; value while leaving ordinary names unbound until a definition stores them.
+; Seed one predefined global with its primitive procedure value.  The area
+; was emitted as zeroes, which leave ordinary names unbound, so only
+; predefined names need the two PATCH words.
 SCGINIT:
         LD A,(SCGIDX)             ; The compiler mark table is byte indexed.
         LD L,A
@@ -69,42 +64,43 @@ SCGINIT:
         ADD HL,DE
         LD A,(HL)                 ; Zero denotes an ordinary uninitialized name.
         OR A
-        JR Z,SCGZERO              ; Ordinary names receive four zero bytes.
+        RET Z                     ; Carry is clear for an ordinary name.
         DEC A                     ; Convert kind one..four to payload low $20..$23.
         ADD A,20H
-        CALL SINKBYTE              ; Primitive procedure payload low byte.
+        LD E,A
+        LD D,0FEH                 ; Primitive payloads use the reserved high byte.
+        LD A,(SCGIDX)             ; Address the global's four-byte record.
+        LD L,A
+        LD H,0
+        ADD HL,HL
+        ADD HL,HL
+        PUSH DE
+        LD DE,SCGREG
+        ADD HL,DE
+        POP DE
+        PUSH HL
+        CALL SINKPTCH              ; Payload word; SINKPTCH preserves BC.
+        POP HL
         RET C
-        LD A,0FEH                 ; Primitive payloads use the reserved high byte.
-        CALL SINKBYTE
-        RET C
-        XOR A                     ; Tag zero identifies a primitive procedure value.
-        CALL SINKBYTE
-        RET C
-        LD A,1                     ; Predefined values are initialized at startup.
-        JP SINKBYTE
-SCGZERO:
-        XOR A                     ; Ordinary names begin with no payload or tag.
-        CALL SINKBYTE
-        RET C
-        CALL SINKBYTE
-        RET C
-        CALL SINKBYTE
-        RET C
-        JP SINKBYTE                ; The zero flag makes an unresolved load fail.
+        INC HL
+        INC HL
+        LD DE,0100H               ; Tag zero, and the value is initialized.
+        JP SINKPTCH
 
 SCGDATA:
         LD A,B                     ; Test the high count byte first.
         OR C                       ; A zero pair means all global slots are present.
         JR Z,SCLDATA               ; Continue with local storage after the globals.
-        CALL SCGINIT               ; Materialize an ordinary or predefined value.
+        CALL SCGINIT               ; Seed a predefined value.
+        RET C
         LD A,(SCGIDX)              ; Advance the primitive-mark cursor.
         INC A
         LD (SCGIDX),A
-        DEC BC                     ; Account for the slot just appended.
+        DEC BC                     ; Account for the slot just seeded.
         JR SCGDATA                 ; Continue until the global count is exhausted.
 SCLDATA:
         LD HL,(SCPC)
-        LD (SCLBASE),HL            ; Locals follow the complete global area.
+        LD (SCLBASE),HL            ; Static locals follow the generated code.
         LD A,(SCLOCMAX)            ; The local high-water mark sets its extent.
         LD C,A                     ; Widen the byte count to a normal word.
         LD B,0                     ; Local slots also occupy four bytes each.

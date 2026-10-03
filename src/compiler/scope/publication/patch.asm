@@ -1,5 +1,5 @@
 ; Scope publication fixups for globals, locals, literals and procedures.
-; Entry points: SCPSLOTS, SCFGLOB, SCFLIT and SCFPATCH.
+; Entry points: SCPSLOTS, SCFLIT and SCFPATCH.
 ; Patch the runtime's CALL operand with the absolute generated-code address.
 SCPENTRY:
         LD HL,SCCODE               ; Generated code starts after the runtime image.
@@ -29,18 +29,22 @@ SCPIMG:
 ; Patch the runtime's static root ranges after the complete image is sized.
 ; Globals, static locals and quoted-list caches are four-byte records with absolute
 ; addresses; zero-length ranges are represented by equal start and end words.
+; The first range is the used part of the fixed global area; the second runs
+; from the static let slots after the code through the quoted-list caches.
 SCPROOTS:
-        LD HL,(SCGBASE)
-        CALL SCABS
+        LD HL,SCGREG
         LD (SCTARG),HL
         LD HL,0100H+SRTGBASE
         CALL SCPROOTW
-        LD HL,(SCQBASE)           ; Static let slots follow globals and precede caches.
-        CALL SCABS                 ; Both regions contain initialized four-byte roots.
+        LD HL,(SCGCOUNT)           ; Four bytes for each allocated global.
+        ADD HL,HL
+        ADD HL,HL
+        LD DE,SCGREG
+        ADD HL,DE
         LD (SCTARG),HL
         LD HL,0100H+SRTGEND
         CALL SCPROOTW
-        LD HL,(SCQBASE)
+        LD HL,(SCLBASE)            ; Static let slots precede the caches.
         CALL SCABS
         LD (SCTARG),HL
         LD HL,0100H+SRTQROOT
@@ -103,12 +107,7 @@ SCFIXLP:
         JP Z,SCFQCH                ; Cache targets use the dedicated cache base.
         CP 3                       ; Kind three names a copied literal record.
         JR Z,SCFLIT                ; Literal targets are staged after descriptors.
-        OR A                       ; Zero selects the global base.
-        JR Z,SCFGLOB               ; A local fixup uses the local base instead.
-        LD DE,(SCLBASE)            ; Select the local data region.
-        JR SCFADDR                 ; Both paths share the slot-offset arithmetic.
-SCFGLOB:
-        LD DE,(SCGBASE)            ; Select the global data region.
+        LD DE,(SCLBASE)            ; Remaining slot fixups are static locals.
 SCFADDR:
         LD A,(SCFSLOT)             ; The slot number is a three-byte index.
         CALL SCADDR                ; Return the absolute address of this slot.
