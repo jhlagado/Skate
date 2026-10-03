@@ -145,7 +145,7 @@ CALL_RUN:
         LD A,(ST_ARGS)             ; Recover the count after the opcode write.
         CALL SINK_PUT                ; Append the count byte.
         RET C                      ; Preserve staged-output exhaustion.
-        LD HL,(ST_WORD)            ; Restore the runtime target after .ALIAS.
+        LD HL,(ST_WORD)            ; Restore the runtime target after SINK_PUT.
         JP EM_CALL                 ; Append CALL nn for an ordinary application.
 
 CALL_JP:

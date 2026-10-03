@@ -66,7 +66,7 @@ ST_FOUND:    DB 0                  ; Last matching local slot.
 ST_HIT:   DB 0                     ; Nonzero after a local match.
 ST_OPID:     DW 0                  ; Operator identity for generic applications.
 ST_NAME:    DW 0                   ; Spelling address while classifying a primitive.
-ST_NAMEN:    DB 0                  ; Spelling length used by SCPMATCH.
+ST_NAMEN:    DB 0                  ; Spelling length used by GLB_PRIM.
 ST_PROCS:   DB 0                   ; Number of fixed procedure descriptors.
 ST_RTLEN:    DW 0                  ; Runtime bytes loaded, chosen by .SCAN.
 ST_GBASE:   DW 0                   ; Address of the global area after the runtime.

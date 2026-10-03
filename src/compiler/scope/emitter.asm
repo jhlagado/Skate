@@ -9,7 +9,7 @@
 
 ; Emit a little-endian word from HL.
 EM_WORD:
-        LD (ST_WORD),HL           ; Preserve both bytes across .ALIAS calls.
+        LD (ST_WORD),HL           ; Preserve both bytes across SINK_PUT calls.
         LD A,(ST_WORD)            ; Emit the low address byte first.
         CALL SINK_PUT               ; Append the low byte to the image.
         RET C                     ; Preserve a staged-output capacity failure.

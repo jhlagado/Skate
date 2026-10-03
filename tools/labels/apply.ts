@@ -210,9 +210,8 @@ for (const dir of ["tools", "tests", "docs", "README.md"]) {
     : walkFiles(path, [".ts", ".mjs", ".js", ".md", ".json"]);
   for await (const p of it) {
     const rel = p.slice(root.length + 1);
-    // The rename tooling and its plan quote old names on purpose.
+    // The rename tooling quotes names on purpose.
     if (rel.startsWith("tools/labels/")) continue;
-    if (rel === "docs/label-renaming-plan.md") continue;
     const t = await Deno.readTextFile(p);
     const n = rewriteOther(rel, t);
     if (n !== t) {

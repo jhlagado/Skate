@@ -221,7 +221,7 @@ PROC_END:
         LD (ST_PNEST),A
         LD HL,(ST_PC)              ; The skip target follows the descriptor.
         CALL BR_ABS                ; Convert the target to a COM address.
-        EX DE,HL                   ; .ALIAS takes the patch address in HL.
+        EX DE,HL                   ; SINK_FIX takes the patch address in HL.
         LD HL,(ST_SKIP)            ; Recover the jump-over patch location.
         JP SINK_FIX                 ; Patch the closure creation jump.
 

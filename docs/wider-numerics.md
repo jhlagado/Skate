@@ -116,7 +116,7 @@ where unary and binary operands live, where the third payload byte is read and
 written, how a result is returned and which value remains available on an
 error. A low-risk internal prototype is memory-record based: `HL` points to
 the left four-byte cell, `DE` points to the right cell for a binary operation,
-and the result is written to a non-allocating `SRTWIDE` cell whose address is
+and the result is written to a non-allocating `NUM_WIDE` cell whose address is
 returned in `HL`; carry clear reports success and carry set reports an error in
 `A`, with the original left record unchanged. That is a proposal for the
 prototype, not a change to the current ABI. A final contract must also define

@@ -3,7 +3,7 @@
 ; stays in the core because string->symbol uses it.
 ;
 ; Compiler-emitted symbols are length-prefixed literals.  The compiler publishes
-; a directory of their absolute addresses in DR_DIR..SRTSYME.  New spellings
+; a directory of their absolute addresses in DR_DIR..DR_DEND.  New spellings
 ; are copied into the fixed arena below the reader frames; those records remain
 ; pinned for the life of the program and are not managed heap objects.
 

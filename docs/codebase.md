@@ -87,9 +87,9 @@ results. They provide a second description of each contract alongside the
 assembly comments.
 
 The assembly comments explain register and flag usage beside the instructions.
-The label prefixes also identify ownership. `SC` is the scope compiler, `RT` is
-the runtime, `H` is managed storage, `N` is numeric work, `F16` is binary16
-arithmetic, `CS` is CP/M source input and `LEX` is tokenisation.
+Label names follow [docs/labels.md](labels.md): a global is `AREA_WHAT`
+(`PAIR_NEW`, `LX_NEXT`, `PUB_UNDO`), and the prefix tables there map each
+area to its files. Labels used only inside one routine are private (`.LOOP`).
 
 ## One program's journey
 
@@ -240,7 +240,7 @@ how those calls are encoded.
 * **RST vectors.** Startup installs `JP` instructions at `RST 08H` to `30H`
   (`RST_SET` in `core/invocation.asm`). The compiler's `EM_CALL` emits a
   one-byte `RST` instead of a three-byte `CALL` for the six helpers in its
-  `SCRSTT` table: `ARG_PUSH`, `L_LOAD`, `PRIM_OP`, `QT_PUSH`, `G_OPSH` and
+  `.VECTORS` table in `EM_CALL`: `ARG_PUSH`, `L_LOAD`, `PRIM_OP`, `QT_PUSH`, `G_OPSH` and
   `INV_OP`. The two tables must list the same helpers in the same order.
   `RST 38H` is left for a debugger.
 * **Inline operands.** Helpers that name a slot or a primitive read one byte
@@ -263,7 +263,7 @@ how those calls are encoded.
 The runtime image is ordered core first, then the standard-procedure module
 (`primitives/standard.asm`, from `STD_MOD`) and then the I/O module (the
 datum reader, file ports and CP/M transport, from `IO_START`). Before
-compiling, `SCSCAN` reads the whole source once. A standard procedure or
+compiling, `CMD_INIT` reads the whole source once. A standard procedure or
 `case` selects the core and standard module; `read` or a file opener selects
 the whole runtime; anything else loads the core alone. The compiler loads
 that prefix of `SKATE.RT` and places the global area and code straight after

@@ -43,7 +43,7 @@ The relevant files are [bindings/forms.asm](../../src/compiler/scope/bindings/fo
 
 In `bindings/forms.asm`, `LET_FORM` begins compilation of an ordinary `let`. It calls
 `LET_OPEN` to save the enclosing scope state and open the binding list. The
-loop at `SCLETB` checks that each binding has the required list structure.
+loop at `.BINDING` in `LET_FORM` checks that each binding has the required list structure.
 After reading a name, it reaches this sequence:
 
 ```asm
@@ -84,7 +84,7 @@ not by itself make the corresponding name visible to an initialiser.
 ## Emitting the store
 
 After reserving `base`, the compiler processes its initialiser, `40`. The next
-part of `SCLETB` connects that expression with its destination:
+part of `.BINDING` connects that expression with its destination:
 
 ```asm
         CALL LET_INIT
@@ -111,7 +111,7 @@ the generated program runs.
 
 `EM_STORE` has two paths. A local belonging to a procedure uses the active
 procedure environment. This `let` is outside a procedure and uses the static
-path at `SCSTFIX`. The beginning of that path is:
+path at `.STATIC` in `EM_STORE`. The beginning of that path is:
 
 ```asm
         LD A,11H
@@ -127,8 +127,7 @@ path at `SCSTFIX`. The beginning of that path is:
 ```
 
 The byte `11H` is the Z80 opcode for `LD DE,nn`. `SINK_PUT` appends it to the
-output; `scope/output-sink.asm` also gives that routine the older label
-`SCBYTE`, which some comments still use. The next two bytes will hold the
+output. The next two bytes will hold the
 destination address, but the final slot address is not available yet. `EM_FIXUP`
 records the location that needs patching and the emitter writes two zero
 placeholders. Later publication resolves that address. The rest of the store path emits a call to the runtime
@@ -176,10 +175,10 @@ the saved value in `A:HL`.
 ## Opening the body
 
 The compiler repeats the binding loop for `delta`. When it reaches the closing
-parenthesis of the binding list, it enters `SCLETBD`:
+parenthesis of the binding list, it enters `.BODY`:
 
 ```asm
-SCLETBD:
+.BODY:
         CALL BIND_ALL
         JP C,LET_FAIL
         CALL LET_BODY
@@ -214,7 +213,7 @@ The same proof contains `LETSTAR.SK8`:
 ```
 
 This also prints `42`, but the second initialiser now uses the first binding.
-In `SCLETSB`, the compiler calls `BIND_ADD` after completing each individual
+In `.BINDING` of `LET_STAR`, the compiler calls `BIND_ADD` after completing each individual
 binding. The next initialiser can therefore resolve that name. Ordinary `let`
 waits until `BIND_ALL` at the end of the list. The source-level difference between
 `let` and `let*` is visible in the placement of that table update.
