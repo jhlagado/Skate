@@ -24,7 +24,7 @@ Deno.test("four-byte bindings descend, load and store with a reserved byte", asy
   assert.equal(stored.tag, 3);
   assert.equal(stored.payload, 0x1234);
   assert.equal(memory[first.payload + 2], 0);
-  assert.equal(memory[first.payload + 3], 0x2b);
+  assert.equal(memory[first.payload + 3], 0x53);
 
   const loaded = call("SRTBLOAD", first.payload);
   assert.equal(loaded.tag, 3);
@@ -38,7 +38,7 @@ Deno.test("four-byte bindings descend, load and store with a reserved byte", asy
   const changed = call("SRTBSET", 0xabcd);
   assert.equal(changed.payload, 0xabcd);
   assert.equal(memory[first.payload + 2], 0);
-  assert.equal(memory[first.payload + 3], 0x2b);
+  assert.equal(memory[first.payload + 3], 0x53);
 });
 
 Deno.test("unreachable bindings return to a same-sized free block", async () => {
@@ -51,12 +51,12 @@ Deno.test("unreachable bindings return to a same-sized free block", async () => 
   const map = 0xd700;
   writeWord(memory, map, binding);
   memory[map + 2] = 0;
-  memory[map + 3] = 2;
+  memory[map + 3] = 0x20; // Promoted.
   writeWord(memory, assembled.address("SRTENV"), map);
   memory[assembled.address("SRTSLOTS")] = 1;
 
   call("SRTGC");
-  assert.equal(memory[binding + 3] & 0x70, 0x20);
+  assert.equal(memory[binding + 3] & 0xe0, 0x40);
 
   writeWord(memory, assembled.address("SRTENV"), 0);
   memory[assembled.address("SRTSLOTS")] = 0;
@@ -66,7 +66,7 @@ Deno.test("unreachable bindings return to a same-sized free block", async () => 
 
   const reused = call("SRTCELL");
   assert.equal(reused.payload, binding);
-  assert.equal(memory[binding + 3], 0x20);
+  assert.equal(memory[binding + 3], 0x40);
 });
 
 Deno.test("retained binding pages rebuild free cells after repeated collection", async () => {
@@ -79,7 +79,7 @@ Deno.test("retained binding pages rebuild free cells after repeated collection",
   const map = 0xd700;
   writeWord(memory, map, survivor);
   memory[map + 2] = 0;
-  memory[map + 3] = 2;
+  memory[map + 3] = 0x20; // Promoted.
   writeWord(memory, assembled.address("SRTENV"), map);
   memory[assembled.address("SRTSLOTS")] = 1;
 
@@ -102,7 +102,7 @@ Deno.test("retained binding pages rebuild free cells after repeated collection",
     allocated.includes(reused),
     `binding allocation escaped the retained page: ${reused.toString(16)}`,
   );
-  assert.equal(memory[reused + 3], 0x20);
+  assert.equal(memory[reused + 3], 0x40);
 });
 
 Deno.test("an active uninitialized binding remains allocated through collection", async () => {
@@ -111,12 +111,12 @@ Deno.test("an active uninitialized binding remains allocated through collection"
   const map = 0xd700;
   writeWord(memory, map, binding);
   memory[map + 2] = 0;
-  memory[map + 3] = 2;
+  memory[map + 3] = 0x20; // Promoted.
   writeWord(memory, assembled.address("SRTENV"), map);
   memory[assembled.address("SRTSLOTS")] = 1;
 
   call("SRTGC");
-  assert.equal(memory[binding + 3], 0x20);
+  assert.equal(memory[binding + 3], 0x40);
   assert.notEqual(call("SRTCELL").payload, binding);
 });
 
@@ -128,7 +128,7 @@ Deno.test("virgin binding flags cannot keep a page alive", async () => {
   const virgin = page + 4;
 
   // A stale mark-looking byte in an unallocated slot must not pin the page.
-  memory[virgin + 3] = 0x40;
+  memory[virgin + 3] = 0x80; // Marked but never allocated.
   assert.equal(readWord(memory, assembled.address("SRTPGFRE")), freeBefore - 1);
   call("SRTGC");
 
@@ -145,7 +145,7 @@ Deno.test("tail-owned cells clear their old value and initialization state", asy
   const descriptor = 0xc100;
   writeWord(memory, map, binding);
   memory[map + 2] = 0;
-  memory[map + 3] = 2;
+  memory[map + 3] = 0x20; // Promoted.
   writeWord(memory, assembled.address("SRTENV"), map);
   writeWord(memory, assembled.address("SRTDESC"), descriptor);
   memory[assembled.address("SRTSLOTS")] = 1;
@@ -154,10 +154,10 @@ Deno.test("tail-owned cells clear their old value and initialization state", asy
   memory[descriptor + 14] = 0; // captured slots.
   memory[binding] = 0x34;
   memory[binding + 1] = 0x12;
-  memory[binding + 3] = 0x2b;
+  memory[binding + 3] = 0x53;
 
   call("SRTOWN");
-  assert.deepEqual([...memory.slice(binding, binding + 4)], [0, 0, 0, 0x20]);
+  assert.deepEqual([...memory.slice(binding, binding + 4)], [0, 0, 0, 0x40]);
 });
 
 Deno.test("promoted recursive clear resets heap binding metadata", async () => {
@@ -167,10 +167,10 @@ Deno.test("promoted recursive clear resets heap binding metadata", async () => {
   memory[binding] = 0x34;
   memory[binding + 1] = 0x12;
   memory[binding + 2] = 0;
-  memory[binding + 3] = 0x2b;
+  memory[binding + 3] = 0x53;
   writeWord(memory, map, binding);
   memory[map + 2] = 0;
-  memory[map + 3] = 2;
+  memory[map + 3] = 0x20; // Promoted.
   writeWord(memory, assembled.address("SRTENV"), map);
   memory[assembled.address("SRTSLOTS")] = 1;
   cpu.b = 0;
@@ -181,7 +181,7 @@ Deno.test("promoted recursive clear resets heap binding metadata", async () => {
     0x34,
     0x12,
     0,
-    0x20,
+    0x40,
   ]);
 });
 
@@ -195,8 +195,8 @@ Deno.test("promotion keeps an inline pair live when allocation collects", async 
   // storage for the promotion allocation.
   const dead = call("SRTCELL").payload;
   writeWord(memory, map, pair.payload);
-  memory[map + 2] = pair.tag;
-  memory[map + 3] = 1;
+  memory[map + 2] = 0;
+  memory[map + 3] = 0x10 | pair.tag; // Initialized inline value.
   writeWord(memory, map + 4, 0x1357);
   memory[map + 6] = 3;
   memory[map + 7] = 1;
@@ -222,7 +222,7 @@ Deno.test("promotion keeps an inline pair live when allocation collects", async 
   const promoted = call("SRTPROM");
   assert.equal(promoted.carry, 0);
   assert.equal(readWord(memory, assembled.address("SRTGCNT")), 1);
-  assert.equal(memory[map + 3], 2);
+  assert.equal(memory[map + 3], 0x20);
   assert.deepEqual(
     [...memory.slice(map + 4, map + 8)],
     [0x57, 0x13, 3, 1],
@@ -522,7 +522,7 @@ Deno.test("a closure capture keeps a pair alive and releases both together", asy
   call("SRTBSTOR", pair.payload);
   writeWord(memory, map, binding);
   memory[map + 2] = 0;
-  memory[map + 3] = 2;
+  memory[map + 3] = 0x20; // Promoted.
   writeWord(memory, assembled.address("SRTENV"), map);
   memory[assembled.address("SRTSLOTS")] = 1;
   const closure = call("SRTMAKE", descriptor);

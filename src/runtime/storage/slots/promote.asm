@@ -15,7 +15,9 @@ SRTPROM:
         INC HL
         LD D,(HL)
         INC HL
+        INC HL                      ; Skip the extension byte.
         LD A,(HL)
+        AND 0FH
         LD (SRTSVTAG),A
         LD (SRTSVAL),DE
         CALL SRTCELL                ; The active inline value remains the root.
@@ -27,7 +29,7 @@ SRTPROM:
         ADD HL,DE
         LD A,(HL)
         LD (SRTSFLG),A
-        AND 1
+        AND SRTCLIVE
         JR Z,SRTPROUN               ; An uninitialized cell is already cleared.
         LD DE,(SRTCELLP)
         LD HL,(SRTSVAL)

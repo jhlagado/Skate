@@ -112,7 +112,7 @@ SRTOWNBT:
         LD DE,3
         ADD HL,DE
         LD A,(HL)
-        AND 10H
+        AND SRTBESC
 	JR NZ,SRTOWNNW             ; Escaped storage cannot be reused by this frame.
 	LD HL,(SRTCELLP)
 	XOR A                       ; Reuse clears the old payload before argument stores.
@@ -122,7 +122,7 @@ SRTOWNBT:
 	INC HL
 	LD (HL),A
 	INC HL
-	LD A,20H                    ; Retain allocation while clearing tag and initialization.
+	LD A,SRTBALOC               ; Retain allocation while clearing tag and initialization.
 	LD (HL),A
 	JR SRTOWNNX
 SRTOWNIN:
@@ -232,6 +232,6 @@ SRTESCAP:
         LD DE,3                    ; The packed binding flags follow the payload.
         ADD HL,DE
         LD A,(HL)
-        OR 10H                     ; Keep the initialized bit and add escape state.
+        OR SRTBESC                 ; Keep the initialized bit and add escape state.
         LD (HL),A
         RET

@@ -9,12 +9,10 @@ SRTSROOT:
         AND SRTSPROM
         JR NZ,SRTSRTP
         LD A,(SRTSFLG)
-        AND 1
+        AND SRTCLIVE
         RET Z
-        LD HL,(SRTSADR)
-        INC HL
-        INC HL
-        LD A,(HL)
+        LD A,(SRTSFLG)
+        AND 0FH
         LD HL,(SRTSADR)
         LD E,(HL)
         INC HL

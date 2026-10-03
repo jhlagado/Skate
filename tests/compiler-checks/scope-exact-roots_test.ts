@@ -233,14 +233,14 @@ Deno.test("an active environment traces its binding value", async () => {
   bindingPages(0x6a);
   writeWord(memory, map, binding);
   memory[map + 2] = 0;
-  memory[map + 3] = 2;
+  memory[map + 3] = 0x20; // Promoted.
   writeWord(memory, binding, pairBase);
-  memory[binding + 3] = 0x29;
+  memory[binding + 3] = 0x51;
   writeWord(memory, assembled.address("SRTENV"), map);
   memory[assembled.address("SRTSLOTS")] = 1;
   call("SRTGC");
   assert.equal(memory[pairBase + CAR_META], 0x43);
-  assert.equal(memory[binding + 3] & 0x70, 0x20);
+  assert.equal(memory[binding + 3] & 0xe0, 0x40);
 });
 
 Deno.test("suspended environments remain roots through their frame maps", async () => {
@@ -268,13 +268,13 @@ Deno.test("suspended environments remain roots through their frame maps", async 
   writeWord(memory, currentMap, currentBinding);
   writeWord(memory, callerMap, callerBinding);
   memory[currentMap + 2] = 0;
-  memory[currentMap + 3] = 2;
+  memory[currentMap + 3] = 0x20; // Promoted.
   memory[callerMap + 2] = 0;
-  memory[callerMap + 3] = 2;
+  memory[callerMap + 3] = 0x20; // Promoted.
   writeWord(memory, currentBinding, pairBase);
   writeWord(memory, callerBinding, pairBase + PAIR_BYTES);
-  memory[currentBinding + 3] = 0x29;
-  memory[callerBinding + 3] = 0x29;
+  memory[currentBinding + 3] = 0x51;
+  memory[callerBinding + 3] = 0x51;
   memory[currentDescriptor + 3] = 1;
   memory[callerDescriptor + 3] = 1;
   writeWord(memory, currentMap - 10 + 4, callerMap);
@@ -316,7 +316,7 @@ Deno.test("a captured closure traces only its declared binding slots", async () 
   writeWord(memory, closure, descriptor);
   writeWord(memory, closure + 2, binding);
   writeWord(memory, binding, pairBase);
-  memory[binding + 3] = 0x29;
+  memory[binding + 3] = 0x51;
   writeWord(memory, 0x6e00, closure);
   memory[0x6e02] = 0; // Clear extension byte.
   memory[0x6e03] = 0x12;
@@ -410,9 +410,9 @@ Deno.test("closure overflow fallback stays within the native stack", async () =>
       ? chainBase + (index + 2) * 8
       : 0xfe02;
     writeWord(memory, firstBinding, firstChild);
-    memory[firstBinding + 3] = (index + 1 < chainCount ? 2 : 0) | 0x28;
+    memory[firstBinding + 3] = (index + 1 < chainCount ? 2 : 0) | 0x50;
     writeWord(memory, secondBinding, secondChild);
-    memory[secondBinding + 3] = (index + 2 < chainCount ? 2 : 0) | 0x28;
+    memory[secondBinding + 3] = (index + 2 < chainCount ? 2 : 0) | 0x50;
   }
   bindingPages(0x68, 0x69, 0x6a, 0x6b, 0x6c);
   for (let index = 0; index < emptyCount; index++) {
@@ -463,7 +463,7 @@ Deno.test("an unaligned binding interior is rejected before its flags change", a
   const { assembled, memory, bindingStart, call } = fixture;
   const binding = 0x6a00;
   bindingStart(binding);
-  memory[binding + 3] = 0x29;
+  memory[binding + 3] = 0x51;
   memory[binding + 4] = 1;
   call("SRTBMARK", binding + 1);
   assert.equal(memory[binding + 4], 1);

@@ -31,16 +31,16 @@ SRTBOK:
         ADD HL,DE
         LD A,(HL)
         LD (SRTBFLG),A
-        AND 20H
+        AND SRTBALOC
         RET Z
         LD A,(SRTBFLG)
-        AND 40H
+        AND SRTBMRKD
         JR NZ,SRTBMDON
         LD A,(SRTBFLG)
-        OR 40H
+        OR SRTBMRKD
         LD (HL),A
         LD A,(SRTBFLG)
-        AND 8
+        AND SRTBINIT
         RET Z
         LD HL,(SRTBADDR)
         LD E,(HL)
@@ -49,7 +49,7 @@ SRTBOK:
         INC HL
         INC HL
         LD A,(HL)
-        AND 7
+        AND 0FH
         EX DE,HL
         JP SRTMVALU
 SRTBMDON:

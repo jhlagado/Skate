@@ -2,10 +2,12 @@
 ; SRTSADDR: A = slot index, returns HL = slot address. SRTSLOAD reads a slot;
 ; SRTSSTOR and SRTSASET write A:HL; SRTSCLR clears one slot. SRTPROM may
 ; allocate and collect before publishing a captured value. SRTCLSC copies captures.
-; Slots hold payload, tag and flags inline until promotion, then point to a
-; managed binding. SRTENV is the active-map base and SRTSROOT scans each slot.
+; Slots use the cell layout: payload in bytes 0 and 1, byte 2 clear, and byte
+; 3 holding the tag in its low nibble with SRTCLIVE (initialized) and SRTSPROM
+; (promoted) above it.  Until promotion a slot holds its value inline; after
+; it, the payload points to a managed binding. SRTENV is the active-map base and SRTSROOT scans each slot.
 
-SRTSPROM EQU 2                     ; Active-slot bit meaning payload is a pointer.
+SRTSPROM EQU 20H                   ; Active-slot bit meaning payload is a pointer.
 
 ; Return the active four-byte slot address for the zero-based index in A.
 SRTSADDR:
@@ -42,14 +44,14 @@ SRTLINLD:
         INC HL
         LD D,(HL)                   ; Recover the payload high byte.
         INC HL
-        LD A,(HL)                   ; Recover the inline value tag.
-        LD (SRTSVTAG),A
-        INC HL
-        LD A,(HL)                   ; Bit zero records inline initialization.
-        AND 1
+        INC HL                      ; Skip the extension byte.
+        LD A,(HL)                   ; SRTCLIVE records inline initialization.
+        AND SRTCLIVE
         JP Z,SRTUNBD                ; Preserve the established unbound error.
+        LD A,(HL)
+        AND 0FH                     ; Return the inline tag in A.
+        LD (SRTSVTAG),A
         EX DE,HL                    ; Return the payload in HL.
-        LD A,(SRTSVTAG)             ; Return the inline tag in A.
         RET
 
 ; Store A:HL in the inline slot addressed by DE and publish initialization last.
@@ -62,12 +64,15 @@ SRTLINST:
         LD A,H
         LD (DE),A                   ; Publish the complete payload.
         INC DE
-        LD A,(SRTSVTAG)
-        LD (DE),A                   ; Publish the inline tag.
+        XOR A
+        LD (DE),A                   ; The extension byte stays clear.
         INC DE
-        LD A,(DE)                   ; Preserve reserved inline flag bits.
-        AND 0FEH
-        OR 1                        ; The value is initialized after all fields.
+        LD A,(DE)                   ; Preserve the promotion and reserved flags.
+        AND 0E0H
+        LD L,A
+        LD A,(SRTSVTAG)
+        OR SRTCLIVE                 ; The value is initialized after all fields.
+        OR L
         LD (DE),A
         LD A,(SRTSVTAG)
         LD HL,(SRTSVAL)
@@ -136,7 +141,7 @@ SRTSASET:
         AND SRTSPROM
         JR NZ,SRTSASTP
         LD A,(SRTSFLG)
-        AND 1
+        AND SRTCLIVE
         JP Z,SRTUNBD
         LD DE,(SRTSADR)
         LD HL,(SRTSVAL)
@@ -157,7 +162,7 @@ SRTSCLR:
         AND SRTSPROM
         JR NZ,SRTSCLRP
         LD A,(SRTSFLG)
-        AND 0FEH
+        AND 0FFH-SRTCLIVE
         LD HL,(SRTSADR)
         LD DE,3
         ADD HL,DE

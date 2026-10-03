@@ -98,7 +98,7 @@ SRTCLRC:
         INC HL
         INC HL
         LD A,(HL)
-        AND 70H
+        AND SRTBESC+SRTBALOC+SRTBMRKD
         LD (HL),A
         RET
 

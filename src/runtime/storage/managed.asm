@@ -15,18 +15,11 @@ SRTBLOAD:
         INC HL
         INC HL
         LD A,(HL)
-        LD (SRTTAG),A
-        AND 8
+        AND SRTBINIT
         JP Z,SRTUNBD
-        LD A,(SRTTAG)
-        AND 80H
-        JR NZ,SRTBESCV
-        LD A,(SRTTAG)
-        AND 7
-        EX DE,HL
-        RET
-SRTBESCV:
-        LD A,8
+        LD A,(HL)
+        AND 0FH                    ; The stored tag, eight included.
+        LD (SRTTAG),A
         EX DE,HL
         RET
 
@@ -40,20 +33,14 @@ SRTBSTOR:
         LD A,H
         LD (DE),A
         INC DE
+        XOR A
+        LD (DE),A                  ; The extension byte stays clear.
         INC DE
         LD A,(DE)
-        AND 70H
-        LD B,A
+        AND SRTBESC+SRTBALOC+SRTBMRKD
+        LD B,A                     ; Keep the escape, allocation and mark bits.
         LD A,(SRTTAG)
-        CP 8
-        JR Z,SRTBTESC
-        AND 7
-        OR 28H
-        JR SRTBTAG
-SRTBTESC:
-        LD A,80H
-        OR 28H
-SRTBTAG:
+        OR SRTBINIT+SRTBALOC       ; The value is initialized and allocated.
         OR B
         LD (DE),A
         LD A,(SRTTAG)
@@ -69,7 +56,7 @@ SRTBSET:
         INC DE
         INC DE
         LD A,(DE)
-        AND 8
+        AND SRTBINIT
         JP Z,SRTUNBD
         LD DE,(SRTCELLP)
         LD A,(SRTATMP)
@@ -254,7 +241,7 @@ SRTCELOK:
         INC HL
         LD (HL),A                   ; Keep the future payload extension zero.
         INC HL
-        LD A,20H                    ; Allocation is distinct from initialization.
+        LD A,SRTBALOC               ; Allocation is distinct from initialization.
         LD (HL),A
         LD HL,(SRTCELLP)            ; Return the new cell address in HL.
         RET

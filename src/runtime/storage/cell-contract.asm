@@ -12,6 +12,12 @@ SRTCELW        EQU 4                ; One value cell occupies four bytes.
 ; and the record's flags in its high nibble.  Bit 4 marks a live or
 ; initialized record; static slots keep their escape mark in bit 7.
 SRTCLIVE       EQU 10H              ; Live or initialized record.
+
+; Heap binding cells keep their tag in the low nibble too, with these flags.
+SRTBINIT       EQU 10H              ; The binding holds a value.
+SRTBESC        EQU 20H              ; A closure has captured it.
+SRTBALOC       EQU 40H              ; The cell is allocated.
+SRTBMRKD       EQU 80H              ; The collector has marked it.
 SRTPAIRW       EQU 8                ; A pair is two adjacent cells.
 SRTBCAP        EQU 64               ; A 256-byte binding page holds 64 cells.
 SRTCP0         EQU 0                ; Payload low byte.

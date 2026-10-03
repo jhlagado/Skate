@@ -159,7 +159,7 @@ SRTBPGSL:
         LD A,(HL)
         LD (SRTBFLG),A
         LD A,(SRTBFLG)
-        AND 40H
+        AND SRTBMRKD
         JR NZ,SRTBPGLV
 SRTBPGFR:
         ; Every unmarked cell is reusable.  This includes cells reclaimed by
@@ -197,7 +197,7 @@ SRTBPGLV:
         INC HL
         INC HL
         LD A,(HL)
-        AND 0BFH
+        AND 0FFH-SRTBMRKD
         LD (HL),A                  ; Surviving cells lose only their mark bit.
         LD A,(SRTBPLIV)
         INC A
