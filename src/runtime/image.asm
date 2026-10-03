@@ -39,3 +39,4 @@
 %INCLUDE "rest.asm"
 %INCLUDE "apply.asm"
 %INCLUDE "escape.asm"
+%INCLUDE "quoted.asm"

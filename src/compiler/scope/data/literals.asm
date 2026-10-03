@@ -177,9 +177,17 @@ SCLTMISS:
         OR A
         RET
 
-; Emit a literal pointer placeholder and remember its record index.
+; Emit a literal pointer placeholder and remember its record index.  Inside a
+; quoted-data encoding the pointer is preceded by code 6 (symbol) or 7
+; (string) instead of LD HL, and no tag load follows.
 SCLITPTR:
+        LD A,(SCQENC)
+        OR A
         LD A,21H
+        JR Z,.OPCODE
+        LD A,(SCLITKND)            ; Kinds four and five become codes 6 and 7.
+        ADD A,2
+.OPCODE:
         CALL SINKBYTE
         RET C
         LD HL,(SCPC)
@@ -194,6 +202,9 @@ SCLITPTR:
         RET C
         CALL SINKBYTE
         RET C
+        LD A,(SCQENC)
+        OR A
+        RET NZ                     ; Carry is clear: the encoding has no tag.
         LD A,3EH
         CALL SINKBYTE
         RET C
@@ -386,6 +397,7 @@ SCSYMIDX:  DB 0                   ; Literal record cursor during directory emiss
 SCSYMBAS: DW 0                   ; Staged directory start, including its count byte.
 SCSYMEND:  DW 0                   ; Staged directory exclusive end.
 SCSYMPTR:  DW 0                   ; Literal pointer held across sink writes.
+SCQENC:    DB 0                   ; Nonzero while a quoted list is encoded.
 SCQCOUNT:  DB 0
 SCQDOT:    DB 0
 SCQCNT:    DB 0                   ; Number of static quoted-list cache cells.

@@ -1,5 +1,5 @@
 ; Scope compiler quoted forms and list construction.
-; Entry points: SCQUOTEF, SCQDAT, SCQLIST and SCQBUILD.
+; Entry points: SCQUOTEF, SCQDAT and SCQLIST.
 ; Included in compiler order by ../data.asm.
 
 ; Quoted data and copied literal support for the compact compiler.
@@ -8,6 +8,12 @@
 ; generated runtime's four-byte data stack: each element is emitted normally,
 ; pushed at run time, and folded into pairs when the closing parenthesis arrives.
 ; Symbols and strings are copied into the output as length-prefixed literals.
+
+QT_LIST  EQU 1                     ; Encoding codes; see src/runtime/quoted.asm.
+QT_END   EQU 2
+QT_DOT   EQU 3
+QT_IMM   EQU 4
+QT_BYTE  EQU 5
 
 ; Compile the explicit (quote datum) form.
 SCQUOTEF:
@@ -26,56 +32,89 @@ SCQSHRT:
         JP Z,SCQNEST               ; Preserve it as (quote datum).
         JP SCQDAT                  ; Emit the quoted value directly.
 
-; Emit the pair represented by a nested apostrophe: (quote datum).
+; Quoted lists are compiled as data: CALL QT_BUILD, the cache and end words,
+; then an encoding of the whole list that the runtime decodes once (see
+; src/runtime/quoted.asm).  SCQENC is set while an encoding is open, so the
+; datum compilers below write encoding bytes instead of code.
+
+; Open an encoding: CALL QT_BUILD, the cache word and the end placeholder.
+SCQHEAD:
+        LD HL,QT_BUILD
+        CALL SCCALL
+        RET C
+        LD A,(SCQCNT)
+        CP 255                     ; The byte-sized cache index must not wrap.
+        JP NC,SCCAP
+        LD (SCQFIX),A
+        INC A
+        LD (SCQCNT),A
+        LD HL,(SCPC)
+        LD A,4                     ; Fixup kind four selects quoted cache cells.
+        LD (SCFKIND),A
+        LD A,(SCQFIX)
+        LD (SCFSLOT),A
+        CALL SCFIX
+        RET C
+        XOR A
+        CALL SINKBYTE
+        RET C
+        CALL SINKBYTE
+        RET C
+        LD HL,(SCPC)               ; The end word is patched when the list closes.
+        CALL SCBRPUSH
+        RET C
+        XOR A
+        CALL SINKBYTE
+        RET C
+        CALL SINKBYTE
+        RET C
+        LD A,1
+        LD (SCQENC),A
+        RET
+
+; Close the encoding: execution resumes at the current address.
+SCQFOOT:
+        XOR A
+        LD (SCQENC),A
+        LD HL,(SCPC)
+        CALL SCABS
+        JP SCBRPAT
+
+; A nested apostrophe is the two-element list (quote datum).
 SCQNEST:
-        LD A,(SCQFIX)              ; Preserve the enclosing literal's cache index.
-        PUSH AF
-        CALL SCQCACH                ; Nested quote pairs are literals as well.
-        JP C,SCNFAIL
+        LD A,(SCQENC)
+        OR A
+        JR NZ,SCQNESTE
+        CALL SCQHEAD
+        RET C
+        CALL SCQNESTE
+        RET C
+        JP SCQFOOT
+SCQNESTE:
+        LD A,QT_LIST
+        CALL SINKBYTE
+        RET C
         LD HL,SCQUOTE+1            ; Intern the reader's ordinary quote name.
         LD BC,5
         LD IX,SCNCTX
         CALL INTERN
-        JP C,SCNFAIL
+        RET C
         LD A,4                     ; The quote operator is a symbol literal.
         CALL SCLITADD
-        JP C,SCNFAIL
-        CALL SCQPUT                ; Push quote as the first pair element.
-        JP C,SCNFAIL
-        CALL SCNEXT                ; Read the datum after the nested prefix.
-        JP C,SCNFAIL
+        RET C
+        CALL SCNEXT                ; The datum after the nested prefix.
+        RET C
         CALL SCQDAT
-        JP C,SCNFAIL
-        CALL SCQPUT                ; Push the quoted datum as the second element.
-        JP C,SCNFAIL
-        LD A,2
-        LD (SCQCOUNT),A
-        XOR A
-        LD (SCQDOT),A
-        LD B,A
-        CALL SCQBUILD
-        JP C,SCNFAIL
-        CALL SCQSTOR
-        JP C,SCNFAIL
-        LD HL,(SCPC)
-        CALL SCBRPAT
-        JP C,SCNFAIL
-        POP AF                     ; Restore the enclosing cache index.
-        LD (SCQFIX),A
-        RET
-
-SCNFAIL:
-        POP AF                     ; Keep compiler stack balanced on every exit.
-        LD (SCQFIX),A
-        SCF
-        RET
+        RET C
+        LD A,QT_END
+        JP SINKBYTE
 
 ; Dispatch one quoted reader event.
 SCQDAT:
         CP 7                       ; Exact integers and booleans are immediate.
-        JP Z,SCNUM                 ; Existing scalar emission preserves RTAG.
+        JR Z,SCQDNUM
         CP 87H                     ; Binary16 numeric events retain their marker in replay.
-        JP Z,FNUM                  ; Emit the tag-zero payload as a scalar literal.
+        JR Z,SCQDF16
         CP 5                       ; A symbol is copied as an immutable literal.
         JP Z,SCQSYM
         CP 8                       ; A string is copied with its byte length.
@@ -85,6 +124,53 @@ SCQDAT:
         CP 3                       ; Quoted shorthand inside data is a pair.
         JP Z,SCQNEST               ; Construct (quote datum) without collapsing it.
         JP SCSYN                   ; Close, dot and EOF are invalid datum starts.
+SCQDNUM:
+        LD A,(SCQENC)
+        OR A
+        JP Z,SCNUM                 ; Outside a list, emit the value as code.
+        JR SCQENUM
+SCQDF16:
+        LD A,(SCQENC)
+        OR A
+        JP Z,FNUM
+        LD (SCVTMP),HL
+        LD C,0                     ; Binary16 values use tag zero.
+        JR SCQEWID
+
+; Encode a reader scalar: code 5 for a byte-sized exact integer, otherwise
+; code 4 with its payload and tag.
+SCQENUM:
+        LD (SCVTMP),HL
+        LD A,(RTAG)
+        LD C,A
+        OR A
+        JR NZ,SCQETAG
+        LD A,H
+        CP 0FFH
+        JR Z,SCQEWID               ; A character keeps its FFxx payload.
+        LD A,0FEH                  ; A boolean becomes FE00H or FE01H.
+        LD (SCVTMP+1),A
+        JR SCQEWID
+SCQETAG:
+        CP 3
+        JP NZ,SCUNSUP              ; Other scalar tags are not supported.
+        LD A,H
+        OR A
+        JR NZ,SCQEWID
+        LD A,QT_BYTE
+        CALL SINKBYTE
+        RET C
+        LD A,(SCVTMP)
+        JP SINKBYTE
+SCQEWID:
+        LD A,QT_IMM
+        CALL SINKBYTE              ; SINKBYTE keeps C, the tag.
+        RET C
+        LD HL,(SCVTMP)
+        CALL SCWORD
+        RET C
+        LD A,C
+        JP SINKBYTE
 
 ; Copy a quoted symbol into the output and return a tag-four value.
 SCQSYM:
@@ -96,198 +182,127 @@ SCQSTR:
         LD A,5                     ; Runtime tag five identifies a string literal.
         JP SCLITADD
 
-; Compile one quoted list.  Elements are pushed in source order; the runtime
-; folds them from the end so both proper and dotted lists retain that order.
+; Compile one quoted list.  The outermost list opens the encoding; nested
+; lists are encoded within it.  An outermost '() is just the constant.
 SCQLIST:
-        LD A,(SCQFIX)              ; Preserve the enclosing literal's cache index.
-        PUSH AF
-        LD A,(SCQCOUNT)            ; Preserve a surrounding quoted-list cursor.
-        PUSH AF
-        LD A,(SCQDOT)              ; Preserve a surrounding dotted-list marker.
-        PUSH AF
-        CALL SCQCACH                ; Probe the stable cell for this literal.
-        JP C,SCQFAIL
-        XOR A                      ; The new list starts with no elements.
-        LD (SCQCOUNT),A
-        LD (SCQDOT),A
-SCQLP:
-        CALL SCNEXT                ; Read an element, dot or the closing parenthesis.
-        JP C,SCQFAIL               ; Restore the surrounding list state.
-        CP 2                       ; A close finishes a proper list.
-        JP Z,SCQEND                ; The list body can exceed a short-branch range.
-        CP 4                       ; A dot switches to one required tail datum.
-        JP Z,SCQDOTF
-        CP 0                       ; EOF cannot close an open quoted list.
-        JP Z,SCQFAIL
-        LD (SCQEV),A               ; Save the event while nested code is emitted.
-        LD (SCQVAL),HL             ; Preserve its payload across SCQDAT.
-        LD A,(RTAG)
-        LD (SCQTAG),A
-        LD A,(SCQCOUNT)            ; Keep this list's counters below nested data.
-        PUSH AF
-        LD A,(SCQDOT)
-        PUSH AF
-        LD A,(SCQTAG)
-        LD (RTAG),A
-        LD A,(SCQEV)
-        LD HL,(SCQVAL)
-        CALL SCQDAT                ; A:HL becomes the element's run-time value.
-        JP C,SCQBADN               ; Balance both saved counters on failure.
-        POP AF                     ; Restore this list's dotted marker.
-        LD (SCQDOT),A
-        POP AF                     ; Restore this list's element count.
-        LD (SCQCOUNT),A
-        CALL SCQPUT                ; Push the complete value at run time.
-        JP C,SCQFAIL               ; Unwind the enclosing list state.
-        LD A,(SCQCOUNT)
-        INC A
-        LD (SCQCOUNT),A
-        CP 64                      ; Keep the generated data stack bounded.
-        JP NC,SCQCAPF
-        JP SCQLP
-
-SCQDOTF:
-        LD A,(SCQDOT)              ; A second dot is malformed.
+        LD A,(SCQENC)
         OR A
-        JP NZ,SCQFAIL
-        LD A,(SCQCOUNT)            ; A dotted list needs at least one head.
-        OR A
-        JP Z,SCQFAIL
-        CALL SCNEXT                ; Read exactly one dotted-tail datum.
-        JP C,SCQFAIL
+        JR NZ,SCQLBODY
+        CALL SCNEXT                ; The first element or the close.
+        RET C
         CP 2
-        JP Z,SCQFAIL
-        CP 4
-        JP Z,SCQFAIL
-        LD (SCQEV),A
-        LD (SCQVAL),HL
+        JR NZ,SCQLSOME
+        LD HL,0FE02H               ; The empty list.
+        JP SCIMM
+SCQLSOME:
+        PUSH AF                    ; Keep the first event across the header.
+        PUSH HL
         LD A,(RTAG)
-        LD (SCQTAG),A
-        LD A,(SCQCOUNT)
         PUSH AF
-        LD A,(SCQDOT)
-        PUSH AF
-        LD A,(SCQTAG)
+        CALL SCQHEAD
+        JR C,SCQLHERR
+        POP AF
         LD (RTAG),A
-        LD A,(SCQEV)
-        LD HL,(SCQVAL)
-        CALL SCQDAT
-        JP C,SCQBADN
+        POP HL
         POP AF
-        LD (SCQDOT),A
+        CALL SCQLGIVN
+        RET C
+        JP SCQFOOT
+SCQLHERR:
         POP AF
-        LD (SCQCOUNT),A
-        CALL SCQPUT
-        JP C,SCQFAIL               ; Unwind the enclosing list state.
-        LD A,(SCQCOUNT)
-        INC A
-        LD (SCQCOUNT),A
-        LD A,1
-        LD (SCQDOT),A
-        CALL SCNEXT                ; The dotted tail must be followed by close.
-        JP C,SCQFAIL
-        CP 2
-        JP NZ,SCQFAIL
-
-SCQEND:
-        LD A,(SCQCOUNT)            ; Runtime receives the number of stack values.
-        LD A,(SCQDOT)              ; Read the dotted-list marker through A.
-        LD B,A                     ; B distinguishes proper from dotted folding.
-        CALL SCQBUILD              ; Return the completed list as A:HL.
-        JP C,SCQFAIL
-        CALL SCQSTOR               ; Retain the pair graph for later evaluations.
-        JP C,SCQFAIL
-        LD HL,(SCPC)               ; Cache hits branch to the code after this store.
-        CALL SCBRPAT
-        JP C,SCQFAIL
-        POP AF                     ; Restore the enclosing dotted marker.
-        LD (SCQDOT),A
-        POP AF                     ; Restore the enclosing element count.
-        LD (SCQCOUNT),A
-        POP AF                     ; Restore the enclosing literal's cache index.
-        LD (SCQFIX),A
-        OR A                       ; Return carry clear with the list value live.
-        RET
-
-SCQBADN:
-        POP AF                     ; Discard the saved dotted marker.
-        POP AF                     ; Discard the saved element count.
-SCQFAIL:
-        POP AF                     ; Restore the enclosing dotted marker.
-        LD (SCQDOT),A
-        POP AF                     ; Restore the enclosing element count.
-        POP AF                     ; Restore the enclosing literal's cache index.
-        LD (SCQFIX),A
+        POP HL
+        POP AF
         SCF
         RET
 
-SCQCAPF:
-        CALL SCCAP                 ; Preserve the capacity diagnostic text.
-        JP SCQFAIL                 ; Unwind the three saved list-state words.
-
-; Emit the run-time data-stack push used by quoted lists.
-SCQPUT:
-        LD HL,SRTQPUT
-        JP SCCALL
-
-; Emit the run-time list fold.  A is the number of values and B the dot flag.
-SCQBUILD:
-        LD A,3EH
+; Encode one list: code 1, its elements, then code 2, or code 3 after a
+; dotted tail.  SCQLGIVN starts with the first event already read.
+SCQLBODY:
+        CALL SCNEXT
+        RET C
+SCQLGIVN:
+        PUSH AF                    ; Keep the first event across code 1.
+        PUSH HL
+        LD A,(RTAG)
+        PUSH AF
+        LD A,QT_LIST
         CALL SINKBYTE
+        JR C,SCQLGERR
+        POP AF
+        LD (RTAG),A
+        POP HL
+        LD A,(SCQCOUNT)            ; Keep the enclosing list's element count
+        EX (SP),HL                 ; below the first event.
+        LD B,H                     ; B is the event kind from the saved AF.
+        LD H,A
+        EX (SP),HL                 ; The stack word is now the count, HL the payload.
+        XOR A
+        LD (SCQCOUNT),A
+        LD A,B
+        JR SCQLGOT
+SCQLGERR:
+        POP AF
+        POP HL
+        POP AF
+        SCF
+        RET
+SCQLP:
+        CALL SCNEXT                ; An element, a dot or the close.
+        JR C,SCQFAIL
+SCQLGOT:
+        CP 2
+        JR Z,SCQPROP
+        CP 4
+        JR Z,SCQDOTF
+        OR A                       ; EOF cannot close an open quoted list.
+        JR Z,SCQFAIL
+        CALL SCQELEM
+        JR C,SCQFAIL
+        JR SCQLP
+SCQDOTF:
+        LD A,(SCQCOUNT)            ; A dotted list needs at least one head.
+        OR A
+        JR Z,SCQFAIL
+        CALL SCNEXT                ; Exactly one tail datum.
+        JR C,SCQFAIL
+        CP 2
+        JR Z,SCQFAIL
+        CP 4
+        JR Z,SCQFAIL
+        OR A
+        JR Z,SCQFAIL
+        CALL SCQELEM
+        JR C,SCQFAIL
+        CALL SCNEXT                ; The tail must be followed by the close.
+        JR C,SCQFAIL
+        CP 2
+        JR NZ,SCQFAIL
+        LD A,QT_DOT
+        JR SCQCLOSE
+SCQPROP:
+        LD A,QT_END
+SCQCLOSE:
+        CALL SINKBYTE
+        JR C,SCQFAIL
+        POP AF
+        LD (SCQCOUNT),A
+        OR A                       ; POP AF restored stale flags.
+        RET
+SCQFAIL:
+        POP AF
+        LD (SCQCOUNT),A
+        SCF
+        RET
+
+; Encode one element, counting it against the quoted-data stack bound.
+SCQELEM:
+        CALL SCQDAT
         RET C
         LD A,(SCQCOUNT)
-        CALL SINKBYTE
-        RET C
-        LD A,6                     ; LD B,n carries the dotted-list marker.
-        CALL SINKBYTE
-        RET C
-        LD A,(SCQDOT)
-        CALL SINKBYTE
-        RET C
-        LD HL,SRTQBLD
-        JP SCCALL
-
-; Reserve one static cache cell and emit its hit probe.  A cache hit returns
-; directly through the conditional branch; a miss falls through to list code.
-SCQCACH:
-        LD A,(SCQCNT)
-        CP 255                      ; The byte-sized cache index must not wrap.
-        JP NC,SCCAP
-        LD (SCQFIX),A
         INC A
-        LD (SCQCNT),A
-        LD A,21H                    ; LD HL,nn receives the cache-cell address.
-        CALL SINKBYTE
-        RET C
-        LD HL,(SCPC)
-        LD A,4                       ; Fixup kind four selects quoted cache cells.
-        LD (SCFKIND),A
-        LD A,(SCQFIX)
-        LD (SCFSLOT),A
-        CALL SCFIX
-        RET C
-        XOR A
-        CALL SINKBYTE
-        RET C
-        CALL SINKBYTE
-        RET C
-        LD HL,SRTQGET
-        CALL SCCALL
-        RET C
-        LD A,0D2H                    ; JP NC skips the builder when the cache hits.
-        CALL SINKBYTE
-        RET C
-        LD HL,(SCPC)
-        CALL SCBRPUSH
-        RET C
-        XOR A
-        CALL SINKBYTE
-        RET C
-        JP SINKBYTE
+        LD (SCQCOUNT),A
+        CP 64                      ; The decoder's stack is bounded too.
+        JP NC,SCCAP
+        OR A
+        RET
 
-; Emit the static store that publishes a freshly built quoted pair graph.
-SCQSTOR:
-        LD A,(SCQFIX)
-        LD L,A
-        LD A,4                       ; The cache cells use the fourth fixup kind.
-        JP SCSTORE

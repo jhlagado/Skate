@@ -137,6 +137,7 @@ SCSETUP:
         LD (SCLITUSE+1),A
         LD (SCQCNT),A             ; No quoted-list cache cells are reserved yet.
         LD (SCQCOUNT),A            ; No quoted-list elements are pending.
+        LD (SCQENC),A              ; No quoted list is being encoded.
         LD (SCQDOT),A              ; No dotted-list marker is active.
         LD (SCBDEP),A             ; No compiler lambda frame is active.
         LD (SCBMODE),A            ; No body is isolating its tail candidates.

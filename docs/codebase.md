@@ -184,6 +184,7 @@ native compiler. The table follows its include order; paths are relative to
 | File or group | Responsibility |
 | --- | --- |
 | `storage/cell-contract.asm` | Four-byte value-cell layout constants; emits no bytes |
+| `core/entry.asm` and the `*/state.asm` files | The entry at 0100H, then the runtime's state ahead of its code |
 | `core.asm` and `core/` | Startup, environment, invocation and frame coordination |
 | `storage/stack-slots.asm` and `storage/slots/` | Inline local bindings and promotion of captured bindings |
 | `storage/managed.asm` | Managed closure and four-byte binding storage |
@@ -202,6 +203,8 @@ native compiler. The table follows its include order; paths are relative to
 | `strings.asm`, `managed-strings.asm` and `strings/` | String and character primitives and managed string storage |
 | `vectors.asm` and `vectors/` | Vector operations, storage and tracing |
 | `rest.asm`, `apply.asm` and `escape.asm` | Rest arguments, proper-list application and `call/ec` |
+| `primitives/standard.asm` | Standard procedures added after the original set: pair mutation, `equal?`, comparisons, conversions, list operations and `case` key matching |
+| `quoted.asm` | Decodes the compact encoding of quoted lists into pairs on first use |
 
 Two runtime files are not part of `image.asm`. `loader.asm` is assembled into
 the compiler, and `external-effects.asm`, the optional provider-facing CP/M
@@ -228,6 +231,32 @@ Managed strings use the same separation between operations and storage in
 `strings/state.asm`. Strings contain bytes rather than managed references, so
 their collector support only marks a leaf. The composition files retain the
 original emitted order.
+
+## Generated code
+
+Generated code is mostly calls into the runtime, so its size is dominated by
+how those calls are encoded.
+
+* **RST vectors.** Startup installs `JP` instructions at `RST 08H` to `30H`
+  (`RST_SET` in `core/invocation.asm`). The compiler's `SCCALL` emits a
+  one-byte `RST` instead of a three-byte `CALL` for the six helpers in its
+  `SCRSTT` table: `ARG_PUSH`, `L_LOAD`, `PRIM_OP`, `SRTQPUT`, `G_OPSH` and
+  `SRTOPINV`. The two tables must list the same helpers in the same order.
+  `RST 38H` is left for a debugger.
+* **Inline operands.** Helpers that name a slot or a primitive read one byte
+  after the call and return past it: `L_LOAD`, `L_STORE` and `L_SET` take a
+  procedure-local slot, `G_LOAD`, `G_STORE`, `G_SET` and `G_OPSH` a global
+  slot, and `PRIM_OP` and `PRIM_TL` a primitive's payload byte. Globals sit
+  in a fixed 1 KB area after the runtime, so the slot number is enough.
+* **Arguments.** Each argument is pushed with `ARG_PUSH`, which records an
+  exact root and pushes the value below the return address.
+* **Descriptors.** Each procedure's descriptor follows its body: body
+  address, arity, the shared slot extent (patched at the end), four formal
+  fields, a mask width `W`, then `W` bytes of owned-slot mask and `W` bytes of
+  capture mask.
+* **Quoted lists.** A quoted list is `CALL QT_BUILD`, a cache-cell word, the
+  address after the data and a compact encoding of the list, decoded into
+  pairs on first use by `quoted.asm`. The encoding is described there.
 
 ## Following common features
 

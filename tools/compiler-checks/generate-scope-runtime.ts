@@ -54,6 +54,7 @@ const values = [
   `SRTOPUSH EQU ${address("SRTOPUSH")}`,
   `SRTOPPOP EQU ${address("SRTOPPOP")}`,
   `CASE_EQ EQU ${address("CASE_EQ")}`,
+  `QT_BUILD EQU ${address("QT_BUILD")}`,
   `ARG_PUSH EQU ${address("ARG_PUSH")}`,
   `ARG_POP EQU ${address("ARG_POP")}`,
   `PRIM_OP EQU ${address("PRIM_OP")}`,
