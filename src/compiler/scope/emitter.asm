@@ -228,7 +228,7 @@ EM_LOAD:
         RET C
         CALL EM_ADDR              ; Emit the address or its fixup placeholder.
         RET C
-        LD HL,SRTLDA         ; Generated code calls the runtime slot loader.
+        LD HL,RT_LOAD        ; Generated code calls the runtime slot loader.
         JP EM_CALL                ; Append the call and return.
 
 ; Emit a store to a compiler-assigned slot.  The value remains in A/HL for the
@@ -265,11 +265,11 @@ EM_STORE:
         RET C
         CALL EM_ADDR              ; Emit the address or its fixup placeholder.
         RET C
-        LD HL,SRTSTA                ; Generated code calls the runtime slot store.
+        LD HL,RT_STORE              ; Generated code calls the runtime slot store.
         LD A,(ST_CHECK)         ; Mutation selects the checked static helper.
         OR A
         JR Z,.HELPER               ; Definitions initialize the destination.
-        LD HL,SRTSETS
+        LD HL,RT_SET
 .HELPER:
         JP EM_CALL                ; Append the call and return.
 

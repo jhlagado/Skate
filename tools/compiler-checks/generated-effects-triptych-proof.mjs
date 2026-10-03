@@ -35,7 +35,7 @@ const providerImage = await loadAssembly(
 assert.equal(compiler.image.base, 0);
 assert.equal(
   providerImage.image.bytes.length - 0x100,
-  compiler.address("SRTLEN"),
+  compiler.address("RT_SIZE"),
 );
 let disk = installCpm22File(backing, {
   name: "SKATE.COM",

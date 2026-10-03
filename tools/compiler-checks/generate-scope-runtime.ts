@@ -36,15 +36,15 @@ function offset(name: string): number {
 
 const values = [
   "; Runtime addresses used by the scope-control compiler.",
-  `SRTLEN EQU ${payload.length}`,
-  `SRTLCORE EQU ${offset("STD_MOD")}`,
-  `SRTLSTD EQU ${offset("IO_START")}`,
-  `SRTCLP EQU ${offset("RT_CALL") + 1}`,
-  `SRTLDA EQU ${address("RT_LOAD")}`,
+  `RT_SIZE EQU ${payload.length}`,
+  `RT_CORE EQU ${offset("STD_MOD")}`,
+  `RT_STD EQU ${offset("IO_START")}`,
+  `RT_CALLP EQU ${offset("RT_CALL") + 1}`,
+  `RT_LOAD EQU ${address("RT_LOAD")}`,
   `QT_CACHE EQU ${address("QT_CACHE")}`,
-  `SRTSTA EQU ${address("RT_STORE")}`,
-  `SRTSETS EQU ${address("RT_SET")}`,
-  `SRTFAL EQU ${address("RT_TEST")}`,
+  `RT_STORE EQU ${address("RT_STORE")}`,
+  `RT_SET EQU ${address("RT_SET")}`,
+  `RT_TEST EQU ${address("RT_TEST")}`,
   `RT_ADD EQU ${address("RT_ADD")}`,
   `RT_SUB EQU ${address("RT_SUB")}`,
   `RT_MUL EQU ${address("RT_MUL")}`,
@@ -79,7 +79,7 @@ const values = [
   `FRM_SET EQU ${address("FRM_SET")}`,
   `FRM_CLR EQU ${address("FRM_CLR")}`,
   `RT_CLR EQU ${address("RT_CLR")}`,
-  `SRTHEP EQU ${address("HEAP_LIM")}`,
+  `HEAP_LIM EQU ${address("HEAP_LIM")}`,
   `RT_LIMIT EQU ${offset("RT_LIMIT")}`,
   `G_BASE EQU ${offset("G_BASE")}`,
   `G_END EQU ${offset("G_END")}`,
@@ -87,9 +87,9 @@ const values = [
   `QT_STOP EQU ${offset("QT_STOP")}`,
   `DR_DIR EQU ${offset("DR_DIR")}`,
   `DR_DEND EQU ${offset("DR_DEND")}`,
-  `SRTLOW EQU ${address("RT_LOWSP")}`,
+  `RT_LOWSP EQU ${address("RT_LOWSP")}`,
   `NUM_ZERO EQU ${address("NUM_ZERO")}`,
-  `SRTPRI EQU ${address("OUT_SHOW")}`,
+  `OUT_SHOW EQU ${address("OUT_SHOW")}`,
   `QT_PUSH EQU ${address("QT_PUSH")}`,
   `QT_FOLD EQU ${address("QT_FOLD")}`,
   `CONS EQU ${address("CONS")}`,
@@ -100,7 +100,7 @@ const values = [
 ];
 const lines = [
   "; Runtime image generated from image.asm.",
-  "SRTIMAGE:",
+  "RT_IMAGE:",
 ];
 for (let index = 0; index < payload.length; index += 32) {
   const bytes = [...payload.slice(index, index + 32)].map((byte) =>
@@ -108,7 +108,7 @@ for (let index = 0; index < payload.length; index += 32) {
   );
   lines.push(`        DB ${bytes.join(",")}`);
 }
-lines.push("SRTIEND:");
+lines.push("RT_IEND:");
 await Deno.writeTextFile(
   new URL(
     "../../src/runtime/values.inc",

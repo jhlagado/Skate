@@ -31,7 +31,7 @@ assert.equal(compiler.image.base, 0);
 assert.equal(compiler.address("CMD_MAIN"), 0x0100);
 assert.ok(compiler.address("W_IMGEND") < 0x10000);
 const runtimeLength = provider.image.bytes.length - 0x0100;
-assert.equal(runtimeLength, compiler.address("SRTLEN"));
+assert.equal(runtimeLength, compiler.address("RT_SIZE"));
 const heapPointerAddress = provider.address("HEAP_LIM");
 const lowStackAddress = provider.address("RT_LOWSP");
 const bindingAllocationAddress = provider.address("CNT_BIND");

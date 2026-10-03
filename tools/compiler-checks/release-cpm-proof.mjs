@@ -267,7 +267,7 @@ const provider = await loadAssembly(
 const compilerBytes = compiler.image.bytes.slice(0x0100);
 const runtimeImage = provider.image.bytes.slice(0x0100);
 const runtimeLength = runtimeImage.length;
-assert.equal(runtimeLength, compiler.address("SRTLEN"));
+assert.equal(runtimeLength, compiler.address("RT_SIZE"));
 assert.ok(
   compilerBytes.length < 0x10000,
   "compiler does not fit the CP/M address space",

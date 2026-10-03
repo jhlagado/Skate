@@ -42,7 +42,7 @@ assert.ok(paths.length > 0, "no workload programs found");
 const { firmware, sourceDisk } = await loadCpmSystem();
 const compiler = await loadAssembly("src/compiler/scope/compiler.asm");
 const provider = await loadAssembly("src/runtime/image.asm");
-assert.equal(provider.image.bytes.length - 0x100, compiler.address("SRTLEN"));
+assert.equal(provider.image.bytes.length - 0x100, compiler.address("RT_SIZE"));
 
 const counters = {
   lowSp: provider.address("RT_LOWSP"),

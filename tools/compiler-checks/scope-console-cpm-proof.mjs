@@ -35,7 +35,7 @@ const provider = await loadAssembly(
   "src/runtime/image.asm",
 );
 assert.equal(compiler.image.base, 0);
-assert.equal(provider.image.bytes.length - 0x100, compiler.address("SRTLEN"));
+assert.equal(provider.image.bytes.length - 0x100, compiler.address("RT_SIZE"));
 const heapPointerAddress = provider.address("HEAP_LIM");
 const lowStackAddress = provider.address("RT_LOWSP");
 const bindingAllocationAddress = provider.address("CNT_BIND");

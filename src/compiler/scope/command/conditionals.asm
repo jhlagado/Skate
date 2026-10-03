@@ -14,7 +14,7 @@ IF_FORM:
         LD (ST_TAIL),A             ; Test evaluation returns to the branch skeleton.
         CALL CMD_NEXT              ; Compile the test value.
         JR C,.FAIL                 ; Preserve a test-expression diagnostic.
-        LD HL,SRTFAL               ; Runtime helper returns Z only for #f.
+        LD HL,RT_TEST              ; Runtime helper returns Z only for #f.
         CALL EM_CALL               ; Check the test without changing its value.
         JR C,.FAIL                 ; Staged output is exhausted.
         CALL EM_JZ                 ; Emit JP Z,zero and return its patch address.
@@ -108,7 +108,7 @@ IF_LOGIC:
         PUSH AF
         CALL EM_PLAIN              ; Not final: its tail calls must return.
         JP C,.NEXTFAIL
-        LD HL,SRTFAL               ; Z means the value is #f; A:HL is kept.
+        LD HL,RT_TEST              ; Z means the value is #f; A:HL is kept.
         CALL EM_CALL
         JP C,.NEXTFAIL
         LD HL,13                   ; The mode is 13 bytes up.
@@ -195,7 +195,7 @@ IF_GUARD:
         LD (ST_TAIL),A             ; The test is never in tail position.
         CALL CMD_NEXT
         JR C,.FAIL
-        LD HL,SRTFAL               ; Z means the test value is #f.
+        LD HL,RT_TEST              ; Z means the test value is #f.
         CALL EM_CALL
         JR C,.FAIL
         LD HL,3                    ; The mode is 3 bytes up.
@@ -368,7 +368,7 @@ IF_COND:
         LD HL,(ST_EVVAL)
         CALL CMD_EXPR              ; Compile the test expression already read.
         JP C,IF_FAIL
-        LD HL,SRTFAL
+        LD HL,RT_TEST
         CALL EM_CALL               ; Z means that the test value is #f.
         JP C,IF_FAIL
         CALL EM_JZ                 ; Save the false path until this clause closes.

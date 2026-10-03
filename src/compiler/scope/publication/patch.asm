@@ -7,7 +7,7 @@ PUB_LINK:
         ADD HL,DE
         CALL BR_ABS                ; Convert its staged address to COM address space.
         LD (PUB_ABS),HL            ; Retain the absolute entry address.
-        LD HL,0100H+SRTCLP         ; SRTCLP points at the runtime CALL operand.
+        LD HL,0100H+RT_CALLP       ; RT_CALLP points at the runtime CALL operand.
         LD DE,(PUB_ABS)            ; Recover the generated entry address.
         CALL SINK_FIX               ; Patch the runtime entry through the sink.
         CALL .IMAGE                 ; Publish the exact end of the loaded image.

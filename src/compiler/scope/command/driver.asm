@@ -218,7 +218,7 @@ CMD_INIT:
 ; it.  A source or syntax error selects the whole runtime; the compiling pass
 ; reports the error.  Symbols interned here are found again by that pass.
 .SCAN:
-        LD HL,SRTLCORE
+        LD HL,RT_CORE
         LD (ST_RTLEN),HL
         LD HL,005CH                ; The same source the compiling pass opens.
         CALL SRC_OPEN
@@ -249,11 +249,11 @@ CMD_INIT:
         CP 60
         JR NC,.NEXT
 .FULL:
-        LD HL,SRTLEN               ; Kinds 56..59 open files.
+        LD HL,RT_SIZE              ; Kinds 56..59 open files.
         LD (ST_RTLEN),HL
         JR .DONE
 .STD:
-        LD HL,SRTLSTD
+        LD HL,RT_STD
         LD (ST_RTLEN),HL
         JR .NEXT                   ; Keep looking for the I/O module.
 .DONE:

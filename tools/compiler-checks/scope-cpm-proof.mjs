@@ -37,7 +37,7 @@ assert.equal(compiler.image.base, 0);
 assert.ok(compiler.address("CMD_MAIN") === 0x0100);
 assert.ok(compiler.address("W_IMGEND") < 0x10000);
 const runtimeLength = provider.image.bytes.length - 0x0100;
-assert.equal(runtimeLength, compiler.address("SRTLEN"));
+assert.equal(runtimeLength, compiler.address("RT_SIZE"));
 const runtimeImage = Uint8Array.from(provider.image.bytes);
 const ceilingAddress = provider.address("HEAP_LIM");
 runtimeImage[ceilingAddress] = managedCeiling & 0xff;
