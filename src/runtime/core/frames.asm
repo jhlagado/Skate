@@ -32,7 +32,7 @@ SRTPACKL:
         LD (HL),A                 ; It stays clear.
         INC HL                    ; Advance to the flags and tag.
         LD A,(SRTATMP)            ; Packet values are always live.
-        OR SRTCLIVE
+        OR CELL_VAL
         LD (HL),A                 ; Publish the complete argument record.
         DEC C                     ; The preceding source argument has a lower index.
         DJNZ SRTPACKL             ; Consume every staged argument.
@@ -70,19 +70,19 @@ SRTADRok:
 
 ; Load a procedure-local value through its current activation map.
 SRTLOADI:
-        JP SRTSLOAD                ; A contains the compiler-emitted slot index.
+        JP SLOT_GET                ; A contains the compiler-emitted slot index.
 
 ; Store A:HL through the current activation map; B contains the slot index.
 SRTSTORI:
-        JP SRTSSTOR                ; B contains the compiler-emitted slot index.
+        JP SLOT_PUT                ; B contains the compiler-emitted slot index.
 
 ; Store through a local activation map while requiring prior initialization.
 SRTSETI:
-        JP SRTSASET                ; B contains the compiler-emitted slot index.
+        JP SLOT_SET                ; B contains the compiler-emitted slot index.
 
 ; Clear a recursive local cell through the current activation map.
 SRTCLRI:
-        JP SRTSCLR                 ; B contains the compiler-emitted slot index.
+        JP SLOT_CLR                ; B contains the compiler-emitted slot index.
 
 ; Clear a fixed recursive cell while preserving its escape mark.
 SRTCLRS:
@@ -98,7 +98,7 @@ SRTCLRC:
         INC HL
         INC HL
         LD A,(HL)
-        AND SRTBESC+SRTBALOC+SRTBMRKD
+        AND BND_ESC+BND_USED+BND_MARK
         LD (HL),A
         RET
 

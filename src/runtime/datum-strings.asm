@@ -130,11 +130,11 @@ SRTDSAPP:
 
 ; Allocate a managed string and copy the decoded buffer into its payload.
 SRTDSFIN:
-        LD A,(SRTDSLN)               ; SRTSACL reads the shared length scratch.
-        LD (SRTSLENB),A
-        CALL SRTSACL                 ; Allocate and mark one managed string.
+        LD A,(SRTDSLN)               ; STR_NEW reads the shared length scratch.
+        LD (STR_LEN),A
+        CALL STR_NEW                 ; Allocate and mark one managed string.
         JP C,SRTERROR               ; Allocation failure is a runtime error.
-        LD A,(SRTSLENB)              ; Retain the count across the destination setup.
+        LD A,(STR_LEN)               ; Retain the count across the destination setup.
         LD (HL),A                    ; The managed representation starts with length.
         INC HL                       ; DE becomes the first managed payload byte.
         EX DE,HL
@@ -150,7 +150,7 @@ SRTDSCP:
         DJNZ SRTDSCP
 SRTDSRET:
         LD A,6                        ; Managed strings use logical tag six.
-        LD HL,(SRTSDST)              ; Return the allocated object base address.
+        LD HL,(STR_DST)              ; Return the allocated object base address.
         OR A                          ; Clear carry for the ordinary datum path.
         RET
 

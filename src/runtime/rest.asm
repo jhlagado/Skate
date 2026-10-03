@@ -78,12 +78,12 @@ SRTSETLP:
         LD A,(HL)
         AND 0FH                  ; A contains the logical value tag.
         LD (SRTSVTAG),A          ; Keep the tag while selecting the active slot.
-        EX DE,HL                 ; HL receives the payload expected by SRTSSTOR.
+        EX DE,HL                 ; HL receives the payload expected by SLOT_PUT.
         PUSH BC                   ; Preserve the formal and packet cursors.
         LD A,(SRTSNUM)
         LD B,A                   ; The active slot helper receives its index in B.
         LD A,(SRTSVTAG)
-        CALL SRTSSTOR             ; Publish the value in the active four-byte slot.
+        CALL SLOT_PUT             ; Publish the value in the active four-byte slot.
         POP BC                    ; Continue with the remaining formal slots.
         INC C                    ; Advance to the next source argument.
         DJNZ SRTSETLP            ; Fill every formal slot.
@@ -132,7 +132,7 @@ SRTRSTOR:
         LD B,A                    ; Active slot helpers take the index in B.
         LD HL,(SRTVAL)
         LD A,(SRTATMP)
-        JP SRTSSTOR                ; Publish the list as an ordinary local value.
+        JP SLOT_PUT                ; Publish the list as an ordinary local value.
 
 ; Read the packet record selected by SRTRESTI.
 SRTRREAD:

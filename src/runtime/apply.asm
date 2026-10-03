@@ -49,7 +49,7 @@ SRTAPPR:
         JP NC,SRTERROR              ; The dynamic call packet has eight records.
         LD HL,(SRTQAVAL)            ; Read this pair's CAR before advancing its CDR.
         LD A,1
-        CALL SRTCARV
+        CALL PAIR_CAR
         JP C,SRTERROR
         LD (SRTQCTAG),A             ; Preserve the CAR while computing its slot.
         LD (SRTQCAR),HL
@@ -72,14 +72,14 @@ SRTAPPR:
         LD (DE),A                   ; The extension byte stays clear.
         INC DE
         LD A,(SRTQCTAG)
-        OR SRTCLIVE
+        OR CELL_VAL
         LD (DE),A                   ; Publish the appended value as live.
         LD A,(SRTLCN)
         INC A
         LD (SRTLCN),A
         LD HL,(SRTQAVAL)            ; Recover the same pair for its CDR.
         LD A,1
-        CALL SRTCDRV
+        CALL PAIR_CDR
         JP C,SRTERROR
         LD (SRTQATAG),A
         LD (SRTQAVAL),HL

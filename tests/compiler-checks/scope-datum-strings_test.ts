@@ -89,7 +89,7 @@ function exhaustManagedPages(
   call: Awaited<ReturnType<typeof managedRuntime>>["call"],
 ) {
   for (let index = 0; index < 256; index++) {
-    const result = call("SRTGPALL", 1);
+    const result = call("PAGE_NEW", 1);
     if (result.carry) return index;
   }
   assert.fail("managed page pool did not report exhaustion");
@@ -116,7 +116,7 @@ Deno.test("datum reader allocates strings and decodes the source escapes", async
     108,
     111,
   ]);
-  assert.equal(call("SRTSVLD", hello.payload).carry, 0);
+  assert.equal(call("STR_CHK", hello.payload).carry, 0);
 
   const empty = readDatum(assembled, memory, cpu);
   assert.equal(empty.tag, 6);
@@ -161,8 +161,8 @@ Deno.test("managed strings survive collection while a 255-byte value is rooted",
   const { assembled, memory, cpu, call } = await managedRuntime();
   const rooted = 0xd700;
 
-  memory[assembled.address("SRTSLENB")] = 255;
-  const longString = call("SRTSACL");
+  memory[assembled.address("STR_LEN")] = 255;
+  const longString = call("STR_NEW");
   assert.equal(longString.carry, 0);
   memory[longString.payload] = 255;
   for (let index = 0; index < 255; index++) {
@@ -176,8 +176,8 @@ Deno.test("managed strings survive collection while a 255-byte value is rooted",
 
   // A 128-byte payload is a one-object class, so the next allocation of the
   // same size must collect the discarded value before it can proceed.
-  memory[assembled.address("SRTSLENB")] = 128;
-  const discarded = call("SRTSACL");
+  memory[assembled.address("STR_LEN")] = 128;
+  const discarded = call("STR_NEW");
   assert.equal(discarded.carry, 0);
   memory[discarded.payload] = 128;
   memory[discarded.payload + 1] = 0x5a;
@@ -191,7 +191,7 @@ Deno.test("managed strings survive collection while a 255-byte value is rooted",
   const replacement = readDatum(assembled, memory, cpu);
   assert.equal(replacement.tag, 6);
   assert.equal(readWord(memory, assembled.address("SRTGCNT")), 1);
-  assert.equal(call("SRTSVLD", longString.payload).carry, 0);
+  assert.equal(call("STR_CHK", longString.payload).carry, 0);
   assert.deepEqual(
     stringBytes(memory, longString.payload),
     Array.from({ length: 255 }, (_, index) => index),

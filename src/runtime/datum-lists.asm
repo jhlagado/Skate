@@ -100,7 +100,7 @@ SRTDRBLP:
         LD (SRTQDTAG),A
         LD HL,(SRTDAVAL)
         LD (SRTQCDR),HL
-        CALL SRTMAKEP               ; The common constructor roots both operands.
+        CALL PAIR_NEW               ; The common constructor roots both operands.
         JP C,SRTERROR               ; Propagate allocation failure to the reader.
         LD (SRTDATAG),A            ; The new pair becomes the next accumulator.
         LD (SRTDAVAL),HL

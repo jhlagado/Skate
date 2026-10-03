@@ -1,16 +1,16 @@
 ; Runtime activation-slot addressing and inline load/store paths.
-; SRTSADDR: A = slot index, returns HL = slot address. SRTSLOAD reads a slot;
-; SRTSSTOR and SRTSASET write A:HL; SRTSCLR clears one slot. SRTPROM may
-; allocate and collect before publishing a captured value. SRTCLSC copies captures.
+; SLOT_AT: A = slot index, returns HL = slot address. SLOT_GET reads a slot;
+; SLOT_PUT and SLOT_SET write A:HL; SLOT_CLR clears one slot. SLOT_BOX may
+; allocate and collect before publishing a captured value. MAP_ENV copies captures.
 ; Slots use the cell layout: payload in bytes 0 and 1, byte 2 clear, and byte
-; 3 holding the tag in its low nibble with SRTCLIVE (initialized) and SRTSPROM
+; 3 holding the tag in its low nibble with CELL_VAL (initialized) and SLOT_PTR
 ; (promoted) above it.  Until promotion a slot holds its value inline; after
-; it, the payload points to a managed binding. SRTENV is the active-map base and SRTSROOT scans each slot.
+; it, the payload points to a managed binding. SRTENV is the active-map base and SLOT_GC scans each slot.
 
-SRTSPROM EQU 20H                   ; Active-slot bit meaning payload is a pointer.
+SLOT_PTR EQU 20H                   ; Active-slot bit meaning payload is a pointer.
 
 ; Return the active four-byte slot address for the zero-based index in A.
-SRTSADDR:
+SLOT_AT:
         LD L,A                     ; Widen the slot number before scaling it.
         LD H,0
         ADD HL,HL                   ; Two bytes cover the first half of the slot.
@@ -20,7 +20,7 @@ SRTSADDR:
         RET                        ; HL names the slot's first byte.
 
 ; Clear the complete active map before captured pointers are expanded.
-SRTMAPC:
+SLOT_INI:
         LD HL,(SRTENV)              ; The map base is the first byte to clear.
         LD BC,(SRTMAPB)             ; The map extent is four bytes per slot.
         LD A,B
@@ -39,14 +39,14 @@ SRTMAPC:
         RET
 
 ; Load an unpromoted value from the active slot address in HL.
-SRTLINLD:
+SLOT_RD:
         LD E,(HL)                   ; Recover the payload low byte.
         INC HL
         LD D,(HL)                   ; Recover the payload high byte.
         INC HL
         INC HL                      ; Skip the extension byte.
-        LD A,(HL)                   ; SRTCLIVE records inline initialization.
-        AND SRTCLIVE
+        LD A,(HL)                   ; CELL_VAL records inline initialization.
+        AND CELL_VAL
         JP Z,SRTUNBD                ; Preserve the established unbound error.
         LD A,(HL)
         AND 0FH                     ; Return the inline tag in A.
@@ -55,7 +55,7 @@ SRTLINLD:
         RET
 
 ; Store A:HL in the inline slot addressed by DE and publish initialization last.
-SRTLINST:
+SLOT_WR:
         LD (SRTSVTAG),A             ; Save the tag while writing both payload bytes.
         LD (SRTSVAL),HL             ; Save the payload for the final return.
         LD A,L
@@ -71,7 +71,7 @@ SRTLINST:
         AND 0E0H
         LD L,A
         LD A,(SRTSVTAG)
-        OR SRTCLIVE                 ; The value is initialized after all fields.
+        OR CELL_VAL                 ; The value is initialized after all fields.
         OR L
         LD (DE),A
         LD A,(SRTSVTAG)
@@ -80,9 +80,9 @@ SRTLINST:
 
 ; Resolve an active slot index in B and return its representation flags in A.
 ; The common address calculation keeps the three write paths identical.
-SRTSBASE:
+SLOT_REF:
         LD A,B
-        CALL SRTSADDR
+        CALL SLOT_AT
         LD (SRTSADR),HL
         LD DE,3
         ADD HL,DE
@@ -91,18 +91,18 @@ SRTSBASE:
         RET
 
 ; Load a value from active slot index A.
-SRTSLOAD:
-        CALL SRTSADDR               ; Convert the index to the four-byte slot.
+SLOT_GET:
+        CALL SLOT_AT                ; Convert the index to the four-byte slot.
         LD (SRTSADR),HL
         LD DE,3
         ADD HL,DE
         LD A,(HL)                   ; Inspect the representation flag.
         LD (SRTSFLG),A
-        AND SRTSPROM
-        JR NZ,SRTSLDP               ; Promoted slots delegate to the heap cell.
+        AND SLOT_PTR
+        JR NZ,.HEAP                 ; Promoted slots delegate to the heap cell.
         LD HL,(SRTSADR)
-        JP SRTLINLD
-SRTSLDP:
+        JP SLOT_RD
+.HEAP:
         LD HL,(SRTSADR)
         LD E,(HL)
         INC HL
@@ -111,64 +111,64 @@ SRTSLDP:
         OR E
         JP Z,SRTUNBD                ; A published promoted slot must have a cell.
         EX DE,HL
-        JP SRTBLOAD
+        JP HEAP_GET
 
 ; Store A:HL through active slot index B.
-SRTSSTOR:
+SLOT_PUT:
         LD (SRTSVTAG),A             ; Save the value while finding the slot.
         LD (SRTSVAL),HL
-        CALL SRTSBASE
-        AND SRTSPROM
-        JR NZ,SRTSSTP
+        CALL SLOT_REF
+        AND SLOT_PTR
+        JR NZ,.HEAP
         LD DE,(SRTSADR)
         LD HL,(SRTSVAL)
         LD A,(SRTSVTAG)
-        JP SRTLINST
-SRTSSTP:
+        JP SLOT_WR
+.HEAP:
         LD HL,(SRTSADR)
         LD E,(HL)
         INC HL
         LD D,(HL)
         LD HL,(SRTSVAL)
         LD A,(SRTSVTAG)
-        JP SRTBSTOR
+        JP HEAP_PUT
 
 ; Store A:HL through active slot index B, requiring prior initialization.
-SRTSASET:
+SLOT_SET:
         LD (SRTSVTAG),A
         LD (SRTSVAL),HL
-        CALL SRTSBASE
-        AND SRTSPROM
-        JR NZ,SRTSASTP
+        CALL SLOT_REF
+        AND SLOT_PTR
+        JR NZ,.HEAP
         LD A,(SRTSFLG)
-        AND SRTCLIVE
+        AND CELL_VAL
         JP Z,SRTUNBD
         LD DE,(SRTSADR)
         LD HL,(SRTSVAL)
         LD A,(SRTSVTAG)
-        JP SRTLINST
-SRTSASTP:
+        JP SLOT_WR
+.HEAP:
         LD HL,(SRTSADR)
         LD E,(HL)
         INC HL
         LD D,(HL)
         LD HL,(SRTSVAL)
         LD A,(SRTSVTAG)
-        JP SRTBSET
+        JP HEAP_SET
 
 ; Clear an active recursive slot while retaining its representation state.
-SRTSCLR:
-        CALL SRTSBASE
-        AND SRTSPROM
-        JR NZ,SRTSCLRP
+SLOT_CLR:
+        CALL SLOT_REF
+        AND SLOT_PTR
+        JR NZ,.HEAP
         LD A,(SRTSFLG)
-        AND 0FFH-SRTCLIVE
+        AND 0FFH-CELL_VAL
         LD HL,(SRTSADR)
         LD DE,3
         ADD HL,DE
         LD (HL),A
         RET
-SRTSCLRP:
+.HEAP:
         LD HL,(SRTSADR)
         LD E,(HL)
         INC HL

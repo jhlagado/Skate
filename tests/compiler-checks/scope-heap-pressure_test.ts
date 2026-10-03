@@ -38,7 +38,7 @@ function runEntry(
 ) {
   const returnAddress = 0xef00;
   const gcAddress = assembled.address("SRTGC");
-  const constructorAddress = assembled.address("SRTMAKEP");
+  const constructorAddress = assembled.address("PAIR_NEW");
   cpu.pc = assembled.address(label);
   cpu.sp = 0xdff0;
   writeWord(memory, cpu.sp, returnAddress);
@@ -73,11 +73,11 @@ function initialiseSinglePairPage(
   cpu.h = assembled.image.end >>> 8;
   cpu.l = assembled.image.end & 255;
   assert.equal(
-    runEntry(assembled, "SRTGPINI", memory, cpu, () => {}).carry,
+    runEntry(assembled, "PAGE_INI", memory, cpu, () => {}).carry,
     0,
   );
   assert.equal(
-    runEntry(assembled, "SRTPIN", memory, cpu, () => {}).carry,
+    runEntry(assembled, "PAIR_INI", memory, cpu, () => {}).carry,
     0,
   );
   // Keep this fixture to one class page so the constructor must collect
@@ -124,7 +124,7 @@ Deno.test("direct cons preserves both scalar inputs through collection", async (
   const pairPage = initialiseSinglePairPage(assembled, memory, cpu);
   const result = runEntry(
     assembled,
-    "SRTCONS",
+    "CONS",
     memory,
     cpu,
     () => {
@@ -230,14 +230,14 @@ Deno.test("tracing preserves a linked list of more than one thousand pairs", asy
   cpu.h = assembled.image.end >>> 8;
   cpu.l = assembled.image.end & 255;
   assert.equal(
-    callRoutine(assembled, "SRTGPINI", memory, cpu).carry,
+    callRoutine(assembled, "PAGE_INI", memory, cpu).carry,
     0,
   );
-  assert.equal(callRoutine(assembled, "SRTPIN", memory, cpu).carry, 0);
+  assert.equal(callRoutine(assembled, "PAIR_INI", memory, cpu).carry, 0);
 
   const records: number[] = [];
   for (let index = 0; index < 1100; index++) {
-    const result = callRoutine(assembled, "SRTFINDP", memory, cpu);
+    const result = callRoutine(assembled, "PAIR_GET", memory, cpu);
     assert.equal(result.carry, 0, `allocation ${index} failed`);
     records.push(result.payload);
   }

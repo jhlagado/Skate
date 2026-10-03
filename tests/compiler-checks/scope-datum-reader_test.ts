@@ -115,7 +115,7 @@ function addDigit(
 function pairPart(
   call: Awaited<ReturnType<typeof managedRuntime>>["call"],
   cpu: Awaited<ReturnType<typeof managedRuntime>>["cpu"],
-  selector: "SRTCARV" | "SRTCDRV",
+  selector: "PAIR_CAR" | "PAIR_CDR",
   payload: number,
 ) {
   cpu.a = 1;
@@ -283,34 +283,34 @@ Deno.test("datum reader constructs proper, nested and dotted lists", async () =>
 
   const outer = readDatum(assembled, memory, cpu);
   assert.equal(outer.tag, 1, `tag=${outer.tag} payload=${outer.payload}`);
-  const first = pairPart(call, cpu, "SRTCARV", outer.payload);
+  const first = pairPart(call, cpu, "PAIR_CAR", outer.payload);
   assert.deepEqual(
     { tag: first.tag, payload: first.payload },
     { tag: 3, payload: 1 },
     `outer state=${memory[outer.payload + 4].toString(16)}`,
   );
-  const secondPair = pairPart(call, cpu, "SRTCDRV", outer.payload);
+  const secondPair = pairPart(call, cpu, "PAIR_CDR", outer.payload);
   assert.equal(secondPair.tag, 1);
-  const second = pairPart(call, cpu, "SRTCARV", secondPair.payload);
+  const second = pairPart(call, cpu, "PAIR_CAR", secondPair.payload);
   assert.deepEqual(
     { tag: second.tag, payload: second.payload },
     { tag: 3, payload: 2 },
   );
-  const nestedPair = pairPart(call, cpu, "SRTCDRV", secondPair.payload);
+  const nestedPair = pairPart(call, cpu, "PAIR_CDR", secondPair.payload);
   assert.equal(nestedPair.tag, 1);
-  const nestedValue = pairPart(call, cpu, "SRTCARV", nestedPair.payload);
+  const nestedValue = pairPart(call, cpu, "PAIR_CAR", nestedPair.payload);
   assert.equal(nestedValue.tag, 1);
-  const nestedHead = pairPart(call, cpu, "SRTCARV", nestedValue.payload);
+  const nestedHead = pairPart(call, cpu, "PAIR_CAR", nestedValue.payload);
   assert.deepEqual(
     { tag: nestedHead.tag, payload: nestedHead.payload },
     { tag: 3, payload: 3 },
   );
-  const dottedTail = pairPart(call, cpu, "SRTCDRV", nestedValue.payload);
+  const dottedTail = pairPart(call, cpu, "PAIR_CDR", nestedValue.payload);
   assert.deepEqual(
     { tag: dottedTail.tag, payload: dottedTail.payload },
     { tag: 3, payload: 4 },
   );
-  const outerEnd = pairPart(call, cpu, "SRTCDRV", nestedPair.payload);
+  const outerEnd = pairPart(call, cpu, "PAIR_CDR", nestedPair.payload);
   assert.deepEqual(
     { tag: outerEnd.tag, payload: outerEnd.payload },
     { tag: 0, payload: 0xfe02 },
@@ -318,12 +318,12 @@ Deno.test("datum reader constructs proper, nested and dotted lists", async () =>
 
   const dotted = readDatum(assembled, memory, cpu);
   assert.equal(dotted.tag, 1);
-  const dottedHead = pairPart(call, cpu, "SRTCARV", dotted.payload);
+  const dottedHead = pairPart(call, cpu, "PAIR_CAR", dotted.payload);
   assert.deepEqual(
     { tag: dottedHead.tag, payload: dottedHead.payload },
     { tag: 3, payload: 5 },
   );
-  const dottedCdr = pairPart(call, cpu, "SRTCDRV", dotted.payload);
+  const dottedCdr = pairPart(call, cpu, "PAIR_CDR", dotted.payload);
   assert.deepEqual(
     { tag: dottedCdr.tag, payload: dottedCdr.payload },
     { tag: 3, payload: 6 },
@@ -342,12 +342,12 @@ Deno.test("datum reader accepts the 64-value aggregate limit", async () => {
   let value = { tag: result.tag, payload: result.payload };
   let count = 0;
   while (value.tag === 1) {
-    const head = pairPart(call, cpu, "SRTCARV", value.payload);
+    const head = pairPart(call, cpu, "PAIR_CAR", value.payload);
     assert.deepEqual({ tag: head.tag, payload: head.payload }, {
       tag: 3,
       payload: 1,
     });
-    value = pairPart(call, cpu, "SRTCDRV", value.payload);
+    value = pairPart(call, cpu, "PAIR_CDR", value.payload);
     count++;
   }
   assert.equal(count, 64);
@@ -361,7 +361,7 @@ Deno.test("datum reader keeps nested values and its accumulator live through GC"
   const { assembled, memory, cpu, call } = await managedRuntime(true);
   memory[assembled.address("SRTPSLIM")] = 2;
   for (let index = 0; index < 100; index++) {
-    assert.equal(call("SRTMAKEP").carry, 0);
+    assert.equal(call("PAIR_NEW").carry, 0);
   }
 
   installBdosReader(
@@ -375,24 +375,24 @@ Deno.test("datum reader keeps nested values and its accumulator live through GC"
   assert.equal(readWord(memory, assembled.address("SRTGCNT")), 1);
   assert.equal(result.tag, 1);
 
-  const nested = pairPart(call, cpu, "SRTCARV", result.payload);
+  const nested = pairPart(call, cpu, "PAIR_CAR", result.payload);
   assert.equal(nested.tag, 1);
   assert.deepEqual(
-    pairPart(call, cpu, "SRTCARV", nested.payload),
+    pairPart(call, cpu, "PAIR_CAR", nested.payload),
     { carry: 0, tag: 3, payload: 1 },
   );
   assert.deepEqual(
-    pairPart(call, cpu, "SRTCDRV", nested.payload),
+    pairPart(call, cpu, "PAIR_CDR", nested.payload),
     { carry: 0, tag: 3, payload: 2 },
   );
-  let rest = pairPart(call, cpu, "SRTCDRV", result.payload);
+  let rest = pairPart(call, cpu, "PAIR_CDR", result.payload);
   for (const expected of [3, 4, 5]) {
     assert.equal(rest.tag, 1);
     assert.deepEqual(
-      pairPart(call, cpu, "SRTCARV", rest.payload),
+      pairPart(call, cpu, "PAIR_CAR", rest.payload),
       { carry: 0, tag: 3, payload: expected },
     );
-    rest = pairPart(call, cpu, "SRTCDRV", rest.payload);
+    rest = pairPart(call, cpu, "PAIR_CDR", rest.payload);
   }
   assert.deepEqual(rest, { carry: 0, tag: 0, payload: 0xfe02 });
 });
@@ -403,7 +403,7 @@ Deno.test("datum reader clears roots when pair allocation fails", async () => {
   const roots = 0xd700;
   const pairs: number[] = [];
   for (let index = 0; index < 32; index++) {
-    const pair = call("SRTMAKEP");
+    const pair = call("PAIR_NEW");
     assert.equal(pair.carry, 0);
     pairs.push(pair.payload);
   }
@@ -461,8 +461,8 @@ Deno.test("datum reader makes a dotted pair", async () => {
   memory[assembled.address("SRTINST")] = 0;
   const result = readDatum(assembled, memory, cpu);
   assert.equal(result.tag, 1);
-  const head = pairPart(call, cpu, "SRTCARV", result.payload);
-  const tail = pairPart(call, cpu, "SRTCDRV", result.payload);
+  const head = pairPart(call, cpu, "PAIR_CAR", result.payload);
+  const tail = pairPart(call, cpu, "PAIR_CDR", result.payload);
   assert.deepEqual(
     { tag: head.tag, payload: head.payload },
     { tag: 3, payload: 3 },

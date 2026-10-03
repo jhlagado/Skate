@@ -95,7 +95,7 @@ SRTQLP:
         LD (SRTQDTAG),A
         LD HL,(SRTQAVAL)
         LD (SRTQCDR),HL
-        CALL SRTMAKEP
+        CALL PAIR_NEW
         LD (SRTQATAG),A
         LD (SRTQAVAL),HL
         LD A,(SRTQNR)

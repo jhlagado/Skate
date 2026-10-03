@@ -51,10 +51,10 @@ SRTTPAOK:
         LD (SRTGCNT),HL
         LD (SRTACNT),HL
         LD HL,(SRTIMGE)           ; Recover the compiler's final loaded image end.
-        CALL SRTGPINI              ; Derive and initialise the page-domain metadata.
+        CALL PAGE_INI              ; Derive and initialise the page-domain metadata.
         JP C,SRTERROR              ; Refuse to enter generated code without pages.
         CALL SRTSYINI              ; Reset the pinned symbol arena for this program.
-        CALL SRTPIN                ; Reserve and clear the first eight-byte pair slab.
+        CALL PAIR_INI              ; Reserve and clear the first eight-byte pair slab.
         JP C,SRTERROR              ; Refuse to enter code without pair capacity.
         LD HL,SRTOPB               ; The operator side stack starts above pair cells.
         LD (SRTOPS),HL            ; Reset it for this generated program run.
@@ -160,7 +160,7 @@ SRTLOAD:
         INC HL                    ; Skip the clear extension byte.
         INC HL                    ; Advance to the flags and tag.
         LD A,(HL)                 ; Bit four records whether the binding is ready.
-        AND SRTCLIVE              ; Ignore the high escape mark kept for closures.
+        AND CELL_VAL              ; Ignore the high escape mark kept for closures.
         JP Z,SRTUNBD           ; Never return a fabricated value.
         LD A,(HL)
         AND 0FH                   ; The stored tag.
@@ -176,7 +176,7 @@ SRTQGET:
         INC HL                    ; Skip the payload high byte.
         INC HL                    ; Skip the extension byte.
         LD A,(HL)                 ; A clear live bit means the cache is empty.
-        AND SRTCLIVE
+        AND CELL_VAL
         POP HL                    ; Restore the cell base for a cache hit.
         JR Z,SRTQMISS             ; The caller falls through to list creation.
         LD E,(HL)                 ; Recover the cached payload low byte.
@@ -206,7 +206,7 @@ SRTSTORE:
         INC DE                    ; Advance to the flags and tag.
         PUSH BC
         LD A,(SRTTAG)
-        OR SRTCLIVE               ; Initialized, with the caller's tag.
+        OR CELL_VAL               ; Initialized, with the caller's tag.
         LD B,A
         LD A,(DE)                 ; Preserve the escape mark and other flags.
         AND 0E0H
@@ -225,7 +225,7 @@ SRTSET:
         INC DE                    ; Skip the payload high byte.
         INC DE                    ; Skip the extension byte.
         LD A,(DE)                  ; Bit four records initialization.
-        AND SRTCLIVE
+        AND CELL_VAL
         JP Z,SRTUNBD               ; A missing binding cannot be mutated.
         LD DE,(SRTCELLP)           ; Restore the cell base for the normal store.
         LD A,(SRTATMP)             ; Restore the caller's tag before storing.

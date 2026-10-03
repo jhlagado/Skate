@@ -63,7 +63,7 @@ SRTNROOT:
         LD (HL),A                  ; The extension byte stays clear.
         INC HL
         LD A,(SRTNRTAG)
-        OR SRTCLIVE                ; A live record and its tag.
+        OR CELL_VAL                ; A live record and its tag.
         LD (HL),A
         LD A,(SRTNCT)
         INC A
@@ -143,7 +143,7 @@ SRTROREC:
         INC HL
         INC HL
         LD A,(HL)
-        AND SRTCLIVE
+        AND CELL_VAL
         RET Z
         LD A,(HL)
         AND 0FH
@@ -294,7 +294,7 @@ SRTENVM:
 SRTENVLP:
         LD HL,(SRTENVP)
         PUSH BC
-        CALL SRTSROOT             ; Active entries are four-byte inline/promoted slots.
+        CALL SLOT_GC              ; Active entries are four-byte inline/promoted slots.
         POP BC
         LD HL,(SRTENVP)
         LD DE,4

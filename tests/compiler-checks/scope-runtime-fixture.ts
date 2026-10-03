@@ -102,10 +102,10 @@ export async function managedRuntime(withPairs = false) {
     };
   }
 
-  assert.equal(call("SRTGPINI", imageEnd).carry, 0);
+  assert.equal(call("PAGE_INI", imageEnd).carry, 0);
 
   if (withPairs) {
-    assert.equal(call("SRTPIN").carry, 0);
+    assert.equal(call("PAIR_INI").carry, 0);
   }
 
   return { assembled, memory, cpu, call };

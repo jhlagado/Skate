@@ -192,7 +192,7 @@ SRTFWRAW:
 ; The parser accepts NAME or NAME.EXT with an eight-character name and a
 ; three-character extension.  The FCB is padded with spaces.
 SRTFBLD:
-        CALL SRTSCHK
+        CALL STR_ARG
         JP C,SRTERROR
         LD A,(HL)
         OR A

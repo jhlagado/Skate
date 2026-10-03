@@ -289,7 +289,7 @@ SRTIVAL:
         LD A,L
         CP 20H
         JP C,SRTERROR
-        CP SRTPRLIM                ; Kinds run to the end of the standard set.
+        CP PRIM_LIM                ; Kinds run to the end of the standard set.
         JP NC,SRTERROR
         SUB 20H
         LD (SRTPID),A              ; Kind zero is addition; kind three is zero?.

@@ -13,7 +13,7 @@ SRTWRVAL:
         JP Z,SRTWRSTR
         CP 6
         JP NZ,SRTWREST
-        CALL SRTSVLD
+        CALL STR_CHK
         JP C,SRTERROR
         JP SRTWRSTR
 SRTWREST:
@@ -125,12 +125,12 @@ SRTWPAIR:
 SRTWPLP:
         PUSH HL                    ; Keep this pair while printing its CAR.
         LD A,1                     ; HL names a pair record.
-        CALL SRTCARV               ; Decode the packed CAR field into A:HL.
+        CALL PAIR_CAR              ; Decode the packed CAR field into A:HL.
         JP C,SRTERROR              ; A corrupt pair cannot be printed safely.
         CALL SRTWRVAL              ; Nested values recurse only through the CAR.
         POP HL                     ; Recover this pair for its CDR.
         LD A,1                     ; HL still names a pair record.
-        CALL SRTCDRV               ; Decode the packed CDR field into A:HL.
+        CALL PAIR_CDR              ; Decode the packed CDR field into A:HL.
         JP C,SRTERROR              ; A corrupt pair cannot be printed safely.
         CP 1                       ; A pair CDR continues the same list.
         JR NZ,SRTWPEND

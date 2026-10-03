@@ -131,7 +131,7 @@ SET_CELL:
         LD A,2
         CALL PKT_NARG
         CALL PKT_ARG0
-        CALL SRTPCHK               ; Reject anything but a live pair.
+        CALL PAIR_CHK              ; Reject anything but a live pair.
         POP BC
         JP C,SRTERROR
         LD B,0
@@ -190,14 +190,14 @@ EQ_DEEP:
 .STRING:
         PUSH BC
         PUSH DE
-        CALL SRTSCHK               ; HL is the left string.
+        CALL STR_ARG               ; HL is the left string.
         POP DE
         POP BC
         JR C,.NO
         PUSH HL
         EX DE,HL
         LD A,C
-        CALL SRTSCHK               ; HL is the right string.
+        CALL STR_ARG               ; HL is the right string.
         POP DE
         JR C,.NO
         EX DE,HL
@@ -208,13 +208,13 @@ EQ_DEEP:
         RET
 .PAIR:
         PUSH DE
-        CALL SRTPCHK               ; Validate the left pair.
+        CALL PAIR_CHK              ; Validate the left pair.
         POP DE
         JR C,.NO
         PUSH HL
         EX DE,HL
         LD A,1
-        CALL SRTPCHK               ; Validate the right pair.
+        CALL PAIR_CHK              ; Validate the right pair.
         EX DE,HL
         POP HL
         JR C,.NO
@@ -406,7 +406,7 @@ STR_REL:
         PUSH BC
         PUSH HL
         CALL SRTPVAL
-        CALL SRTSCHK
+        CALL STR_ARG
         POP HL
         POP BC
         JP C,SRTERROR
@@ -422,14 +422,14 @@ STR_REL:
         PUSH BC
         LD HL,(STD_PTR)
         CALL SRTPVAL
-        CALL SRTSCHK
+        CALL STR_ARG
         PUSH HL                    ; Left string.
         LD HL,(STD_PTR)
         LD DE,4
         ADD HL,DE
         LD (STD_PTR),HL
         CALL SRTPVAL
-        CALL SRTSCHK
+        CALL STR_ARG
         EX DE,HL                   ; Right string.
         POP HL
         CALL STR_CMP
@@ -458,7 +458,7 @@ STR2SYM:
         LD A,1
         CALL PKT_NARG
         CALL PKT_ARG0
-        CALL SRTSCHK
+        CALL STR_ARG
         JP C,SRTERROR
         LD C,(HL)
         LD B,0
@@ -505,11 +505,11 @@ NUM2STR:
         OR A
         SBC HL,DE
         LD A,L
-        LD (SRTSLENB),A
+        LD (STR_LEN),A
         LD (STD_PTR),DE
-        CALL SRTSACL               ; May collect; nothing here is a heap value.
+        CALL STR_NEW               ; May collect; nothing here is a heap value.
         JP C,SRTERROR
-        LD A,(SRTSLENB)
+        LD A,(STR_LEN)
         LD (HL),A
         INC HL
         EX DE,HL
@@ -517,7 +517,7 @@ NUM2STR:
         LD C,A
         LD B,0
         LDIR
-        JP SRTSRET
+        JP STR_RET
 
 ; Divide HL by ten, unsigned: HL is the quotient and A the remainder.
 DIV10:
@@ -613,7 +613,7 @@ LENGTH:
         CALL IS_NULL
         JR Z,.DONE
         PUSH BC
-        CALL SRTCDRV
+        CALL PAIR_CDR
         POP BC
         JP C,SRTERROR              ; An improper list has no length.
         INC BC
@@ -633,7 +633,7 @@ LIST_P:
 .LOOP:
         CALL IS_NULL
         JP Z,BOOL_T
-        CALL SRTCDRV
+        CALL PAIR_CDR
         JP C,BOOL_F
         JR .LOOP
 
@@ -667,20 +667,20 @@ REV_CORE:
         LD HL,(STD_LIST)
         CALL IS_NULL
         RET Z
-        CALL SRTCARV
+        CALL PAIR_CAR
         JP C,SRTERROR              ; Only a proper list can be reversed.
         LD (SRTQCAR),HL
         LD (SRTQCTAG),A
         LD A,(STD_LTAG)
         LD HL,(STD_LIST)
-        CALL SRTCDRV
+        CALL PAIR_CDR
         LD (STD_LIST),HL
         LD (STD_LTAG),A
         LD HL,(STD_ACC)
         LD (SRTQCDR),HL
         LD A,(STD_ATAG)
         LD (SRTQDTAG),A
-        CALL SRTMAKEP
+        CALL PAIR_NEW
         LD (STD_ACC),HL
         LD (STD_ATAG),A
         JR REV_CORE
@@ -736,20 +736,20 @@ APPEND:
         LD HL,(STD_LIST)
         CALL IS_NULL
         JP Z,.LINK
-        CALL SRTCARV
+        CALL PAIR_CAR
         JP C,SRTERROR              ; Only proper lists can be copied.
         LD (SRTQCAR),HL
         LD (SRTQCTAG),A
         LD A,(STD_LTAG)
         LD HL,(STD_LIST)
-        CALL SRTCDRV
+        CALL PAIR_CDR
         LD (STD_LIST),HL
         LD (STD_LTAG),A
         LD HL,0FE02H               ; Each new cell starts as a one-element list.
         LD (SRTQCDR),HL
         XOR A
         LD (SRTQDTAG),A
-        CALL SRTMAKEP              ; A:HL is the new cell.
+        CALL PAIR_NEW              ; A:HL is the new cell.
         EX DE,HL
         LD HL,(STD_ACC)
         LD A,H
@@ -760,7 +760,7 @@ APPEND:
         CALL OPS_PUT
         JR .LAST
 .CHAIN:
-        LD BC,SRPCDDR0             ; Point the previous cell's CDR here.
+        LD BC,CDR_LO               ; Point the previous cell's CDR here.
         ADD HL,BC
         LD A,1
         CALL CDR_PUT
@@ -772,7 +772,7 @@ APPEND:
         LD A,H
         OR L
         JP Z,.NEXT                 ; An empty list leaves the result unchanged.
-        LD BC,SRPCDDR0
+        LD BC,CDR_LO
         ADD HL,BC
         PUSH HL
         LD HL,(STD_RADR)
@@ -843,7 +843,7 @@ LISTTAIL:
         RET
 LIST_REF:
         CALL TAIL_K
-        CALL SRTCARV
+        CALL PAIR_CAR
         JP C,SRTERROR
         PUSH IX
         RET
@@ -869,7 +869,7 @@ TAIL_K:
         JR Z,.DONE
         POP AF
         PUSH BC
-        CALL SRTCDRV
+        CALL PAIR_CDR
         POP BC
         JP C,SRTERROR
         DEC BC
@@ -897,13 +897,13 @@ MEM_ANY:
         LD (STD_LTAG),A
         CALL IS_NULL
         JP Z,BOOL_F
-        CALL SRTCARV
+        CALL PAIR_CAR
         JP C,SRTERROR
         CALL MATCH
         JR NC,.FOUND
         LD HL,(STD_LIST)
         LD A,(STD_LTAG)
-        CALL SRTCDRV
+        CALL PAIR_CDR
         JP C,SRTERROR
         JR .LOOP
 .FOUND:
@@ -931,17 +931,17 @@ ASS_ANY:
         LD (STD_LTAG),A
         CALL IS_NULL
         JP Z,BOOL_F
-        CALL SRTCARV
+        CALL PAIR_CAR
         JP C,SRTERROR
         LD (STD_ENT),HL
         LD (STD_ETAG),A
-        CALL SRTCARV               ; Every entry must be a pair.
+        CALL PAIR_CAR              ; Every entry must be a pair.
         JP C,SRTERROR
         CALL MATCH
         JR NC,.FOUND
         LD HL,(STD_LIST)
         LD A,(STD_LTAG)
-        CALL SRTCDRV
+        CALL PAIR_CDR
         JP C,SRTERROR
         JR .LOOP
 .FOUND:
@@ -1039,7 +1039,7 @@ SUBSTR:
         LD A,3
         CALL PKT_NARG
         CALL PKT_ARG0
-        CALL SRTSCHK
+        CALL STR_ARG
         JP C,SRTERROR
         LD (STD_PTR),HL
         LD HL,SRTARGPK+8
@@ -1060,14 +1060,14 @@ SUBSTR:
         JP C,SRTERROR              ; The end may not pass the string.
         LD A,C
         SUB B
-        LD (SRTSLENB),A
-        CALL SRTSACL               ; The source stays rooted in the packet.
+        LD (STR_LEN),A
+        CALL STR_NEW               ; The source stays rooted in the packet.
         JP C,SRTERROR
-        LD A,(SRTSLENB)
+        LD A,(STR_LEN)
         LD (HL),A
         INC HL
         OR A
-        JP Z,SRTSRET
+        JP Z,STR_RET
         EX DE,HL
         LD HL,(STD_PTR)
         INC HL
@@ -1075,10 +1075,10 @@ SUBSTR:
         LD C,A
         LD B,0
         ADD HL,BC
-        LD A,(SRTSLENB)
+        LD A,(STR_LEN)
         LD C,A
         LDIR
-        JP SRTSRET
+        JP STR_RET
 .INDEX:
         CP 3                       ; An index is a byte-sized exact integer.
         JP NZ,SRTERROR

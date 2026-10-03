@@ -7,7 +7,7 @@ SRTVHOOK:
         LD (SRTCLOBJ),HL           ; Keep the queued object across bitmap probes.
         CP 1
         JP Z,SRTVMARK
-        CALL SRTSSTA                ; Strings are leaves and need no traversal.
+        CALL STR_TEST               ; Strings are leaves and need no traversal.
         RET NZ
         CALL SRTVSST                ; Test the vector marker on this allocation.
         JR Z,SRTVHCLS

@@ -7,7 +7,7 @@ import {
 
 Deno.test("an unmapped binding cell stops before any cell bytes are written", async () => {
   const { assembled, memory, cpu } = await managedRuntime();
-  // A damaged free list hands SRTCELL a cell outside the binding start map.
+  // A damaged free list hands HEAP_NEW a cell outside the binding start map.
   const bad = 0xd702;
   writeWord(memory, bad, 0);
   writeWord(memory, assembled.address("SRTBHEAD"), bad);
@@ -15,20 +15,20 @@ Deno.test("an unmapped binding cell stops before any cell bytes are written", as
   memory.fill(0x5a, bad, bad + 4);
   writeWord(memory, bad, 0);
 
-  cpu.pc = assembled.address("SRTCELL");
+  cpu.pc = assembled.address("HEAP_NEW");
   cpu.sp = 0xdff0;
   writeWord(memory, cpu.sp, 0xef00);
   const error = assembled.address("SRTERROR");
   let steps = 0;
   while (cpu.pc !== 0xef00 && cpu.pc !== error) {
-    assert.ok(++steps < 1_000_000, "SRTCELL did not finish");
+    assert.ok(++steps < 1_000_000, "HEAP_NEW did not finish");
     assembled.runtime.step();
   }
   assert.equal(cpu.pc, error, "an unmapped cell must be a runtime error");
   assert.deepEqual(
     [...memory.slice(0xa700, 0xa710)],
     new Array(16).fill(0x5a),
-    "SRTCELL wrote through an unrestored pointer",
+    "HEAP_NEW wrote through an unrestored pointer",
   );
   assert.deepEqual([...memory.slice(bad + 2, bad + 4)], [0x5a, 0x5a]);
 });

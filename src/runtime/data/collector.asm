@@ -32,7 +32,7 @@ SRTGFIX:
         JR NZ,SRTGFIX               ; Continue until a fixed point is reached.
 SRTSWEEP:
         CALL SRTBSW                 ; Reclaim dead four-byte bindings.
-        CALL SRTCLSW                ; Reclaim dead rounded closure blocks.
+        CALL SLAB_GC                ; Reclaim dead rounded closure blocks.
         CALL SRTPSW                ; Rebuild free records and clear surviving marks.
         RET
 
@@ -70,16 +70,16 @@ SRTPCLAB:
         LD (SRTPSST),HL
         LD (SRTPSBA),DE
         LD (SRTPSCAN),DE
-        LD C,SRPPCAP                ; Each page contains 32 eight-byte records.
+        LD C,PAIR_CAP               ; Each page contains 32 eight-byte records.
 SRTPCLP:
         LD HL,(SRTPSCAN)
-        LD DE,SRPCCARM
+        LD DE,CAR_TAG
         ADD HL,DE
         LD A,(HL)
         AND 7FH                     ; Preserve tags and allocation, clear marking.
         LD (HL),A
         LD HL,(SRTPSCAN)
-        LD DE,SRTPW
+        LD DE,PAIR_SZ
         ADD HL,DE
         LD (SRTPSCAN),HL
         DEC C
@@ -113,10 +113,10 @@ SRTPSWL:
         LD (SRTPSST),HL
         LD (SRTPSBA),DE
         LD (SRTPSCAN),DE
-        LD C,SRPPCAP
+        LD C,PAIR_CAP
 SRTPSWLP:
         LD HL,(SRTPSCAN)
-        LD DE,SRPCCARM
+        LD DE,CAR_TAG
         ADD HL,DE
         LD A,(HL)
         AND 40H                     ; An unallocated record is already dead.
@@ -139,20 +139,20 @@ SRTPSWV:
         LD (HL),A
 SRTPSWN:
         LD HL,(SRTPSCAN)
-        LD DE,SRTPW
+        LD DE,PAIR_SZ
         ADD HL,DE
         LD (SRTPSCAN),HL
         DEC C
         JR NZ,SRTPSWLP
         LD HL,(SRTPSST)
         DJNZ SRTPSWL
-        CALL SRTPSRB                ; Rebuild links after dead records were cleared.
+        CALL PAIR_GC                ; Rebuild links after dead records were cleared.
         RET
 SRTPSWSK:
         LD DE,3                     ; Advance over a released descriptor slot.
         ADD HL,DE
         DJNZ SRTPSWL
-        CALL SRTPSRB
+        CALL PAIR_GC
         RET
 
 ; Drain the bounded worklist.  A full queue is handled by the fallback scan.
@@ -206,10 +206,10 @@ SRTGFS:
         LD (SRTPSST),HL
         LD (SRTPSBA),DE
         LD (SRTPSCAN),DE
-        LD C,SRPPCAP
+        LD C,PAIR_CAP
 SRTGFSLP:
         LD HL,(SRTPSCAN)
-        LD DE,SRPCCARM
+        LD DE,CAR_TAG
         ADD HL,DE
         LD A,(HL)
         AND 80H                     ; Only marked records need another visit.
@@ -226,7 +226,7 @@ SRTGFSLP:
         CALL SRTMARKV               ; The queued value is the record start.
         POP HL
         POP BC
-        LD DE,(SRTFSST)             ; Restore the slab cursor changed by SRTPCHK.
+        LD DE,(SRTFSST)             ; Restore the slab cursor changed by PAIR_CHK.
         LD (SRTPSST),DE
         LD DE,(SRTFSBA)
         LD (SRTPSBA),DE
@@ -234,7 +234,7 @@ SRTGFSLP:
         LD (SRTPSCAN),DE
 SRTGFSN:
         LD HL,(SRTPSCAN)
-        LD DE,SRTPW
+        LD DE,PAIR_SZ
         ADD HL,DE
         LD (SRTPSCAN),HL
         DEC C
@@ -283,10 +283,10 @@ SRTSCEND:
 ; Mark one pair and queue it for child scanning.
 SRTMARK:
         LD A,1                      ; Validate the candidate as a pair value.
-        CALL SRTPCHK
+        CALL PAIR_CHK
         RET C
         LD HL,(SRTPSAD)             ; Recover the validated record address.
-        LD DE,SRPCCARM
+        LD DE,CAR_TAG
         ADD HL,DE
         LD A,(HL)
         AND 40H                     ; A swept or never-published record is ignored.
@@ -321,7 +321,7 @@ SRTMQOV:
 SRTMARKV:
         LD (SRTMVAL),HL
         LD A,1
-        CALL SRTPCHK
+        CALL PAIR_CHK
         RET C
         ; Copy both payloads before marking either edge; SRTMARK may use HL/DE.
         LD HL,(SRTMVAL)
@@ -330,21 +330,21 @@ SRTMARKV:
         LD D,(HL)
         LD (SRTQCAR),DE
         LD HL,(SRTMVAL)
-        LD DE,SRPCDDR0
+        LD DE,CDR_LO
         ADD HL,DE
         LD E,(HL)
         INC HL
         LD D,(HL)
         LD (SRTQCDR),DE
         LD HL,(SRTMVAL)
-        LD DE,SRPCCARM
+        LD DE,CAR_TAG
         ADD HL,DE
         LD A,(HL)
         LD (SRTQFLG),A
         AND 0FH                     ; The CAR tag occupies its cell metadata nibble.
         LD (SRTQCTAG),A
         LD HL,(SRTMVAL)
-        LD DE,SRPCDDRM
+        LD DE,CDR_TAG
         ADD HL,DE
         LD A,(HL)
         AND 0FH                     ; The CDR tag occupies its cell metadata nibble.

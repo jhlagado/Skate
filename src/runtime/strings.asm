@@ -5,36 +5,36 @@
 ; tag six and are validated by the collector-backed helpers.
 
 ; Dispatch string and character primitives.
-SRTSTRCH:
+STR_PRIM:
         LD A,(SRTPID)              ; Read the zero-based primitive kind.
         CP 32                      ; Kind thirty-two is string-length.
-        JP Z,SRTSLEN               ; Return the literal's byte count.
+        JP Z,.LENGTH               ; Return the literal's byte count.
         CP 33                      ; Kind thirty-three is string-ref.
-        JP Z,SRTSREF               ; Index a literal and return a character.
+        JP Z,.REF                  ; Index a literal and return a character.
         CP 34                      ; Kind thirty-four is char->integer.
-        JP Z,SRTCHINT              ; Convert one byte character to an integer.
+        JP Z,.CHAR_INT             ; Convert one byte character to an integer.
         CP 35                      ; Kind thirty-five is integer->char.
-        JP Z,SRTINTCH
+        JP Z,.INT_CHAR
         CP 36                      ; Kind thirty-six constructs a managed string.
-        JP Z,SRTSMK
+        JP Z,STR_MAKE
         CP 37                      ; Kind thirty-seven copies a string.
-        JP Z,SRTSCPY
-        JP SRTSJN              ; Kind thirty-eight appends two strings.
+        JP Z,STR_COPY
+        JP STR_JOIN            ; Kind thirty-eight appends two strings.
 
 ; Return the length byte of one literal string as an exact integer.
-SRTSLEN:
+.LENGTH:
         LD A,(SRTARGC)             ; The procedure accepts exactly one value.
         CP 1
         JP NZ,SRTERROR             ; Reject missing and extra arguments.
         LD HL,SRTARGPK             ; Read the only packet record.
         CALL SRTPVAL               ; Recover its payload and logical tag.
         CP 5
-        JR Z,SRTSLENP              ; Literal strings need no managed validation.
+        JR Z,.LEN_READ             ; Literal strings need no managed validation.
         CP 6
         JP NZ,SRTERROR             ; Every other value is outside the string type.
-        CALL SRTSVLD             ; Reject stale or interior managed pointers.
+        CALL STR_CHK             ; Reject stale or interior managed pointers.
         JP C,SRTERROR
-SRTSLENP:
+.LEN_READ:
         LD A,(HL)                  ; The first byte records the string length.
         LD L,A                     ; Widen the byte count into an exact payload.
         LD H,0
@@ -43,19 +43,19 @@ SRTSLENP:
         RET
 
 ; Return the byte character at an exact, in-range string index.
-SRTSREF:
+.REF:
         LD A,(SRTARGC)             ; string-ref takes a string and an index.
         CP 2
         JP NZ,SRTERROR             ; Reject every other arity.
         LD HL,SRTARGPK             ; Read the string argument first.
         CALL SRTPVAL
         CP 5
-        JR Z,SRTSREFP              ; Literal strings use the image representation.
+        JR Z,.REF_IDX              ; Literal strings use the image representation.
         CP 6
         JP NZ,SRTERROR             ; The first argument must be a string.
-        CALL SRTSVLD             ; Check the managed allocation before indexing.
+        CALL STR_CHK             ; Check the managed allocation before indexing.
         JP C,SRTERROR
-SRTSREFP:
+.REF_IDX:
         LD (SRTNVAL),HL            ; Preserve its address while reading index.
         LD HL,SRTARGPK+4           ; The second packet record is the index.
         CALL SRTPVAL
@@ -82,7 +82,7 @@ SRTSREFP:
         RET
 
 ; Convert one byte character (FFxx, scalar tag zero) to an exact integer.
-SRTCHINT:
+.CHAR_INT:
         LD A,(SRTARGC)              ; The conversion is unary.
         CP 1
         JP NZ,SRTERROR
@@ -101,7 +101,7 @@ SRTCHINT:
         RET
 
 ; Convert an exact integer in the byte range to the FFxx character form.
-SRTINTCH:
+.INT_CHAR:
         LD A,(SRTARGC)              ; The conversion is unary.
         CP 1
         JP NZ,SRTERROR

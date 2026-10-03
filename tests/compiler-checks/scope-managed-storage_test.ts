@@ -7,7 +7,7 @@ import {
 
 Deno.test("four-byte bindings descend, load and store with a reserved byte", async () => {
   const { assembled, memory, cpu, call } = await managedRuntime();
-  const first = call("SRTCELL");
+  const first = call("HEAP_NEW");
   assert.equal(first.carry, 0);
   assert.equal(first.payload, readWord(memory, assembled.address("SRTBPGBA")));
   assert.equal(
@@ -20,13 +20,13 @@ Deno.test("four-byte bindings descend, load and store with a reserved byte", asy
   cpu.a = 3;
   cpu.h = 0x12;
   cpu.l = 0x34;
-  const stored = call("SRTBSTOR", 0x1234);
+  const stored = call("HEAP_PUT", 0x1234);
   assert.equal(stored.tag, 3);
   assert.equal(stored.payload, 0x1234);
   assert.equal(memory[first.payload + 2], 0);
   assert.equal(memory[first.payload + 3], 0x53);
 
-  const loaded = call("SRTBLOAD", first.payload);
+  const loaded = call("HEAP_GET", first.payload);
   assert.equal(loaded.tag, 3);
   assert.equal(loaded.payload, 0x1234);
 
@@ -35,7 +35,7 @@ Deno.test("four-byte bindings descend, load and store with a reserved byte", asy
   cpu.a = 3;
   cpu.h = 0xab;
   cpu.l = 0xcd;
-  const changed = call("SRTBSET", 0xabcd);
+  const changed = call("HEAP_SET", 0xabcd);
   assert.equal(changed.payload, 0xabcd);
   assert.equal(memory[first.payload + 2], 0);
   assert.equal(memory[first.payload + 3], 0x53);
@@ -43,11 +43,11 @@ Deno.test("four-byte bindings descend, load and store with a reserved byte", asy
 
 Deno.test("unreachable bindings return to a same-sized free block", async () => {
   const { assembled, memory, cpu, call } = await managedRuntime();
-  const binding = call("SRTCELL").payload;
+  const binding = call("HEAP_NEW").payload;
   cpu.d = binding >>> 8;
   cpu.e = binding & 255;
   cpu.a = 3;
-  call("SRTBSTOR", 0x1234);
+  call("HEAP_PUT", 0x1234);
   const map = 0xd700;
   writeWord(memory, map, binding);
   memory[map + 2] = 0;
@@ -64,7 +64,7 @@ Deno.test("unreachable bindings return to a same-sized free block", async () => 
   assert.equal(readWord(memory, assembled.address("SRTBHEAD")), 0);
   assert.equal(memory[assembled.address("SRTBPGN")], 0);
 
-  const reused = call("SRTCELL");
+  const reused = call("HEAP_NEW");
   assert.equal(reused.payload, binding);
   assert.equal(memory[binding + 3], 0x40);
 });
@@ -73,7 +73,7 @@ Deno.test("retained binding pages rebuild free cells after repeated collection",
   const { assembled, memory, call } = await managedRuntime();
   const allocated: number[] = [];
   for (let index = 0; index < 64; index++) {
-    allocated.push(call("SRTCELL").payload);
+    allocated.push(call("HEAP_NEW").payload);
   }
   const survivor = allocated[0];
   const map = 0xd700;
@@ -96,7 +96,7 @@ Deno.test("retained binding pages rebuild free cells after repeated collection",
     "a retained page must rebuild its dead cells on the second collection",
   );
 
-  const reused = call("SRTCELL").payload;
+  const reused = call("HEAP_NEW").payload;
   assert.notEqual(reused, survivor);
   assert.ok(
     allocated.includes(reused),
@@ -107,7 +107,7 @@ Deno.test("retained binding pages rebuild free cells after repeated collection",
 
 Deno.test("an active uninitialized binding remains allocated through collection", async () => {
   const { assembled, memory, call } = await managedRuntime();
-  const binding = call("SRTCELL").payload;
+  const binding = call("HEAP_NEW").payload;
   const map = 0xd700;
   writeWord(memory, map, binding);
   memory[map + 2] = 0;
@@ -117,30 +117,30 @@ Deno.test("an active uninitialized binding remains allocated through collection"
 
   call("SRTGC");
   assert.equal(memory[binding + 3], 0x40);
-  assert.notEqual(call("SRTCELL").payload, binding);
+  assert.notEqual(call("HEAP_NEW").payload, binding);
 });
 
 Deno.test("virgin binding flags cannot keep a page alive", async () => {
   const { assembled, memory, call } = await managedRuntime();
-  const freeBefore = readWord(memory, assembled.address("SRTPGFRE"));
-  const binding = call("SRTCELL").payload;
+  const freeBefore = readWord(memory, assembled.address("PAGE_CAP"));
+  const binding = call("HEAP_NEW").payload;
   const page = readWord(memory, assembled.address("SRTBPGBA"));
   const virgin = page + 4;
 
   // A stale mark-looking byte in an unallocated slot must not pin the page.
   memory[virgin + 3] = 0x80; // Marked but never allocated.
-  assert.equal(readWord(memory, assembled.address("SRTPGFRE")), freeBefore - 1);
+  assert.equal(readWord(memory, assembled.address("PAGE_CAP")), freeBefore - 1);
   call("SRTGC");
 
   assert.equal(readWord(memory, assembled.address("SRTBPGN")), 0);
-  assert.equal(readWord(memory, assembled.address("SRTPGFRE")), freeBefore);
+  assert.equal(readWord(memory, assembled.address("PAGE_CAP")), freeBefore);
   assert.equal(memory[virgin + 3], 0);
-  assert.equal(call("SRTCELL").payload, binding);
+  assert.equal(call("HEAP_NEW").payload, binding);
 });
 
 Deno.test("tail-owned cells clear their old value and initialization state", async () => {
   const { assembled, memory, call } = await managedRuntime();
-  const binding = call("SRTCELL").payload;
+  const binding = call("HEAP_NEW").payload;
   const map = 0xd700;
   const descriptor = 0xc100;
   writeWord(memory, map, binding);
@@ -162,7 +162,7 @@ Deno.test("tail-owned cells clear their old value and initialization state", asy
 
 Deno.test("promoted recursive clear resets heap binding metadata", async () => {
   const { assembled, memory, cpu, call } = await managedRuntime();
-  const binding = call("SRTCELL").payload;
+  const binding = call("HEAP_NEW").payload;
   const map = 0xd700;
   memory[binding] = 0x34;
   memory[binding + 1] = 0x12;
@@ -188,12 +188,12 @@ Deno.test("promoted recursive clear resets heap binding metadata", async () => {
 Deno.test("promotion keeps an inline pair live when allocation collects", async () => {
   const { assembled, memory, cpu, call } = await managedRuntime(true);
   const map = 0xd700;
-  const pair = call("SRTMAKEP");
+  const pair = call("PAIR_NEW");
   assert.equal(pair.tag, 1);
 
   // Leave one binding unreachable so the forced collection can reclaim
   // storage for the promotion allocation.
-  const dead = call("SRTCELL").payload;
+  const dead = call("HEAP_NEW").payload;
   writeWord(memory, map, pair.payload);
   memory[map + 2] = 0;
   memory[map + 3] = 0x10 | pair.tag; // Initialized inline value.
@@ -212,14 +212,14 @@ Deno.test("promotion keeps an inline pair live when allocation collects", async 
     readWord(memory, assembled.address("SRTBPGED")),
   );
   for (let index = 0; index < 256; index++) {
-    const page = call("SRTGPALL", 1);
+    const page = call("PAGE_NEW", 1);
     if (page.carry) break;
     assert.equal(page.payload & 0xff, 0);
     assert.ok(index < 255, "page manager did not report exhaustion");
   }
 
   cpu.a = 0;
-  const promoted = call("SRTPROM");
+  const promoted = call("SLOT_BOX");
   assert.equal(promoted.carry, 0);
   assert.equal(readWord(memory, assembled.address("SRTGCNT")), 1);
   assert.equal(memory[map + 3], 0x20);
@@ -229,11 +229,11 @@ Deno.test("promotion keeps an inline pair live when allocation collects", async 
   );
   const cell = readWord(memory, map);
   assert.equal(cell, dead);
-  const loaded = call("SRTBLOAD", cell);
+  const loaded = call("HEAP_GET", cell);
   assert.equal(loaded.tag, pair.tag);
   assert.equal(loaded.payload, pair.payload);
   cpu.a = 1;
-  assert.equal(call("SRTPCHK", pair.payload).carry, 0);
+  assert.equal(call("PAIR_CHK", pair.payload).carry, 0);
 });
 
 Deno.test("closure classes round at the supported 128-slot boundary", async () => {
@@ -249,7 +249,7 @@ Deno.test("closure classes round at the supported 128-slot boundary", async () =
     ]]
   ) {
     memory[slots] = count;
-    call("SRTCLSIZ");
+    call("SLAB_SZ");
     assert.equal(readWord(memory, rounded), size, `slot count ${count}`);
     assert.equal(memory[index], classIndex, `class ${count}`);
   }
@@ -262,7 +262,7 @@ Deno.test("closure creation clears every uncaptured environment byte", async () 
   memory[descriptor + 3] = 3;
   memory[descriptor + 12] = 0; // No mask bytes.
 
-  const closure = call("SRTMAKE", descriptor);
+  const closure = call("HEAP_LAM", descriptor);
   assert.equal(closure.tag, 2);
   const extent = readWord(memory, assembled.address("SRTCLSZ"));
   assert.equal(extent, 8);
@@ -309,7 +309,7 @@ Deno.test("large closures own and release a contiguous two-page run", async () =
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 3] = 128;
 
-  const closure = call("SRTMAKE", descriptor);
+  const closure = call("HEAP_LAM", descriptor);
   assert.equal(closure.tag, 2);
   const closureBase = closure.payload;
   assert.equal(memory[assembled.address("SRTCLOWN")], 0x41);
@@ -333,7 +333,7 @@ Deno.test("large closures own and release a contiguous two-page run", async () =
   call("SRTGC");
   assert.equal(memory[assembled.address("SRTCLOWN")], 0);
   assert.equal(memory[assembled.address("SRTCLOWN") + 1], 0);
-  assert.equal(call("SRTMAKE", descriptor).payload, closureBase);
+  assert.equal(call("HEAP_LAM", descriptor).payload, closureBase);
 });
 
 Deno.test("dead closures are reclaimed by class and live closures remain published", async () => {
@@ -343,8 +343,8 @@ Deno.test("dead closures are reclaimed by class and live closures remain publish
   memory[descriptor + 3] = 1;
   memory[descriptor + 12] = 0; // No mask bytes.
 
-  const dead = call("SRTMAKE", descriptor);
-  const live = call("SRTMAKE", descriptor);
+  const dead = call("HEAP_LAM", descriptor);
+  const live = call("HEAP_LAM", descriptor);
   assert.equal(dead.tag, 2);
   const closureBase = dead.payload;
   assert.equal(live.payload, closureBase + 4);
@@ -363,7 +363,7 @@ Deno.test("dead closures are reclaimed by class and live closures remain publish
   const freeHead = readWord(memory, assembled.address("SRTCFREE"));
   assert.ok(freeHead >= closureBase && freeHead < closureBase + 0x100);
 
-  const reused = call("SRTMAKE", descriptor);
+  const reused = call("HEAP_LAM", descriptor);
   assert.equal(reused.tag, 2);
   assert.equal(reused.payload, freeHead);
 
@@ -371,19 +371,19 @@ Deno.test("dead closures are reclaimed by class and live closures remain publish
   writeWord(memory, assembled.address("SRTGEND"), 0);
   call("SRTGC");
   assert.equal(memory[assembled.address("SRTCLOWN")], 0);
-  const republished = call("SRTMAKE", descriptor);
+  const republished = call("HEAP_LAM", descriptor);
   assert.equal(republished.payload, closureBase);
 });
 
 Deno.test("closure pages share the pool with binding pages", async () => {
   const { assembled, call } = await managedRuntime();
-  const binding = call("SRTCELL");
+  const binding = call("HEAP_NEW");
   assert.equal(binding.carry, 0);
   const descriptor = 0xc100;
   const memory = assembled.runtime.hardware.memory;
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 3] = 1;
-  const closure = call("SRTMAKE", descriptor);
+  const closure = call("HEAP_LAM", descriptor);
   assert.equal(closure.tag, 2);
   assert.notEqual(closure.payload >>> 8, binding.payload >>> 8);
   assert.notEqual(memory[assembled.address("SRTBPGN")], 0);
@@ -394,7 +394,7 @@ Deno.test("a two-page closure claims adjacent pages in the shared pool", async (
   const descriptor = 0xc100;
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 3] = 128;
-  const closure = call("SRTMAKE", descriptor);
+  const closure = call("HEAP_LAM", descriptor);
   assert.equal(closure.tag, 2);
   const owners = assembled.address("SRTCLOWN");
   assert.equal(memory[owners], 0x41);
@@ -410,8 +410,8 @@ Deno.test("a live two-page closure does not hide a later dead page", async () =>
   writeWord(memory, narrowDescriptor, 0x4000);
   memory[narrowDescriptor + 3] = 1;
 
-  const wide = call("SRTMAKE", wideDescriptor);
-  const narrow = call("SRTMAKE", narrowDescriptor);
+  const wide = call("HEAP_LAM", wideDescriptor);
+  const narrow = call("HEAP_LAM", narrowDescriptor);
   const wideBase = wide.payload;
   assert.equal(narrow.payload, wideBase + 0x200);
   const root = 0xd800;
@@ -428,7 +428,7 @@ Deno.test("a live two-page closure does not hide a later dead page", async () =>
   assert.equal(memory[owners + 2], 0);
   writeWord(memory, assembled.address("SRTCLOBJ"), narrow.payload);
   assert.equal(call("SRTCLSTA").tag, 0);
-  const reused = call("SRTMAKE", narrowDescriptor);
+  const reused = call("HEAP_LAM", narrowDescriptor);
   assert.ok(
     reused.payload >= narrow.payload && reused.payload < narrow.payload + 0x100,
   );
@@ -443,7 +443,7 @@ Deno.test("a partial closure slab can refill every freed slot", async () => {
 
   const allocated: number[] = [];
   for (let index = 0; index < 64; index++) {
-    allocated.push(call("SRTMAKE", descriptor).payload);
+    allocated.push(call("HEAP_LAM", descriptor).payload);
   }
   writeWord(memory, root, allocated[0]);
   memory[root + 2] = 0; // Clear extension byte.
@@ -454,7 +454,7 @@ Deno.test("a partial closure slab can refill every freed slot", async () => {
 
   const refilled = new Set<number>();
   for (let index = 0; index < 63; index++) {
-    refilled.add(call("SRTMAKE", descriptor).payload);
+    refilled.add(call("HEAP_LAM", descriptor).payload);
   }
   assert.equal(refilled.size, 63);
   for (const address of refilled) {
@@ -476,7 +476,7 @@ Deno.test("closure churn beyond sixteen kilobytes reuses a bounded live set", as
   for (let batch = 0; batch < 8; batch++) {
     let live = 0;
     for (let index = 0; index < 32; index++) {
-      live = call("SRTMAKE", descriptor).payload;
+      live = call("HEAP_LAM", descriptor).payload;
       if (batch === 0 && index === 0) firstBase = live;
     }
     writeWord(memory, root, live);
@@ -512,20 +512,20 @@ Deno.test("a closure capture keeps a pair alive and releases both together", asy
   memory[descriptor + 13] = 0; // owned slots,
   memory[descriptor + 14] = 1; // captured slots.
 
-  const pair = call("SRTMAKEP");
+  const pair = call("PAIR_NEW");
   assert.equal(pair.tag, 1);
-  const binding = call("SRTCELL").payload;
+  const binding = call("HEAP_NEW").payload;
   const cpu = assembled.runtime.cpu;
   cpu.d = binding >>> 8;
   cpu.e = binding & 255;
   cpu.a = 1;
-  call("SRTBSTOR", pair.payload);
+  call("HEAP_PUT", pair.payload);
   writeWord(memory, map, binding);
   memory[map + 2] = 0;
   memory[map + 3] = 0x20; // Promoted.
   writeWord(memory, assembled.address("SRTENV"), map);
   memory[assembled.address("SRTSLOTS")] = 1;
-  const closure = call("SRTMAKE", descriptor);
+  const closure = call("HEAP_LAM", descriptor);
   writeWord(memory, assembled.address("SRTENV"), 0);
   memory[assembled.address("SRTSLOTS")] = 0;
 
@@ -540,11 +540,11 @@ Deno.test("a closure capture keeps a pair alive and releases both together", asy
   writeWord(memory, assembled.address("SRTGEND"), root + 4);
   call("SRTGC");
   cpu.a = 1;
-  assert.equal(call("SRTPCHK", pair.payload).carry, 0);
+  assert.equal(call("PAIR_CHK", pair.payload).carry, 0);
 
   writeWord(memory, assembled.address("SRTGBASE"), 0);
   writeWord(memory, assembled.address("SRTGEND"), 0);
   call("SRTGC");
   cpu.a = 1;
-  assert.equal(call("SRTPCHK", pair.payload).carry, 1);
+  assert.equal(call("PAIR_CHK", pair.payload).carry, 1);
 });

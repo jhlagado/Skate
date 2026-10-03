@@ -22,7 +22,7 @@ disagree on bytes 2 and 3.
 
 | Container | Byte 2 | Byte 3 |
 | --- | --- | --- |
-| Inline activation slot (`storage/slots/`) | tag | flags: bit 0 initialized, bit 1 promoted (`SRTSPROM`) |
+| Inline activation slot (`storage/slots/`) | tag | flags: bit 0 initialized, bit 1 promoted (`SLOT_PTR`) |
 | Argument packet (`SRTARGPK`) | tag | always `1` (initialized) |
 | Heap binding (`storage/managed.asm`) | zero | bits 0–2 tag 0–7, bit 3 initialized, bit 4 escape, bit 5 allocated, bit 6 mark, bit 7 tag 8 |
 | Pair cell (`storage/pairs.asm`) | zero | bits 0–3 tag; CAR cell bit 6 allocated, bit 7 mark |

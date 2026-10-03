@@ -22,7 +22,7 @@ SRTNCHK:
         JR C,SRTNFAIL
         CP 20H
         JR C,SRTNF16
-        CP SRTPRLIM
+        CP PRIM_LIM
         JR C,SRTNFAIL             ; FE20H upward are reserved primitive values.
 SRTNF16:
         LD HL,(SRTNVAL)

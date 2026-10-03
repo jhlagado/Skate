@@ -1,15 +1,15 @@
 ; Runtime tracing of active activation slots.
-; Entry point: SRTSROOT.
-SRTSROOT:
+; Entry point: SLOT_GC.
+SLOT_GC:
         LD (SRTSADR),HL
         LD DE,3
         ADD HL,DE
         LD A,(HL)
         LD (SRTSFLG),A
-        AND SRTSPROM
-        JR NZ,SRTSRTP
+        AND SLOT_PTR
+        JR NZ,.HEAP
         LD A,(SRTSFLG)
-        AND SRTCLIVE
+        AND CELL_VAL
         RET Z
         LD A,(SRTSFLG)
         AND 0FH
@@ -19,7 +19,7 @@ SRTSROOT:
         LD D,(HL)
         EX DE,HL
         JP SRTMVALU
-SRTSRTP:
+.HEAP:
         LD HL,(SRTSADR)
         LD E,(HL)
         INC HL

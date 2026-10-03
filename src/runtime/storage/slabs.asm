@@ -3,14 +3,14 @@
 ; The page manager owns physical pages.  This module adds the closure class
 ; and object state needed after a page has been claimed.  The owner directory
 ; keeps tracing layout outside live objects; the base directory maps its
-; logical page index to the physical page returned by SRTGPALL.
+; logical page index to the physical page returned by PAGE_NEW.
 
 ; Allocate a page for a small closure class and build its free-object chain.
-SRTCLPNW:
+SLAB_ADD:
         LD A,(SRTCLIDX)
         CP 40H
-        JP Z,SRTCLPRN             ; The 260-byte class needs two pages.
-        CALL SRTCLP1              ; The page manager supplies one free page.
+        JP Z,SLAB_RUN             ; The 260-byte class needs two pages.
+        CALL SLAB_ONE             ; The page manager supplies one free page.
         RET C
         LD A,(SRTCLIDX)
         LD L,A
@@ -21,11 +21,11 @@ SRTCLPNW:
         LD (SRTCLPGN),A           ; Capacity determines the chain length.
         LD HL,(SRTCLPGA)
         LD (SRTCLPGF),HL          ; Begin with the first object in the page.
-SRTCLPBL:
+.LINK:
         LD A,(SRTCLPGN)
         DEC A
         LD (SRTCLPGN),A
-        JR Z,SRTCLPZE             ; The final object links to the old head.
+        JR Z,.LAST                ; The final object links to the old head.
         LD HL,(SRTCLPGF)
         LD DE,(SRTCLSZ)
         ADD HL,DE
@@ -38,8 +38,8 @@ SRTCLPBL:
         LD (DE),A                 ; A free object stores a two-byte link.
         LD HL,(SRTCLPGL)
         LD (SRTCLPGF),HL
-        JR SRTCLPBL
-SRTCLPZE:
+        JR .LINK
+.LAST:
         LD DE,(SRTCLPGF)
         XOR A
         LD (DE),A
@@ -51,29 +51,29 @@ SRTCLPZE:
         LD (HL),A
         INC HL
         LD A,D
-        LD (HL),A                 ; Publish the page head for SRTCLALC.
+        LD (HL),A                 ; Publish the page head for SLAB_NEW.
         RET
 
 ; Find an unused logical closure-page entry and claim one physical page.
-SRTCLP1:
+SLAB_ONE:
         XOR A
         LD (SRTCLPGI),A
-SRTCLP1L:
+.LOOP:
         LD A,(SRTCLPGI)
         CP 80H
-        JR NC,SRTCLPFL
+        JR NC,SLAB_ERR
         LD L,A
         LD H,0
         LD DE,SRTCLOWN
         ADD HL,DE
         LD A,(HL)
         OR A
-        JR NZ,SRTCLP1N
+        JR NZ,.NEXT
         LD HL,1
-        CALL SRTGPALL
+        CALL PAGE_NEW
         RET C
         LD (SRTCLPGA),HL
-        CALL SRTCLPST
+        CALL SLAB_PUT
         LD A,(SRTCLPGI)
         LD L,A
         LD H,0
@@ -82,43 +82,43 @@ SRTCLP1L:
         LD A,(SRTCLIDX)
         INC A
         LD (HL),A                 ; Record this page's tracing class.
-        CALL SRTCLPUP             ; Retain the largest physical end for reports.
+        CALL SLAB_TOP             ; Retain the largest physical end for reports.
         LD HL,(SRTCLPGA)
         XOR A
         RET
-SRTCLP1N:
+.NEXT:
         LD A,(SRTCLPGI)
         INC A
         LD (SRTCLPGI),A
-        JR SRTCLP1L
-SRTCLPFL:
+        JR .LOOP
+SLAB_ERR:
         SCF
         RET
 
 ; Allocate the two-page class used by a 128-slot closure (260 bytes).
-SRTCLPRN:
+SLAB_RUN:
         XOR A
         LD (SRTCLPGI),A
-SRTCLPRL:
+.LOOP:
         LD A,(SRTCLPGI)
         CP 7FH
-        JR NC,SRTCLPFL
+        JR NC,SLAB_ERR
         LD L,A
         LD H,0
         LD DE,SRTCLOWN
         ADD HL,DE
         LD A,(HL)
         OR A
-        JR NZ,SRTCLPRX
+        JR NZ,.NEXT
         INC HL
         LD A,(HL)
         OR A
-        JR NZ,SRTCLPRX
+        JR NZ,.NEXT
         LD HL,2
-        CALL SRTGPALL
+        CALL PAGE_NEW
         RET C
         LD (SRTCLPGA),HL
-        CALL SRTCLPST
+        CALL SLAB_PUT
         LD A,(SRTCLPGI)
         LD L,A
         LD H,0
@@ -129,18 +129,18 @@ SRTCLPRL:
         INC HL
         LD A,0FFH
         LD (HL),A
-        CALL SRTCLPUP
+        CALL SLAB_TOP
         LD HL,(SRTCLPGA)
         XOR A
         RET
-SRTCLPRX:
+.NEXT:
         LD A,(SRTCLPGI)
         INC A
         LD (SRTCLPGI),A
-        JR SRTCLPRL
+        JR .LOOP
 
 ; Save the physical high byte for the current logical page entry.
-SRTCLPST:
+SLAB_PUT:
         LD A,(SRTCLPGI)
         LD L,A
         LD H,0
@@ -153,7 +153,7 @@ SRTCLPST:
         RET
 
 ; Recover the physical base for the current logical page entry.
-SRTCLGET:
+SLAB_GET:
         LD A,(SRTCLPGI)
         LD L,A
         LD H,0
@@ -166,16 +166,16 @@ SRTCLGET:
         RET
 
 ; Extend the diagnostic high-water boundary when a new page lies above it.
-SRTCLPUP:
+SLAB_TOP:
         LD HL,(SRTCLPGA)
         LD A,(SRTCLIDX)
         CP 40H
-        JR NZ,SRTCLP1E
+        JR NZ,.ONE_PAGE
         LD DE,200H                ; The largest class occupies two pages.
-        JR SRTCLPUE
-SRTCLP1E:
+        JR .EXTEND
+.ONE_PAGE:
         LD DE,100H
-SRTCLPUE:
+.EXTEND:
         ADD HL,DE
         LD (SRTCLPGE),HL
         LD DE,(SRTCLCUR)
@@ -189,13 +189,13 @@ SRTCLPUE:
 ; Find the owned logical page entry containing the current closure address.
 ; Carry clear returns its index in SRTCLPGI.  Carry set reports a miss and
 ; leaves SRTCLPGI at 80H, which the vector and string validators also reject.
-SRTCLFND:
+SLAB_AT:
         LD HL,(SRTCLBAS)           ; The page high byte identifies the slab.
         LD A,H
         LD (SRTCLPGH),A            ; Keep it while the directory is scanned.
         XOR A
         LD (SRTCLPGI),A            ; Start with the first logical entry.
-SRTCLFNL:
+.LOOP:
         LD A,(SRTCLPGI)
         CP 80H                     ; Carry is set while entries remain.
         CCF                        ; Carry now reports an exhausted directory.
@@ -206,9 +206,9 @@ SRTCLFNL:
         ADD HL,DE
         LD A,(HL)                  ; Only an owned head entry has a live base.
         OR A
-        JR Z,SRTCLFNX              ; A free entry's base byte is not authoritative.
+        JR Z,.NEXT                 ; A free entry's base byte is not authoritative.
         INC A
-        JR Z,SRTCLFNX              ; FFH continues a two-page run and has no base.
+        JR Z,.NEXT                 ; FFH continues a two-page run and has no base.
         LD A,(SRTCLPGI)            ; Address the same entry's physical base.
         LD L,A
         LD H,0
@@ -217,16 +217,16 @@ SRTCLFNL:
         LD A,(SRTCLPGH)            ; Compare the page high bytes.
         CP (HL)
         RET Z                      ; Equal also leaves carry clear for a hit.
-SRTCLFNX:
+.NEXT:
         LD A,(SRTCLPGI)
         INC A
         LD (SRTCLPGI),A            ; Continue with the next logical entry.
-        JR SRTCLFNL
+        JR .LOOP
 
 ; Count one live allocation in the page containing SRTCLBAS.  Carry set means
 ; the address belongs to no owned page and no counter was changed.
-SRTCLINC:
-        CALL SRTCLFND
+SLAB_INC:
+        CALL SLAB_AT
         RET C                      ; Never count a miss into a neighbouring table.
         LD A,(SRTCLPGI)
         LD L,A
@@ -239,7 +239,7 @@ SRTCLINC:
         RET
 
 ; Sweep closure pages, release empty slabs and rebuild every class free list.
-SRTCLSW:
+SLAB_GC:
         LD HL,SRTCFREE
         LD DE,SRTCFREE+1
         LD BC,129
@@ -248,7 +248,7 @@ SRTCLSW:
         LDIR
         XOR A
         LD (SRTCLPGI),A
-SRTCLSMP:
+.LOOP:
         LD A,(SRTCLPGI)
         CP 80H
         RET NC
@@ -258,25 +258,25 @@ SRTCLSMP:
         ADD HL,DE
         LD A,(HL)
         OR A
-        JR Z,SRTCLSNX
+        JR Z,.NEXT
         CP 0FFH
-        JR Z,SRTCLSNX
+        JR Z,.NEXT
         CP 41H
-        JR NZ,SRTCLONE
-        CALL SRTCLR2
-        JR SRTCLSNX
-SRTCLONE:
+        JR NZ,.ONE
+        CALL SLAB_GC2
+        JR .NEXT
+.ONE:
         DEC A
         LD (SRTCLPGN),A
-        CALL SRTCLPAG
-SRTCLSNX:
+        CALL .PAGE
+.NEXT:
         LD A,(SRTCLPGI)
         INC A
         LD (SRTCLPGI),A
-        JR SRTCLSMP
+        JR .LOOP
 
 ; Sweep one single-page class and then rebuild its free links.
-SRTCLPAG:
+.PAGE:
         LD A,(SRTCLPGI)
         LD L,A
         LD H,0
@@ -298,24 +298,24 @@ SRTCLPAG:
         ADD HL,HL
         ADD HL,HL
         LD (SRTCLSTR),HL
-        CALL SRTCLGET
+        CALL SLAB_GET
         LD HL,(SRTCLPGA)
         LD (SRTCLPGL),HL
-SRTCLPLL:
+.OBJ_LOOP:
         LD A,(SRTCLPGQ)
         OR A
-        JR Z,SRTCLPDN
+        JR Z,.PAGE_END
         LD HL,(SRTCLPGL)
         LD (SRTCLOBJ),HL
         CALL SRTCLSTA
-        JR Z,SRTCLPNX
+        JR Z,.OBJ_NEXT
         CALL SRTCLSEE
-        JR Z,SRTCLPDE
+        JR Z,.DEAD
         CALL SRTCLCLM
-        CALL SRTCLUIN
-        JR SRTCLPNX
-SRTCLPDE:
-        CALL SRTSCL
+        CALL SLAB_USE
+        JR .OBJ_NEXT
+.DEAD:
+        CALL STR_CLRM
         CALL SRTCLCLM              ; Clear the mark and leave its map byte in HL.
         LD A,C                     ; Recover the allocation's even start mask.
         ADD A,A                    ; Select the adjacent odd vector marker.
@@ -325,7 +325,7 @@ SRTCLPDE:
         AND B                      ; Clear only this object's vector marker.
         LD (HL),A                  ; Retain neighboring allocation metadata.
         CALL SRTCLCLB
-SRTCLPNX:
+.OBJ_NEXT:
         LD HL,(SRTCLPGL)
         LD DE,(SRTCLSTR)
         ADD HL,DE
@@ -333,8 +333,8 @@ SRTCLPNX:
         LD A,(SRTCLPGQ)
         DEC A
         LD (SRTCLPGQ),A
-        JR SRTCLPLL
-SRTCLPDN:
+        JR .OBJ_LOOP
+.PAGE_END:
         LD A,(SRTCLPGI)
         LD L,A
         LD H,0
@@ -342,8 +342,8 @@ SRTCLPDN:
         ADD HL,DE
         LD A,(HL)
         OR A
-        JR NZ,SRTCLPFR
-        CALL SRTCLPRE
+        JR NZ,SLAB_FIX
+        CALL SLAB_REL
         RET C
         LD A,(SRTCLPGI)
         LD L,A
@@ -355,10 +355,10 @@ SRTCLPDN:
         RET
 
 ; Release the physical page belonging to the current logical entry.
-SRTCLPRE:
+SLAB_REL:
         LD HL,(SRTCLPGA)
         LD DE,1
-        CALL SRTGPREL
+        CALL PAGE_REL
         RET C
         LD A,(SRTCLPGI)
         LD L,A
@@ -384,7 +384,7 @@ SRTCLPRE:
         RET
 
 ; Rebuild one class's available-object chain from its surviving page.
-SRTCLPFR:
+SLAB_FIX:
         LD A,(SRTCLPGN)
         LD L,A
         LD H,0
@@ -399,17 +399,17 @@ SRTCLPFR:
         ADD HL,DE
         LD A,(HL)
         LD (SRTCLPGQ),A
-        CALL SRTCLGET
+        CALL SLAB_GET
         LD HL,(SRTCLPGA)
         LD (SRTCLPGL),HL
-SRTCLFLP:
+.LOOP:
         LD A,(SRTCLPGQ)
         OR A
         RET Z
         LD HL,(SRTCLPGL)
         LD (SRTCLOBJ),HL
         CALL SRTCLSTA
-        JR NZ,SRTCLFLN
+        JR NZ,.NEXT
         LD HL,(SRTCLFP)           ; Address of the class-head word.
         LD E,(HL)                 ; Link to the previous free object.
         INC HL
@@ -427,7 +427,7 @@ SRTCLFLP:
         INC HL
         LD A,D
         LD (HL),A
-SRTCLFLN:
+.NEXT:
         LD HL,(SRTCLPGL)
         LD DE,(SRTCLSTR)
         ADD HL,DE
@@ -435,17 +435,17 @@ SRTCLFLN:
         LD A,(SRTCLPGQ)
         DEC A
         LD (SRTCLPGQ),A
-        JR SRTCLFLP
+        JR .LOOP
 
 ; Sweep a 260-byte two-page closure run.  There is one object and no free list.
-SRTCLR2:
-        CALL SRTCLGET
+SLAB_GC2:
+        CALL SLAB_GET
         LD HL,(SRTCLPGA)
         LD (SRTCLOBJ),HL
         CALL SRTCLSTA
-        JR Z,SRTCLRLS
+        JR Z,.FREE
         CALL SRTCLSEE
-        JR Z,SRTCLRLS
+        JR Z,.FREE
         CALL SRTCLCLM
         LD A,(SRTCLPGI)
         LD L,A
@@ -455,7 +455,7 @@ SRTCLR2:
         LD A,1
         LD (HL),A
         RET
-SRTCLRLS:
+.FREE:
         LD HL,(SRTCLOBJ)
         CALL SRTCLCLM              ; Clear the mark and leave its map byte in HL.
         LD A,C                     ; Recover the two-page object's even mask.
@@ -468,7 +468,7 @@ SRTCLRLS:
         CALL SRTCLCLB
         LD HL,(SRTCLPGA)
         LD DE,2
-        CALL SRTGPREL
+        CALL PAGE_REL
         RET C
         LD A,(SRTCLPGI)
         LD L,A
@@ -498,7 +498,7 @@ SRTCLRLS:
         RET
 
 ; Increment the live-object count for the page in SRTCLPGI.
-SRTCLUIN:
+SLAB_USE:
         LD A,(SRTCLPGI)
         LD L,A
         LD H,0

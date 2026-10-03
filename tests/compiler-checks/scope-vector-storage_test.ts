@@ -16,7 +16,7 @@ Deno.test("vector overflow fallback preserves every rooted pair", async () => {
     assert.equal(vector.carry, 0);
     vectors.push(vector.payload);
 
-    const pair = call("SRTMAKEP");
+    const pair = call("PAIR_NEW");
     assert.equal(pair.carry, 0);
     pairs.push(pair.payload);
     writeWord(memory, vector.payload, 1);

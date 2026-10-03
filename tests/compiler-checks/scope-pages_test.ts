@@ -68,68 +68,68 @@ Deno.test("page setup rejects an image at the managed boundary", async () => {
   const { memory, call, assembled } = await pageRuntime();
   memory.fill(0xa5, 0x8f00, 0x9000);
   const before = memory.slice(0x8f00, 0x9000);
-  const result = call("SRTGPINI", 0x9000);
+  const result = call("PAGE_INI", 0x9000);
   assert.equal(result.carry, 1);
   assert.equal(result.status, 2);
   assert.deepEqual(memory.slice(0x8f00, 0x9000), before);
-  assert.equal(memory[assembled.address("SRTPGOK")], 0);
+  assert.equal(memory[assembled.address("PAGE_OK")], 0);
 });
 
 Deno.test("one-page gaps reserve management before the high extent", async () => {
   const { memory, call, assembled } = await pageRuntime();
-  const result = call("SRTGPINI", 0x8e01);
+  const result = call("PAGE_INI", 0x8e01);
   assert.equal(result.carry, 0);
-  assert.equal(readWord(memory, assembled.address("SRTPGBAS")), 0x8f00);
-  assert.equal(readWord(memory, assembled.address("SRTPGLOW")), 1);
-  assert.equal(readWord(memory, assembled.address("SRTPGCNT")), 22);
-  assert.equal(readWord(memory, assembled.address("SRTPGMET")), 1);
-  assert.equal(readWord(memory, assembled.address("SRTPGFRE")), 21);
-  assert.equal(readWord(memory, assembled.address("SRTPGFRB")), 0xab00);
-  const high = call("SRTGPALL", 1);
+  assert.equal(readWord(memory, assembled.address("PAGE_ORG")), 0x8f00);
+  assert.equal(readWord(memory, assembled.address("PAGE_LO")), 1);
+  assert.equal(readWord(memory, assembled.address("PAGE_CNT")), 22);
+  assert.equal(readWord(memory, assembled.address("PAGE_SYS")), 1);
+  assert.equal(readWord(memory, assembled.address("PAGE_CAP")), 21);
+  assert.equal(readWord(memory, assembled.address("PAGE_MIN")), 0xab00);
+  const high = call("PAGE_NEW", 1);
   assert.equal(high.carry, 0);
   assert.equal(high.hl, 0xab00);
-  assert.equal(call("SRTGPREL", high.hl, 1).carry, 0);
+  assert.equal(call("PAGE_REL", high.hl, 1).carry, 0);
 });
 
 Deno.test("small images use the pages below the legacy map origin", async () => {
   const { memory, call, assembled } = await pageRuntime();
-  const result = call("SRTGPINI", 0x3659);
+  const result = call("PAGE_INI", 0x3659);
   assert.equal(result.carry, 0);
-  assert.equal(readWord(memory, assembled.address("SRTPGBAS")), 0x3700);
-  assert.equal(readWord(memory, assembled.address("SRTPGFRB")), 0x3800);
-  const first = call("SRTGPALL", 1);
+  assert.equal(readWord(memory, assembled.address("PAGE_ORG")), 0x3700);
+  assert.equal(readWord(memory, assembled.address("PAGE_MIN")), 0x3800);
+  const first = call("PAGE_NEW", 1);
   assert.equal(first.carry, 0);
   assert.equal(first.hl, 0x3800);
-  assert.equal(call("SRTGPREL", first.hl, 1).carry, 0);
+  assert.equal(call("PAGE_REL", first.hl, 1).carry, 0);
 });
 
 Deno.test("a lower managed ceiling shortens the high extent without overlap", async () => {
   const { memory, call, assembled } = await pageRuntime();
   writeWord(memory, assembled.address("SRTHEAPP"), 0xad00);
-  const lower = call("SRTGPINI", 0x8e01);
+  const lower = call("PAGE_INI", 0x8e01);
   assert.equal(lower.carry, 0);
-  assert.equal(readWord(memory, assembled.address("SRTPGHIG")), 2);
-  assert.equal(readWord(memory, assembled.address("SRTPGCNT")), 3);
-  assert.equal(readWord(memory, assembled.address("SRTPGFRE")), 2);
-  const first = call("SRTGPALL", 2);
+  assert.equal(readWord(memory, assembled.address("PAGE_HI")), 2);
+  assert.equal(readWord(memory, assembled.address("PAGE_CNT")), 3);
+  assert.equal(readWord(memory, assembled.address("PAGE_CAP")), 2);
+  const first = call("PAGE_NEW", 2);
   assert.equal(first.carry, 0);
   assert.equal(first.hl, 0xab00);
-  assert.equal(call("SRTGPALL", 1).carry, 1);
+  assert.equal(call("PAGE_NEW", 1).carry, 1);
 
   writeWord(memory, assembled.address("SRTHEAPP"), 0xc000);
-  const full = call("SRTGPINI", 0x8e01);
+  const full = call("PAGE_INI", 0x8e01);
   assert.equal(full.carry, 0);
-  assert.equal(readWord(memory, assembled.address("SRTPGHIG")), 21);
-  assert.equal(readWord(memory, assembled.address("SRTPGFRE")), 21);
+  assert.equal(readWord(memory, assembled.address("PAGE_HI")), 21);
+  assert.equal(readWord(memory, assembled.address("PAGE_CAP")), 21);
 });
 
 Deno.test("runtime startup publishes page readiness and rejects an invalid image", async () => {
   const { assembled, memory, call } = await pageRuntime();
   memory.fill(0xa5, 0x8f00, 0x9000);
   runStartup(assembled, memory, 0x8f00, false);
-  assert.equal(memory[assembled.address("SRTPGOK")], 1);
-  assert.equal(readWord(memory, assembled.address("SRTPGBAS")), 0x8f00);
-  assert.equal(readWord(memory, assembled.address("SRTPGFRE")), 20);
+  assert.equal(memory[assembled.address("PAGE_OK")], 1);
+  assert.equal(readWord(memory, assembled.address("PAGE_ORG")), 0x8f00);
+  assert.equal(readWord(memory, assembled.address("PAGE_CAP")), 20);
   assert.equal(memory[assembled.address("SRTPSLBN")], 1);
   assert.ok(
     [...memory.slice(
@@ -138,14 +138,14 @@ Deno.test("runtime startup publishes page readiness and rejects an invalid image
     )].every((value) => value === 0),
     "binding-start bitmap was not cleared at startup",
   );
-  const high = call("SRTGPALL", 1);
+  const high = call("PAGE_NEW", 1);
   assert.equal(high.carry, 0);
   assert.equal(high.hl, 0xac00);
 
   memory.fill(0xa5, 0x8f00, 0x9000);
   const beforeFailure = memory.slice(0x8f00, 0x9000);
   runStartup(assembled, memory, 0x9000, true);
-  assert.equal(memory[assembled.address("SRTPGOK")], 0);
+  assert.equal(memory[assembled.address("PAGE_OK")], 0);
   assert.deepEqual([...memory.slice(0x8f00, 0x9000)], [...beforeFailure]);
 });
 
@@ -154,22 +154,22 @@ Deno.test("page runs honor bitmap boundaries, fragmentation and canaries", async
   memory.fill(0xa5, 0x6000, 0x9000);
   memory.fill(0xa5, 0x9000, 0xab00);
   memory.fill(0xa5, 0xc000, 0xdfe0);
-  const result = call("SRTGPINI", 0x6f00);
+  const result = call("PAGE_INI", 0x6f00);
   assert.equal(result.carry, 0);
   const address = (name: string) => assembled.address(name);
-  assert.equal(readWord(memory, address("SRTPGBAS")), 0x6f00);
-  assert.equal(readWord(memory, address("SRTPGLOW")), 33);
-  assert.equal(readWord(memory, address("SRTPGCNT")), 54);
-  assert.equal(readWord(memory, address("SRTPGBYT")), 7);
-  assert.equal(readWord(memory, address("SRTPGMET")), 1);
-  assert.equal(readWord(memory, address("SRTPGFRE")), 53);
-  assert.equal(readWord(memory, address("SRTPGFRB")), 0x7000);
-  const bitmap = readWord(memory, address("SRTPGBMA"));
+  assert.equal(readWord(memory, address("PAGE_ORG")), 0x6f00);
+  assert.equal(readWord(memory, address("PAGE_LO")), 33);
+  assert.equal(readWord(memory, address("PAGE_CNT")), 54);
+  assert.equal(readWord(memory, address("PAGE_LEN")), 7);
+  assert.equal(readWord(memory, address("PAGE_SYS")), 1);
+  assert.equal(readWord(memory, address("PAGE_CAP")), 53);
+  assert.equal(readWord(memory, address("PAGE_MIN")), 0x7000);
+  const bitmap = readWord(memory, address("PAGE_MAP"));
   assert.deepEqual(
     [...memory.slice(bitmap, bitmap + 7)],
     [0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0x3f],
   );
-  const directory = readWord(memory, address("SRTPGDIR"));
+  const directory = readWord(memory, address("PAGE_DIR"));
   assert.equal(memory[directory], 2);
   assert.equal(memory[directory + 1], 0);
   assert.equal(memory[directory + 16], 0);
@@ -177,53 +177,53 @@ Deno.test("page runs honor bitmap boundaries, fragmentation and canaries", async
   const lowCanary = memory.slice(0x6000, 0x6f00);
   const stackCanary = memory.slice(0xc000, 0xdfe0);
 
-  const first = call("SRTGPALL", 3);
+  const first = call("PAGE_NEW", 3);
   assert.equal(first.carry, 0);
   assert.equal(first.hl, 0x7000);
-  const second = call("SRTGPALL", 2);
+  const second = call("PAGE_NEW", 2);
   assert.equal(second.carry, 0);
   assert.equal(second.hl, 0x7300);
-  assert.equal(readWord(memory, address("SRTPGFRE")), 48);
+  assert.equal(readWord(memory, address("PAGE_CAP")), 48);
   assert.ok([...memory.slice(0x7000, 0x7500)].every((value) => value === 0xa5));
 
-  assert.equal(call("SRTGPREL", first.hl, 3).carry, 0);
-  const fragmented = call("SRTGPALL", 4);
+  assert.equal(call("PAGE_REL", first.hl, 3).carry, 0);
+  const fragmented = call("PAGE_NEW", 4);
   assert.equal(fragmented.carry, 0);
   assert.equal(fragmented.hl, 0x7500);
-  assert.equal(call("SRTGPREL", second.hl, 2).carry, 0);
-  const reused = call("SRTGPALL", 3);
+  assert.equal(call("PAGE_REL", second.hl, 2).carry, 0);
+  const reused = call("PAGE_NEW", 3);
   assert.equal(reused.carry, 0);
   assert.equal(reused.hl, 0x7000);
-  assert.equal(call("SRTGPREL", reused.hl, 3).carry, 0);
+  assert.equal(call("PAGE_REL", reused.hl, 3).carry, 0);
   const beforeDoubleFree = memory.slice(bitmap, bitmap + 7);
-  const doubleFree = call("SRTGPREL", reused.hl, 3);
+  const doubleFree = call("PAGE_REL", reused.hl, 3);
   assert.equal(doubleFree.carry, 1);
   assert.equal(doubleFree.status, 2);
   assert.deepEqual([...memory.slice(bitmap, bitmap + 7)], [
     ...beforeDoubleFree,
   ]);
-  assert.equal(call("SRTGPREL", fragmented.hl, 4).carry, 0);
+  assert.equal(call("PAGE_REL", fragmented.hl, 4).carry, 0);
 
-  const five = call("SRTGPALL", 5);
+  const five = call("PAGE_NEW", 5);
   assert.equal(five.carry, 0);
   assert.equal(five.hl, 0x7000);
-  const seven = call("SRTGPALL", 7);
+  const seven = call("PAGE_NEW", 7);
   assert.equal(seven.carry, 0);
   assert.equal(seven.hl, 0x7500);
-  assert.equal(readWord(memory, address("SRTPGFRE")), 41);
-  const lowRemainder = call("SRTGPALL", 20);
+  assert.equal(readWord(memory, address("PAGE_CAP")), 41);
+  const lowRemainder = call("PAGE_NEW", 20);
   assert.equal(lowRemainder.carry, 0);
   assert.equal(lowRemainder.hl, 0x7c00);
-  assert.equal(readWord(memory, address("SRTPGFRE")), 21);
-  const highOne = call("SRTGPALL", 1);
+  assert.equal(readWord(memory, address("PAGE_CAP")), 21);
+  const highOne = call("PAGE_NEW", 1);
   assert.equal(highOne.carry, 0);
   assert.equal(highOne.hl, 0xab00);
-  assert.equal(readWord(memory, address("SRTPGFRE")), 20);
-  assert.equal(call("SRTGPREL", five.hl, 5).carry, 0);
-  assert.equal(call("SRTGPREL", seven.hl, 7).carry, 0);
-  assert.equal(call("SRTGPREL", lowRemainder.hl, 20).carry, 0);
-  assert.equal(call("SRTGPREL", highOne.hl, 1).carry, 0);
-  assert.equal(readWord(memory, address("SRTPGFRE")), 53);
+  assert.equal(readWord(memory, address("PAGE_CAP")), 20);
+  assert.equal(call("PAGE_REL", five.hl, 5).carry, 0);
+  assert.equal(call("PAGE_REL", seven.hl, 7).carry, 0);
+  assert.equal(call("PAGE_REL", lowRemainder.hl, 20).carry, 0);
+  assert.equal(call("PAGE_REL", highOne.hl, 1).carry, 0);
+  assert.equal(readWord(memory, address("PAGE_CAP")), 53);
   assert.deepEqual(
     [...memory.slice(bitmap, bitmap + 7)],
     [0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0x3f],
@@ -231,26 +231,26 @@ Deno.test("page runs honor bitmap boundaries, fragmentation and canaries", async
   assert.deepEqual([...memory.slice(0x6000, 0x6f00)], [...lowCanary]);
   assert.deepEqual([...memory.slice(0xc000, 0xdfe0)], [...stackCanary]);
 
-  const lowAll = call("SRTGPALL", 32);
+  const lowAll = call("PAGE_NEW", 32);
   assert.equal(lowAll.carry, 0);
   assert.equal(lowAll.hl, 0x7000);
-  assert.equal(readWord(memory, address("SRTPGFRE")), 21);
-  const highAll = call("SRTGPALL", 21);
+  assert.equal(readWord(memory, address("PAGE_CAP")), 21);
+  const highAll = call("PAGE_NEW", 21);
   assert.equal(highAll.carry, 0);
   assert.equal(highAll.hl, 0xab00);
-  assert.equal(readWord(memory, address("SRTPGFRE")), 0);
-  const exhausted = call("SRTGPALL", 1);
+  assert.equal(readWord(memory, address("PAGE_CAP")), 0);
+  const exhausted = call("PAGE_NEW", 1);
   assert.equal(exhausted.carry, 1);
   assert.equal(exhausted.status, 1);
-  assert.equal(readWord(memory, address("SRTPGFRE")), 0);
-  assert.equal(call("SRTGPREL", highAll.hl, 21).carry, 0);
-  const highAgain = call("SRTGPALL", 21);
+  assert.equal(readWord(memory, address("PAGE_CAP")), 0);
+  assert.equal(call("PAGE_REL", highAll.hl, 21).carry, 0);
+  const highAgain = call("PAGE_NEW", 21);
   assert.equal(highAgain.carry, 0);
   assert.equal(highAgain.hl, 0xab00);
-  assert.equal(readWord(memory, address("SRTPGFRE")), 0);
-  assert.equal(call("SRTGPREL", highAgain.hl, 21).carry, 0);
-  assert.equal(call("SRTGPREL", lowAll.hl, 32).carry, 0);
-  assert.equal(readWord(memory, address("SRTPGFRE")), 53);
+  assert.equal(readWord(memory, address("PAGE_CAP")), 0);
+  assert.equal(call("PAGE_REL", highAgain.hl, 21).carry, 0);
+  assert.equal(call("PAGE_REL", lowAll.hl, 32).carry, 0);
+  assert.equal(readWord(memory, address("PAGE_CAP")), 53);
   assert.deepEqual([...memory.slice(0x6000, 0x6f00)], [...lowCanary]);
   assert.deepEqual(
     [...memory.slice(0x9000, 0xab00)],
@@ -262,12 +262,12 @@ Deno.test("page runs honor bitmap boundaries, fragmentation and canaries", async
 Deno.test("page release rejects the protected intervals", async () => {
   const { memory, call, assembled } = await pageRuntime();
   memory.fill(0xa5, 0x8f00, 0x9000);
-  const result = call("SRTGPINI", 0x8f00);
+  const result = call("PAGE_INI", 0x8f00);
   assert.equal(result.carry, 0);
   for (const address of [0x8e00, 0x8f00, 0x9000, 0xaa00, 0xc000, 0xdf00]) {
-    const rejected = call("SRTGPREL", address, 1);
+    const rejected = call("PAGE_REL", address, 1);
     assert.equal(rejected.carry, 1, `release ${address.toString(16)}`);
     assert.equal(rejected.status, 2);
   }
-  assert.equal(readWord(memory, assembled.address("SRTPGFRE")), 21);
+  assert.equal(readWord(memory, assembled.address("PAGE_CAP")), 21);
 });

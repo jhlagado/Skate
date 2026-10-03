@@ -23,20 +23,20 @@ SRTPCONS:
         CALL SRTPVAL
         LD (SRTQCDR),HL
         LD (SRTQDTAG),A
-        CALL SRTMAKEP
+        CALL PAIR_NEW
         PUSH IX
         RET
 
 ; Apply a selector to the one packet argument.
 SRTPCAR:
         CALL SRTONE
-        CALL SRTCARV
+        CALL PAIR_CAR
         JP C,SRTERROR
         PUSH IX
         RET
 SRTPCDR:
         CALL SRTONE
-        CALL SRTCDRV
+        CALL PAIR_CDR
         JP C,SRTERROR
         PUSH IX
         RET
@@ -44,8 +44,8 @@ SRTPCDR:
 ; pair? returns false for every non-pair value.
 SRTPPAR:
         CALL SRTONE
-        CALL SRTPCHK
-        JP C,SRTFPALS
+        CALL PAIR_CHK
+        JP C,PAIR_NO
         XOR A
         LD HL,0FE01H
         PUSH IX
@@ -55,11 +55,11 @@ SRTPPAR:
 SRTNPRED:
         CALL SRTONE
         OR A
-        JP NZ,SRTFPALS
+        JP NZ,PAIR_NO
         LD DE,0FE02H
         OR A
         SBC HL,DE
-        JP NZ,SRTFPALS
+        JP NZ,PAIR_NO
         XOR A
         LD HL,0FE01H
         PUSH IX
@@ -112,12 +112,12 @@ SRTPEQ:
         LD B,A
         LD A,(SRTQDTAG)
         CP B
-        JP NZ,SRTFPALS
+        JP NZ,PAIR_NO
         LD HL,(SRTQCAR)
         LD DE,(SRTQCDR)
         OR A
         SBC HL,DE
-        JP NZ,SRTFPALS
+        JP NZ,PAIR_NO
         XOR A
         LD HL,0FE01H
         PUSH IX

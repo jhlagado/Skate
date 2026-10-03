@@ -6,11 +6,11 @@
 ; Allocate a vector block and set its ownership and type marker.
 SRTVACL:
         CALL SRTVSZ                ; Derive the rounded class from the request.
-        CALL SRTCLALC              ; Reuse a class block before growing the pool.
+        CALL SLAB_NEW              ; Reuse a class block before growing the pool.
         JR NC,SRTVAK               ; Carry clear means a block is reserved.
         CALL SRTGC                  ; Reclaim dead managed objects once.
         CALL SRTVSZ                ; Recompute the request-sized class after collection.
-        CALL SRTCLALC              ; Retry the same class after sweeping.
+        CALL SLAB_NEW              ; Retry the same class after sweeping.
         RET C                      ; Preserve the capacity failure for the caller.
 SRTVAK:
         LD (SRTVOBJ),HL            ; Retain the exact block start.
@@ -40,7 +40,7 @@ SRTVSZ:
         RR L
         DEC L                      ; Four bytes per class index, zero based.
         LD A,L
-        LD (SRTCLIDX),A            ; Publish the selected class for SRTCLALC.
+        LD (SRTCLIDX),A            ; Publish the selected class for SLAB_NEW.
         RET
 
 ; Validate HL as a vector address; the caller has already checked its tag.
@@ -63,7 +63,7 @@ SRTVLD:
         JP Z,SRTVBD
         LD HL,(SRTCLOBJ)            ; Find the owning logical closure page.
         LD (SRTCLBAS),HL
-        CALL SRTCLFND
+        CALL SLAB_AT
         LD A,(SRTCLPGI)
         CP 80H
         JP NC,SRTVBD                ; A missing owner cannot describe a vector.
@@ -78,7 +78,7 @@ SRTVLD:
         JP NC,SRTVBD
         DEC A
         LD (SRTCLIDX),A
-        CALL SRTCLGET                ; Recover the physical page base.
+        CALL SLAB_GET                ; Recover the physical page base.
         LD A,(SRTCLIDX)              ; Rebuild the exact class extent from its owner.
         INC A
         LD L,A

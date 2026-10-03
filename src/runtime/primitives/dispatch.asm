@@ -4,7 +4,7 @@
 
 ; Predefined arithmetic procedure values for the scope-control runtime.
 ;
-; Primitive values use tag zero and payloads from FE20H below SRTPRLIM.  The
+; Primitive values use tag zero and payloads from FE20H below PRIM_LIM.  The
 ; dispatcher validates packet arity, pushes values in the numeric ABI order,
 ; and returns through the continuation supplied in IX.
 
@@ -37,7 +37,7 @@ SRTPKGL:
         LD (HL),A                ; The extension byte stays clear.
         INC HL
         LD A,(SRTATMP)
-        OR SRTCLIVE              ; A live record and its tag.
+        OR CELL_VAL              ; A live record and its tag.
         LD (HL),A
         DEC C
         DJNZ SRTPKGL
@@ -126,7 +126,7 @@ SRTPRIM:
         CP 32
         JP C,SRTPNUM                 ; Division is zero-based runtime kind thirty-one.
         CP 39
-        JP C,SRTSTRCH                 ; String and character operations follow division.
+        JP C,STR_PRIM                 ; String and character operations follow division.
         CP 45
         JP Z,SRTAPPLY                 ; Apply spreads a checked proper list into a call.
         JP C,SRTVEC                   ; Vector operations use the preceding range.
@@ -134,7 +134,7 @@ SRTPRIM:
         JP C,SRTPORTS                 ; Standard ports follow the vector services.
         CP 60
         JP C,SRTFILE                   ; File ports use the same provider boundary.
-        CP SRTPRLIM-20H
+        CP PRIM_LIM-20H
         JP C,STD_DISP                  ; Standard procedures added later.
         JP SRTERROR                ; The reserved range has no other services.
 

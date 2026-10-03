@@ -4,7 +4,7 @@
 ; available-slab index and free-record head offset.  A free record's two CAR
 ; bytes hold the next free offset, with FFH as the end marker.  These links are
 ; never visible after the allocation bit is published.
-SRTCONS:
+CONS:
         POP IX                     ; Preserve the generated continuation.
         POP DE                     ; Recover the CDR payload.
         POP BC                     ; Recover the CDR tag in B.
@@ -15,24 +15,24 @@ SRTCONS:
         LD A,B
         LD (SRTQDTAG),A
         LD (SRTQCAR),HL
-        CALL SRTMAKEP
+        CALL PAIR_NEW
         PUSH IX
         RET
 
 ; Initialise the pair class and reserve its first managed page.
-SRTPIN:
+PAIR_INI:
         XOR A
         LD (SRTPSLBN),A             ; No slab is available before this call.
-        LD A,(SRTPGCNT)             ; The page domain bounds the descriptor table.
+        LD A,(PAGE_CNT)             ; The page domain bounds the descriptor table.
         CP 128                      ; The table covers the expanded two-extent domain.
-        JR C,SRTPSIL                ; Keep a smaller qualified domain unchanged.
+        JR C,.LIMIT                 ; Keep a smaller qualified domain unchanged.
         LD A,128                    ; Never advertise more entries than the table holds.
-SRTPSIL:
+.LIMIT:
         LD (SRTPSLIM),A             ; Empty descriptors can later be reused.
-        CALL SRTFINDP               ; The first free record creates one page.
+        CALL PAIR_GET               ; The first free record creates one page.
         RET C                       ; Startup reports a page-capacity failure.
         LD (SRTPSCAN),HL            ; Keep the probe record while returning it.
-        LD DE,SRPCCARM              ; Locate the CAR metadata byte.
+        LD DE,CAR_TAG               ; Locate the CAR metadata byte.
         ADD HL,DE                   ; HL addresses the allocation and mark bits.
         XOR A                       ; Return the probe record to the free chain.
         LD (HL),A                   ; The page remains assigned to the pair class.
@@ -77,7 +77,7 @@ SRTPSIL:
         RET
 
 ; Allocate, initialise and return one eight-byte pair record.
-SRTMAKEP:
+PAIR_NEW:
         LD HL,(SRTQCAR)             ; Copy constructor inputs into dedicated roots.
         LD (SRTCRCAR),HL
         LD HL,(SRTQCDR)
@@ -88,12 +88,12 @@ SRTMAKEP:
         LD (SRTCRDTA),A
         LD A,1                       ; The roots remain live until initialisation ends.
         LD (SRTCRON),A
-        CALL SRTFINDP               ; Find a record or grow the pair class.
-        JR NC,SRTPINIT              ; Carry clear means the record is reserved.
+        CALL PAIR_GET               ; Find a record or grow the pair class.
+        JR NC,.INIT                 ; Carry clear means the record is reserved.
         CALL SRTGC                  ; Reclaim unreachable records when full.
-        CALL SRTFINDP               ; Retry after the complete collection.
+        CALL PAIR_GET               ; Retry after the complete collection.
         JP C,SRTERROR               ; No managed page or record remains.
-SRTPINIT:
+.INIT:
         LD DE,(SRTPCNT)             ; Count this successfully reserved pair.
         INC DE
         LD (SRTPCNT),DE
@@ -139,11 +139,11 @@ SRTPINIT:
 
 ; Find and reserve a free record in the available-slab/free-record chains,
 ; or add one page when every assigned slab is full.
-SRTFINDP:
+PAIR_GET:
         LD A,(SRTPSLHD)             ; The one-based index identifies the list head.
         OR A
-        JR Z,SRTPSNEW               ; No available slab means the class must grow.
-SRTPSHD:
+        JR Z,.GROW                  ; No available slab means the class must grow.
+.HEAD:
         DEC A                       ; Convert the one-based list index to zero-based.
         LD L,A
         LD H,0
@@ -163,7 +163,7 @@ SRTPSHD:
         INC HL                      ; Skip the next-list and free-head fields.
         LD A,(HL)                   ; FFH means this slab has become full.
         CP 0FFH
-        JR Z,SRTPSD                 ; Remove a stale full head and inspect its successor.
+        JR Z,.DROP                  ; Remove a stale full head and inspect its successor.
         LD C,A                      ; Widen the record offset to a word.
         LD B,0
         LD HL,(SRTPSBA)
@@ -174,20 +174,20 @@ SRTPSHD:
         LD D,(HL)                   ; The high link byte is zero for a same-page record.
         LD A,E
         CP 0FFH
-        JR Z,SRTPSLS                ; FFH terminates this slab's free-record chain.
+        JR Z,.NOW_FULL              ; FFH terminates this slab's free-record chain.
         LD (SRTPSNXT),A             ; Preserve the successor offset for publication.
-        JR SRTPSHS
-SRTPSLS:
+        JR .TAKE
+.NOW_FULL:
         LD A,0FFH                   ; The slab is full after this reservation.
         LD (SRTPSNXT),A
-SRTPSHS:
+.TAKE:
         LD HL,(SRTPSST)
         LD DE,2
         ADD HL,DE
         LD A,(SRTPSNXT)
         LD (HL),A                   ; Publish the next free offset before claiming this one.
         LD HL,(SRTPSCAN)
-        LD DE,SRPCCARM
+        LD DE,CAR_TAG
         ADD HL,DE                   ; Reach the CAR metadata byte of the free record.
         LD A,(HL)
         OR 40H                      ; Preserve tags while claiming the record.
@@ -195,31 +195,31 @@ SRTPSHS:
         LD HL,(SRTPSCAN)             ; Return the record start, not its state byte.
         XOR A                       ; Carry clear and A zero report success.
         RET
-SRTPSD:
+.DROP:
         LD HL,(SRTPSST)              ; Read the successor slab index at descriptor offset one.
         LD DE,1
         ADD HL,DE
         LD A,(HL)
         LD (SRTPSLHD),A              ; Pop this full slab from the available list.
-        JR SRTFINDP
-SRTPSNEW:
+        JR PAIR_GET
+.GROW:
         LD HL,1                     ; Request one whole page for a new pair slab.
-        CALL SRTGPALL               ; The page manager owns all page arithmetic.
+        CALL PAGE_NEW               ; The page manager owns all page arithmetic.
         RET C                       ; Preserve its capacity status on failure.
-        CALL SRTPSADD               ; Record the page and initialise its flags.
+        CALL .ADD_PAGE              ; Record the page and initialise its flags.
         RET                         ; The first record is reserved for the caller.
 
 ; Add a newly allocated page to the pair class and reserve its first record.
-SRTPSADD:
+.ADD_PAGE:
         LD (SRTPSBA),HL             ; Keep the page address during table arithmetic.
         LD A,(SRTPSLBN)             ; Search the high-water table for a released slot.
         LD C,A                      ; C counts descriptors still in the table.
         XOR A                       ; SRTPSIDX is a zero-based search cursor.
         LD (SRTPSIDX),A
-SRTPSLOT:
+.SEEK:
         LD A,C
         OR A
-        JR Z,SRTPSAPP               ; No hole remains; append after the high-water mark.
+        JR Z,.APPEND                ; No hole remains; append after the high-water mark.
         LD A,(SRTPSIDX)
         LD L,A
         LD H,0
@@ -231,26 +231,26 @@ SRTPSLOT:
         ADD HL,DE
         LD A,(HL)                   ; Zero page bytes identify released descriptors.
         OR A
-        JR Z,SRTPSUSE               ; Reuse this slot without growing the table.
+        JR Z,.USE                   ; Reuse this slot without growing the table.
         LD A,(SRTPSIDX)
         INC A
         LD (SRTPSIDX),A
         DEC C
-        JR SRTPSLOT
-SRTPSAPP:
+        JR .SEEK
+.APPEND:
         LD A,(SRTPSLBN)
         LD C,A
         LD A,(SRTPSLIM)
         CP C
-        JP C,SRTPSAFL               ; The qualified table cannot accept another slab.
-        JP Z,SRTPSAFL
+        JP C,.FULL                  ; The qualified table cannot accept another slab.
+        JP Z,.FULL
         LD A,C                      ; Append at the previous high-water index.
         LD (SRTPSIDX),A
         INC C
         LD A,C
         LD (SRTPSLBN),A             ; Publish the expanded high-water count.
         LD A,(SRTPSIDX)             ; Recover the selected descriptor index.
-SRTPSUSE:
+.USE:
         LD A,(SRTPSIDX)             ; A hole carries its saved table index here.
         LD C,A                      ; C is the selected zero-based descriptor index.
         LD L,A
@@ -269,36 +269,36 @@ SRTPSUSE:
         LD A,(SRTPSLHD)             ; Link the new slab to the old list head.
         LD (HL),A
         INC HL                      ; Descriptor byte two is the free-record head.
-        LD A,SRTPW                  ; Record one is the first free record after the probe.
+        LD A,PAIR_SZ                ; Record one is the first free record after the probe.
         LD (HL),A
         LD A,C
         INC A                        ; Available-list links use one-based indices.
         LD (SRTPSLHD),A             ; The new slab's one-based index is the new head.
-        LD C,SRPPCAP-1              ; Initialise the remaining free-record chain.
+        LD C,PAIR_CAP-1             ; Initialise the remaining free-record chain.
         LD HL,(SRTPSBA)
-        LD DE,SRTPW
+        LD DE,PAIR_SZ
         ADD HL,DE                   ; Begin at record one.
         LD (SRTPSCAN),HL
-SRTPSFI:
+.LINK:
         LD A,C
         DEC A
-        JR Z,SRTPSFL                ; The final record links to the FFH sentinel.
+        JR Z,.LAST                  ; The final record links to the FFH sentinel.
         LD HL,(SRTPSCAN)
         LD A,L
-        ADD A,SRTPW
+        ADD A,PAIR_SZ
         LD (HL),A                   ; Link to the next record's in-page offset.
         INC HL
         XOR A
         LD (HL),A                   ; Keep the link's high byte clear.
-        JR SRTPSFS
-SRTPSFL:
+        JR .CLEAR
+.LAST:
         LD HL,(SRTPSCAN)
         LD A,0FFH
         LD (HL),A                   ; FFH marks the end of the free-record chain.
         INC HL
         XOR A
         LD (HL),A
-SRTPSFS:
+.CLEAR:
         LD HL,(SRTPSCAN)
         INC HL                      ; Skip the free-record link's two bytes.
         INC HL
@@ -313,11 +313,11 @@ SRTPSFS:
         INC HL
         LD (HL),A                   ; Free records carry no CDR metadata.
         LD HL,(SRTPSCAN)
-        LD DE,SRTPW
+        LD DE,PAIR_SZ
         ADD HL,DE
         LD (SRTPSCAN),HL            ; Advance to the next eight-byte record.
         DEC C
-        JR NZ,SRTPSFI
+        JR NZ,.LINK
         LD HL,(SRTPSBA)             ; Reserve record zero for this allocation.
         INC HL
         INC HL
@@ -336,28 +336,28 @@ SRTPSFS:
         LD HL,(SRTPSBA)             ; Return the first record's address.
         XOR A                       ; Carry clear reports a usable pair slot.
         RET
-SRTPSAFL:
+.FULL:
         LD HL,(SRTPSBA)             ; Return the page when no descriptor is available.
         LD DE,1
-        CALL SRTGPREL
+        CALL PAGE_REL
         LD A,1
         SCF
         RET
 
 ; car and cdr selectors.
-SRTCAR:
+CAR:
         POP IX
         POP HL
         POP AF
-        CALL SRTCARV
+        CALL PAIR_CAR
         JP C,SRTERROR
         PUSH IX
         RET
 
-SRTCARV:
+PAIR_CAR:
         LD (SRTQAVAL),HL
         LD (SRTQATAG),A
-        CALL SRTPCHK
+        CALL PAIR_CHK
         RET C
         LD HL,(SRTQAVAL)
         LD E,(HL)
@@ -367,26 +367,26 @@ SRTCARV:
         INC HL                     ; Reach the CAR metadata byte.
         LD A,(HL)
         AND 0FH                     ; The CAR tag occupies its cell metadata nibble.
-SRTCAROK:
+.OK:
         OR A                       ; Pair access reports success with carry clear.
         EX DE,HL
         RET
-SRTCDR:
+CDR:
         POP IX
         POP HL
         POP AF
-        CALL SRTCDRV
+        CALL PAIR_CDR
         JP C,SRTERROR
         PUSH IX
         RET
 
-SRTCDRV:
+PAIR_CDR:
         LD (SRTQAVAL),HL
         LD (SRTQATAG),A
-        CALL SRTPCHK
+        CALL PAIR_CHK
         RET C
         LD HL,(SRTQAVAL)
-        LD DE,SRPCDDR0
+        LD DE,CDR_LO
         ADD HL,DE
         LD E,(HL)
         INC HL
@@ -396,37 +396,37 @@ SRTCDRV:
         ; Reach the CDR metadata byte.
         LD A,(HL)
         AND 0FH                      ; The CDR tag occupies its cell metadata nibble.
-SRTCDROK:
+.OK:
         OR A                       ; Pair access reports success with carry clear.
         EX DE,HL
         RET
 
 ; Return booleans for pair? and null?.
-SRTPAIRP:
+PAIR_IS:
         POP IX
         POP HL
         POP AF
-        CALL SRTPCHK
-        JR C,SRTFPALS
+        CALL PAIR_CHK
+        JR C,PAIR_NO
         XOR A
         LD HL,0FE01H
         PUSH IX
         RET
-SRTFPALS:
+PAIR_NO:
         XOR A
         LD HL,0FE00H
         PUSH IX
         RET
-SRTNULLP:
+PAIR_NIL:
         POP IX
         POP HL
         POP AF
         OR A
-        JR NZ,SRTFPALS
+        JR NZ,PAIR_NO
         LD DE,0FE02H
         OR A
         SBC HL,DE
-        JR NZ,SRTFPALS
+        JR NZ,PAIR_NO
         XOR A
         LD HL,0FE01H
         PUSH IX

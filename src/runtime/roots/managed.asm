@@ -14,7 +14,7 @@ SRTBMARK:
         SBC HL,DE
         JR C,SRTBFAIL
         LD HL,(SRTBADDR)
-        LD DE,SRTCELW
+        LD DE,CELL_SZ
         ADD HL,DE
         JR C,SRTBFAIL              ; A wrapped binding extent is invalid.
         LD DE,(SRTHEAPP)
@@ -31,16 +31,16 @@ SRTBOK:
         ADD HL,DE
         LD A,(HL)
         LD (SRTBFLG),A
-        AND SRTBALOC
+        AND BND_USED
         RET Z
         LD A,(SRTBFLG)
-        AND SRTBMRKD
+        AND BND_MARK
         JR NZ,SRTBMDON
         LD A,(SRTBFLG)
-        OR SRTBMRKD
+        OR BND_MARK
         LD (HL),A
         LD A,(SRTBFLG)
-        AND SRTBINIT
+        AND BND_INIT
         RET Z
         LD HL,(SRTBADDR)
         LD E,(HL)
@@ -65,7 +65,7 @@ SRTMVALU:
         CP 2
         JP Z,SRTCLENQ
         CP 6
-        JP Z,SRTSMARK
+        JP Z,STR_MARK
         CP 7
         JP NZ,SRTMVR
         LD A,H                       ; Pair-stored escape tokens are scalar leaves.
@@ -380,7 +380,7 @@ SRTCSLP:
         JR Z,SRTCPOP
         CALL SRTCLSEE
         JR Z,SRTCPOP
-        CALL SRTSSTA
+        CALL STR_TEST
         JR NZ,SRTCPOP
         LD HL,(SRTCLOBJ)           ; Restore the scanned object after string classification.
         XOR A

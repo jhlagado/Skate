@@ -1,0 +1,17 @@
+{
+  "globals": {
+    "SRTLEN": "RT_SIZE",
+    "SRTLCORE": "RT_CORE",
+    "SRTLSTD": "RT_STD",
+    "SRTCLP": "RT_CALLP",
+    "SRTLDA": "RT_LOAD",
+    "SRTSTA": "RT_STORE",
+    "SRTSETS": "RT_SET",
+    "SRTFAL": "RT_TEST",
+    "SRTHEP": "HEAP_LIM",
+    "SRTLOW": "RT_LOWSP",
+    "SRTPRI": "OUT_SHOW",
+    "SRTIMAGE": "RT_IMAGE",
+    "SRTIEND": "RT_IEND"
+  }
+}

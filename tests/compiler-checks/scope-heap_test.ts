@@ -171,12 +171,12 @@ Deno.test("pair allocator follows free chains across a second slab", async () =>
 
   cpu.h = assembled.image.end >>> 8;
   cpu.l = assembled.image.end & 255;
-  assert.equal(call("SRTGPINI").carry, 0);
-  assert.equal(call("SRTPIN").carry, 0);
+  assert.equal(call("PAGE_INI").carry, 0);
+  assert.equal(call("PAIR_INI").carry, 0);
 
   const records: number[] = [];
   for (let index = 0; index < PAIRS_PER_SLAB * 2; index++) {
-    const result = call("SRTFINDP");
+    const result = call("PAIR_GET");
     assert.equal(result.carry, 0, `allocation ${index} failed`);
     records.push(result.payload);
   }
@@ -190,7 +190,7 @@ Deno.test("pair allocator follows free chains across a second slab", async () =>
   assert.equal(memory[assembled.address("SRTPSLBN")], 2);
 
   assert.equal(call("SRTGC").carry, 0);
-  const reused = call("SRTFINDP");
+  const reused = call("PAIR_GET");
   assert.equal(reused.carry, 0);
   assert.ok(
     records.includes(reused.payload),
@@ -206,15 +206,15 @@ Deno.test("constructor roots survive collection and retain both inputs", async (
   const cpu = assembled.runtime.cpu;
   cpu.h = assembled.image.end >>> 8;
   cpu.l = assembled.image.end & 255;
-  assert.equal(callLabel(assembled, "SRTGPINI", memory, cpu).carry, 0);
-  assert.equal(callLabel(assembled, "SRTPIN", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "PAGE_INI", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "PAIR_INI", memory, cpu).carry, 0);
   // Keep the fixture at one slab so the constructor exercises collection
   // instead of growing into the second managed extent.
   memory[assembled.address("SRTPSLIM")] = 1;
 
   const records: number[] = [];
   for (let index = 0; index < PAIRS_PER_SLAB; index++) {
-    const result = callLabel(assembled, "SRTFINDP", memory, cpu);
+    const result = callLabel(assembled, "PAIR_GET", memory, cpu);
     assert.equal(result.carry, 0);
     records.push(result.payload);
     memory[result.payload + CAR_META] = 0x40;
@@ -230,7 +230,7 @@ Deno.test("constructor roots survive collection and retain both inputs", async (
   memory[assembled.address("SRTQCTAG")] = 1;
   memory[assembled.address("SRTQDTAG")] = 3;
 
-  const result = callLabel(assembled, "SRTMAKEP", memory, cpu);
+  const result = callLabel(assembled, "PAIR_NEW", memory, cpu);
   assert.equal(result.carry, 0);
   const pair = result.payload;
   assert.equal(memory[root + CAR_META], 0x43, "pending pair root was swept");
@@ -243,13 +243,13 @@ Deno.test("constructor roots survive collection and retain both inputs", async (
   assert.equal(memory[pair + CDR_META], 3);
 
   for (let index = 0; index < PAIRS_PER_SLAB - 2; index++) {
-    assert.equal(callLabel(assembled, "SRTFINDP", memory, cpu).carry, 0);
+    assert.equal(callLabel(assembled, "PAIR_GET", memory, cpu).carry, 0);
   }
   writeWord(memory, assembled.address("SRTQCAR"), 1234);
   writeWord(memory, assembled.address("SRTQCDR"), 5678);
   memory[assembled.address("SRTQCTAG")] = 3;
   memory[assembled.address("SRTQDTAG")] = 3;
-  const scalarPair = callLabel(assembled, "SRTMAKEP", memory, cpu).payload;
+  const scalarPair = callLabel(assembled, "PAIR_NEW", memory, cpu).payload;
   assert.equal(memory[scalarPair] | memory[scalarPair + 1] << 8, 1234);
   assert.equal(
     memory[scalarPair + CDR_PAYLOAD] |
@@ -300,17 +300,17 @@ Deno.test("pair slabs return pages and reuse released descriptors", async () => 
   const cpu = assembled.runtime.cpu;
   cpu.h = assembled.image.end >>> 8;
   cpu.l = assembled.image.end & 255;
-  assert.equal(callLabel(assembled, "SRTGPINI", memory, cpu).carry, 0);
-  const before = memory[assembled.address("SRTPGFRE")] |
-    memory[assembled.address("SRTPGFRE") + 1] << 8;
-  assert.equal(callLabel(assembled, "SRTPIN", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "PAGE_INI", memory, cpu).carry, 0);
+  const before = memory[assembled.address("PAGE_CAP")] |
+    memory[assembled.address("PAGE_CAP") + 1] << 8;
+  assert.equal(callLabel(assembled, "PAIR_INI", memory, cpu).carry, 0);
   const firstPairPage = memory[assembled.address("SRTPSLT")] << 8;
   assert.equal(callLabel(assembled, "SRTGC", memory, cpu).carry, 0);
-  const after = memory[assembled.address("SRTPGFRE")] |
-    memory[assembled.address("SRTPGFRE") + 1] << 8;
+  const after = memory[assembled.address("PAGE_CAP")] |
+    memory[assembled.address("PAGE_CAP") + 1] << 8;
   assert.equal(after, before, "empty slab did not return its page");
   assert.equal(memory[assembled.address("SRTPSLT")], 0);
-  const reused = callLabel(assembled, "SRTFINDP", memory, cpu);
+  const reused = callLabel(assembled, "PAIR_GET", memory, cpu);
   assert.equal(reused.carry, 0);
   assert.equal(reused.payload, firstPairPage);
   assert.equal(memory[assembled.address("SRTPSLBN")], 1);
@@ -324,12 +324,12 @@ Deno.test("pair slabs reuse a middle descriptor without losing live slabs", asyn
   const cpu = assembled.runtime.cpu;
   cpu.h = assembled.image.end >>> 8;
   cpu.l = assembled.image.end & 255;
-  assert.equal(callLabel(assembled, "SRTGPINI", memory, cpu).carry, 0);
-  assert.equal(callLabel(assembled, "SRTPIN", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "PAGE_INI", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "PAIR_INI", memory, cpu).carry, 0);
 
   const records: number[] = [];
   for (let index = 0; index < PAIRS_PER_SLAB * 3; index++) {
-    const result = callLabel(assembled, "SRTFINDP", memory, cpu);
+    const result = callLabel(assembled, "PAIR_GET", memory, cpu);
     assert.equal(result.carry, 0, `allocation ${index} failed`);
     records.push(result.payload);
   }
@@ -342,13 +342,13 @@ Deno.test("pair slabs reuse a middle descriptor without losing live slabs", asyn
   for (let slot = 0; slot < PAIRS_PER_SLAB; slot++) {
     memory[middleBase + slot * PAIR_BYTES + CAR_META] = 0;
   }
-  assert.equal(callLabel(assembled, "SRTPSRB", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "PAIR_GC", memory, cpu).carry, 0);
   const descriptor = assembled.address("SRTPSLT");
   assert.notEqual(memory[descriptor], 0);
   assert.equal(memory[descriptor + 3], 0);
   assert.notEqual(memory[descriptor + 6], 0);
 
-  const replacement = callLabel(assembled, "SRTFINDP", memory, cpu);
+  const replacement = callLabel(assembled, "PAIR_GET", memory, cpu);
   assert.equal(replacement.carry, 0);
   assert.notEqual(memory[descriptor], 0, "first descriptor was overwritten");
   assert.notEqual(
@@ -361,7 +361,7 @@ Deno.test("pair slabs reuse a middle descriptor without losing live slabs", asyn
   cpu.h = firstBase >>> 8;
   cpu.l = firstBase & 255;
   assert.equal(
-    callLabel(assembled, "SRTPCHK", memory, cpu).carry,
+    callLabel(assembled, "PAIR_CHK", memory, cpu).carry,
     0,
     "live pair in the first slab was lost",
   );
@@ -369,7 +369,7 @@ Deno.test("pair slabs reuse a middle descriptor without losing live slabs", asyn
   cpu.h = lastBase >>> 8;
   cpu.l = lastBase & 255;
   assert.equal(
-    callLabel(assembled, "SRTPCHK", memory, cpu).carry,
+    callLabel(assembled, "PAIR_CHK", memory, cpu).carry,
     0,
     "live pair after a released descriptor was lost",
   );
@@ -383,12 +383,12 @@ Deno.test("pair descriptor table reaches beyond thirty-two slabs", async () => {
   const cpu = assembled.runtime.cpu;
   cpu.h = assembled.image.end >>> 8;
   cpu.l = assembled.image.end & 255;
-  assert.equal(callLabel(assembled, "SRTGPINI", memory, cpu).carry, 0);
-  assert.equal(callLabel(assembled, "SRTPIN", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "PAGE_INI", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "PAIR_INI", memory, cpu).carry, 0);
   for (let index = 0; index < PAIRS_PER_SLAB * 33; index++) {
-    const result = callLabel(assembled, "SRTFINDP", memory, cpu);
+    const result = callLabel(assembled, "PAIR_GET", memory, cpu);
     assert.equal(result.carry, 0, `allocation ${index} failed`);
   }
   assert.equal(memory[assembled.address("SRTPSLBN")], 33);
-  assert.equal(callLabel(assembled, "SRTFINDP", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "PAIR_GET", memory, cpu).carry, 0);
 });

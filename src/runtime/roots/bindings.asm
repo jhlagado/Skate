@@ -57,7 +57,7 @@ SRTBSTA:
         AND C
         RET
 
-; Record the binding start most recently allocated by SRTCELL.  HL returns
+; Record the binding start most recently allocated by HEAP_NEW.  HL returns
 ; the cell address in both cases; carry set means it has no start-map bit.
 SRTBNEW:
         LD HL,(SRTCELLP)
@@ -136,7 +136,7 @@ SRTBPGLO:
         LD (SRTBPLST),HL
         XOR A
         LD (SRTBPLIV),A
-        LD A,SRTBCAP
+        LD A,HEAP_CAP
         LD (SRTCLPGQ),A
 SRTBPGSL:
         LD A,(SRTCLPGQ)
@@ -159,7 +159,7 @@ SRTBPGSL:
         LD A,(HL)
         LD (SRTBFLG),A
         LD A,(SRTBFLG)
-        AND SRTBMRKD
+        AND BND_MARK
         JR NZ,SRTBPGLV
 SRTBPGFR:
         ; Every unmarked cell is reusable.  This includes cells reclaimed by
@@ -197,7 +197,7 @@ SRTBPGLV:
         INC HL
         INC HL
         LD A,(HL)
-        AND 0FFH-SRTBMRKD
+        AND 0FFH-BND_MARK
         LD (HL),A                  ; Surviving cells lose only their mark bit.
         LD A,(SRTBPLIV)
         INC A
@@ -213,7 +213,7 @@ SRTBPGCL:
         LD (HL),A
 SRTBPGNX:
         LD HL,(SRTBSCAN)
-        LD DE,SRTCELW
+        LD DE,CELL_SZ
         ADD HL,DE
         LD (SRTBSCAN),HL
         LD A,(SRTCLPGQ)
@@ -226,7 +226,7 @@ SRTBPGST:
         JR NZ,SRTBPGLP
         LD HL,(SRTBPGBA)
         LD DE,1
-        CALL SRTGPREL
+        CALL PAGE_REL
         JR C,SRTBPGLP             ; Keep the descriptor if release was rejected.
         LD A,(SRTBPGN)
         DEC A

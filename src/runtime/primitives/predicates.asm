@@ -81,7 +81,7 @@ SRTTPROC:
         LD A,L
         CP 20H
         JP C,SRTBNO
-        CP SRTPRLIM
+        CP PRIM_LIM
         JP C,SRTBYES
         JP SRTBNO
 SRTTSTR:
@@ -91,7 +91,7 @@ SRTTSTR:
         CP 6
         JP NZ,SRTBNO
         LD HL,(SRTNVAL)
-        CALL SRTSVLD
+        CALL STR_CHK
         JP C,SRTBNO
         JP SRTBYES
 SRTTCHAR:

@@ -69,7 +69,7 @@ function readDatumError(bytes: readonly number[]) {
 function pairPart(
   call: Awaited<ReturnType<typeof managedRuntime>>["call"],
   cpu: Awaited<ReturnType<typeof managedRuntime>>["cpu"],
-  selector: "SRTCARV" | "SRTCDRV",
+  selector: "PAIR_CAR" | "PAIR_CDR",
   payload: number,
 ) {
   cpu.a = 1;
@@ -147,19 +147,19 @@ Deno.test("datum reader preserves nested vector and pair values", async () => {
 
   const pair = vectorElement(memory, outer.payload, 1);
   assert.equal(pair.tag, 1);
-  assert.deepEqual(pairPart(call, cpu, "SRTCARV", pair.payload), {
+  assert.deepEqual(pairPart(call, cpu, "PAIR_CAR", pair.payload), {
     carry: 0,
     tag: 3,
     payload: 3,
   });
-  const pairTail = pairPart(call, cpu, "SRTCDRV", pair.payload);
+  const pairTail = pairPart(call, cpu, "PAIR_CDR", pair.payload);
   assert.equal(pairTail.tag, 1);
-  assert.deepEqual(pairPart(call, cpu, "SRTCARV", pairTail.payload), {
+  assert.deepEqual(pairPart(call, cpu, "PAIR_CAR", pairTail.payload), {
     carry: 0,
     tag: 3,
     payload: 4,
   });
-  assert.deepEqual(pairPart(call, cpu, "SRTCDRV", pairTail.payload), {
+  assert.deepEqual(pairPart(call, cpu, "PAIR_CDR", pairTail.payload), {
     carry: 0,
     tag: 0,
     payload: 0xfe02,
@@ -217,8 +217,8 @@ Deno.test("datum reader keeps vector elements live through a collection", async 
     assembled.address("SRTCFREE") + classIndex * 2,
     0,
   );
-  memory[assembled.address("SRTCLPNW")] = 0x37; // SCF: no new page for this proof.
-  memory[assembled.address("SRTCLPNW") + 1] = 0xc9; // RET after the forced failure.
+  memory[assembled.address("SLAB_ADD")] = 0x37; // SCF: no new page for this proof.
+  memory[assembled.address("SLAB_ADD") + 1] = 0xc9; // RET after the forced failure.
 
   installBdosReader(
     memory,
@@ -234,12 +234,12 @@ Deno.test("datum reader keeps vector elements live through a collection", async 
   for (const [index, expected] of [1, 3, 5, 7].entries()) {
     const value = vectorElement(memory, result.payload, index);
     assert.equal(value.tag, 1);
-    assert.deepEqual(pairPart(call, cpu, "SRTCARV", value.payload), {
+    assert.deepEqual(pairPart(call, cpu, "PAIR_CAR", value.payload), {
       carry: 0,
       tag: 3,
       payload: expected,
     });
-    assert.deepEqual(pairPart(call, cpu, "SRTCDRV", value.payload), {
+    assert.deepEqual(pairPart(call, cpu, "PAIR_CDR", value.payload), {
       carry: 0,
       tag: 3,
       payload: expected + 1,
@@ -273,8 +273,8 @@ Deno.test("datum reader cleans up when vector allocation is exhausted", async ()
   }
   const classIndex = memory[assembled.address("SRTCLIDX")];
   writeWord(memory, assembled.address("SRTCFREE") + classIndex * 2, 0);
-  memory[assembled.address("SRTCLPNW")] = 0x37; // SCF: no page is available.
-  memory[assembled.address("SRTCLPNW") + 1] = 0xc9; // RET after the failure.
+  memory[assembled.address("SLAB_ADD")] = 0x37; // SCF: no page is available.
+  memory[assembled.address("SLAB_ADD") + 1] = 0xc9; // RET after the failure.
 
   installBdosReader(
     memory,

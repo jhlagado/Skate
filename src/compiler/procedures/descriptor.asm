@@ -30,7 +30,7 @@ SCMAKE:
         RET C                      ; Preserve staged-output exhaustion.
         CALL SINKBYTE                ; Append its high placeholder byte.
         RET C                      ; Preserve staged-output exhaustion.
-        LD HL,SRTMAKE               ; Runtime allocates a fresh closure object.
+        LD HL,HEAP_LAM              ; Runtime allocates a fresh closure object.
         CALL SCCALL                ; The returned value carries tag two.
         RET C                      ; Preserve staged-output exhaustion.
         RET                        ; The generated value is in the runtime registers.

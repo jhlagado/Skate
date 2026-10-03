@@ -42,9 +42,9 @@ SRTENVIN:
         LD HL,(SRTNEXT)            ; Recover the candidate address after the compare.
         LD (SRTLOWSP),HL           ; Publish the deepest native stack boundary.
 SRTLOWDN:
-        CALL SRTMAPC               ; Publish a zeroed map before any allocation can run.
-        CALL SRTCOPYM              ; Expand captured closure pointers into active slots.
-        CALL SRTCLNSE              ; Drop any unused entries before root scanning begins.
+        CALL SLOT_INI              ; Publish a zeroed map before any allocation can run.
+        CALL MAP_COPY              ; Expand captured closure pointers into active slots.
+        CALL MAP_TRIM              ; Drop any unused entries before root scanning begins.
         LD HL,(SRTACNT)            ; Count each activation map before body entry.
         INC HL
         LD (SRTACNT),HL
@@ -92,13 +92,13 @@ SRTOWNBT:
         JR Z,SRTOWNNX              ; An unset bit retains its captured pointer.
         LD A,(SRTSLOTI)            ; Keep the logical index across slot inspection.
         LD (SRTSNUM),A
-        CALL SRTSADDR              ; HL names the four-byte active slot.
+        CALL SLOT_AT               ; HL names the four-byte active slot.
         LD (SRTSADR),HL
         LD DE,3                    ; The representation flag is the fourth byte.
         ADD HL,DE
         LD A,(HL)
         LD (SRTSFLG),A
-        AND SRTSPROM
+        AND SLOT_PTR
         JR Z,SRTOWNIN              ; Inline locals need no managed allocation.
         LD HL,(SRTSADR)            ; A promoted slot may reuse its unescaped cell.
         LD E,(HL)
@@ -112,7 +112,7 @@ SRTOWNBT:
         LD DE,3
         ADD HL,DE
         LD A,(HL)
-        AND SRTBESC
+        AND BND_ESC
 	JR NZ,SRTOWNNW             ; Escaped storage cannot be reused by this frame.
 	LD HL,(SRTCELLP)
 	XOR A                       ; Reuse clears the old payload before argument stores.
@@ -122,7 +122,7 @@ SRTOWNBT:
 	INC HL
 	LD (HL),A
 	INC HL
-	LD A,SRTBALOC               ; Retain allocation while clearing tag and initialization.
+	LD A,BND_USED               ; Retain allocation while clearing tag and initialization.
 	LD (HL),A
 	JR SRTOWNNX
 SRTOWNIN:
@@ -137,12 +137,12 @@ SRTOWNIN:
         LD (HL),A
         JR SRTOWNNX
 SRTOWNNW:
-        PUSH BC                    ; SRTCELL may collect and uses the loop registers.
-        CALL SRTCELL               ; The old escaped cell remains a live root until publish.
+        PUSH BC                    ; HEAP_NEW may collect and uses the loop registers.
+        CALL HEAP_NEW              ; The old escaped cell remains a live root until publish.
         POP BC
         LD (SRTCELLP),HL
         LD A,(SRTSNUM)
-        CALL SRTSADDR
+        CALL SLOT_AT
         LD DE,(SRTCELLP)
         LD A,E
         LD (HL),A
@@ -153,7 +153,7 @@ SRTOWNNW:
         XOR A
         LD (HL),A
         INC HL
-        LD A,SRTSPROM
+        LD A,SLOT_PTR
         LD (HL),A
 SRTOWNNX:
         LD A,(SRTMASKV)            ; Shift this mask bit out before the next slot.
@@ -171,8 +171,8 @@ SRTOWNNX:
 ; Copy only captured pointers from the target closure into the active map.
 ; Owned pointers remain in place so a tail transfer can reuse their cells.
 SRTCOPYC:
-        CALL SRTCOPYM              ; Expand target captures into the active map.
-        JP SRTCLNSE                ; Clear stale roots outside the target masks.
+        CALL MAP_COPY              ; Expand target captures into the active map.
+        JP MAP_TRIM                ; Clear stale roots outside the target masks.
 
 ; Mark every cell copied into a closure as escaped.  The mark lives in the
 ; high bit of the cell's initialized byte and keeps tail-frame reuse safe.
@@ -219,9 +219,9 @@ SRTMKNX:
 ; Set the escape bit in the active environment cell for slot A.
 SRTESCAP:
         LD (SRTSNUM),A             ; Promotion may collect, so retain the index.
-        CALL SRTPROM               ; Captured inline values become managed roots first.
+        CALL SLOT_BOX              ; Captured inline values become managed roots first.
         LD A,(SRTSNUM)
-        CALL SRTSADDR
+        CALL SLOT_AT
         LD E,(HL)
         INC HL
         LD D,(HL)
@@ -232,6 +232,6 @@ SRTESCAP:
         LD DE,3                    ; The packed binding flags follow the payload.
         ADD HL,DE
         LD A,(HL)
-        OR SRTBESC                 ; Keep the initialized bit and add escape state.
+        OR BND_ESC                 ; Keep the initialized bit and add escape state.
         LD (HL),A
         RET
