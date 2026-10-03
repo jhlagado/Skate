@@ -45,13 +45,13 @@ const provider = await loadAssembly("src/runtime/image.asm");
 assert.equal(provider.image.bytes.length - 0x100, compiler.address("SRTLEN"));
 
 const counters = {
-  lowSp: provider.address("SRTLOWSP"),
-  heapEnd: provider.address("SRTHEAPP"),
-  bindingAllocations: provider.address("SRTBCNT"),
-  closureAllocations: provider.address("SRTCCNT"),
-  pairAllocations: provider.address("SRTPCNT"),
-  collections: provider.address("SRTGCNT"),
-  activations: provider.address("SRTACNT"),
+  lowSp: provider.address("RT_LOWSP"),
+  heapEnd: provider.address("HEAP_LIM"),
+  bindingAllocations: provider.address("CNT_BIND"),
+  closureAllocations: provider.address("CNT_CLOS"),
+  pairAllocations: provider.address("CNT_PAIR"),
+  collections: provider.address("CNT_GC"),
+  activations: provider.address("CNT_MAPS"),
 };
 
 const programs = [];

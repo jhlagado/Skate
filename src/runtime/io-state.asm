@@ -7,39 +7,39 @@
 ; module's private buffers stay with its code.
 
 ; Datum reader.
-SRTDRACT:    DB 0                    ; Nonzero while a datum read owns its roots.
-SRTDRRC:  DB 0                    ; Active exact-root count for later units.
-SRTDRFC: DB 0                    ; Open construction frames for later units.
-SRTDRVC:   DB 0                    ; Used construction-value slots for later units.
-SRTDRVP:   DW RT_DRVLO            ; Next free reader value-stack address.
-SRTDRFP:   DW 0                    ; Current reader frame address, if any.
-SRTDRACC:  DB 0                    ; Nonzero while the list accumulator is a root.
-SRTDATAG: DB 0                    ; Accumulator tag during list construction.
-SRTDAVAL: DW 0                    ; Accumulator payload during list construction.
-SRTDRNR:   DB 0                    ; Remaining values while folding one list.
-SRTDRDOT:  DB 0                    ; Nonzero while SRTDRBLD is folding a dotted list.
-SRTDEOF: DB 0                    ; Nonzero when the current nested value is EOF.
-SRTDRLEN:   DB 0                    ; Numeric spelling length, bounded at 64 bytes.
-SRTDRNUM:    DW 0                    ; Unsigned magnitude for an exact integer.
-SRTDRSG:   DB 0                    ; Nonzero while the token has a minus sign.
-SRTDRSN:   DB 0                    ; Nonzero after at least one digit is read.
-SRTDRDIG:    DB 0                    ; Current decimal or character byte.
-SRTDRNXT:    DB 0                    ; Peeked byte used to classify a signed token.
-SRTDRTAG:    DB 0                    ; Result tag saved across normal cleanup.
-SRTDVAL:    DW 0                    ; Result payload saved across normal cleanup.
-SRTDSLN: DB 0                        ; Decoded byte count, bounded at 255.
-SRTDSTMP: DB 0                       ; One-byte scratch for append and escapes.
+DR_LIVE:    DB 0                     ; Nonzero while a datum read owns its roots.
+DR_ROOTS:  DB 0                   ; Active exact-root count for later units.
+DR_DEPTH: DB 0                   ; Open construction frames for later units.
+DR_SLOTS:   DB 0                   ; Used construction-value slots for later units.
+DR_SP:   DW RT_DRVLO              ; Next free reader value-stack address.
+DR_FRAME:   DW 0                   ; Current reader frame address, if any.
+DR_HELD:  DB 0                     ; Nonzero while the list accumulator is a root.
+DR_ATAG: DB 0                     ; Accumulator tag during list construction.
+DR_ACC: DW 0                      ; Accumulator payload during list construction.
+DR_FOLD:   DB 0                    ; Remaining values while folding one list.
+DR_DOT:  DB 0                      ; Nonzero while DR_BUILD is folding a dotted list.
+DR_EOF: DB 0                     ; Nonzero when the current nested value is EOF.
+DR_LEN:   DB 0                      ; Numeric spelling length, bounded at 64 bytes.
+DR_MAG:    DW 0                      ; Unsigned magnitude for an exact integer.
+DR_NEG:   DB 0                     ; Nonzero while the token has a minus sign.
+DR_SEEN:   DB 0                    ; Nonzero after at least one digit is read.
+DR_BYTE:    DB 0                     ; Current decimal or character byte.
+DR_AHEAD:    DB 0                    ; Peeked byte used to classify a signed token.
+DR_TAG:    DB 0                      ; Result tag saved across normal cleanup.
+DR_VAL:    DW 0                     ; Result payload saved across normal cleanup.
+DR_SIZE: DB 0                        ; Decoded byte count, bounded at 255.
+DR_TMP: DB 0                         ; One-byte scratch for append and escapes.
 
 ; File ports.
-SRTFOMOD: DB 0
-SRTFIACT:    DB 0
-SRTFOACT:   DB 0
-SRTFIMOD:    DB 0
-SRTFWMDE:  DB 0
-SRTFCR:       DB 0
-SRTFNLEN:     DB 0
-SRTFEXT:      DB 0
-SRTFNPOS:     DB 0
-SRTFEPOS:     DB 0
-SRTFCHAR:     DB 0
-SRTFFPTR:      DW 0
+FILE_BIN: DB 0
+IN_FILE:    DB 0
+OUT_FILE:   DB 0
+IN_MODE:    DB 0
+OUT_MODE:  DB 0
+OUT_CR:       DB 0
+FILE_LEN:     DB 0
+FILE_DOT:      DB 0
+FILE_POS:     DB 0
+FILE_EXT:     DB 0
+FILE_CHR:     DB 0
+FILE_PTR:      DW 0

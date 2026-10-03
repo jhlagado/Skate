@@ -33,7 +33,7 @@ function readDatum(
   terminalError = false,
   maxSteps = 50_000_000,
 ) {
-  cpu.pc = assembled.address("SRTDRRD");
+  cpu.pc = assembled.address("DR_READ");
   cpu.sp = 0xdff2;
   cpu.ix = 0xef00;
   writeWord(memory, cpu.sp, 0xef00);
@@ -41,7 +41,7 @@ function readDatum(
   while (cpu.pc !== 0xef00) {
     assert.ok(
       ++steps < maxSteps,
-      `SRTDRRD did not return at PC=$${cpu.pc.toString(16)}`,
+      `DR_READ did not return at PC=$${cpu.pc.toString(16)}`,
     );
     assembled.runtime.step();
   }
@@ -56,11 +56,11 @@ function readDatum(
 function readDatumError(bytes: readonly number[]) {
   return managedRuntime().then(({ assembled, memory, cpu }) => {
     installBdosReader(memory, bytes);
-    memory[assembled.address("SRTARGC")] = 0;
-    memory[assembled.address("SRTINCR")] = 0;
-    memory[assembled.address("SRTINST")] = 0;
-    memory[assembled.address("SRTERROR")] = 0x37;
-    memory[assembled.address("SRTERROR") + 1] = 0xc9;
+    memory[assembled.address("ARG_CNT")] = 0;
+    memory[assembled.address("IN_CR")] = 0;
+    memory[assembled.address("IN_STATE")] = 0;
+    memory[assembled.address("ERROR")] = 0x37;
+    memory[assembled.address("ERROR") + 1] = 0xc9;
     const result = readDatum(assembled, memory, cpu, true, 2_000_000);
     assert.equal(result.carry, 1);
   });
@@ -88,9 +88,9 @@ function initialiseReader(
   assembled: Awaited<ReturnType<typeof managedRuntime>>["assembled"],
   memory: Uint8Array,
 ) {
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
-  memory[assembled.address("SRTINST")] = 0;
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
 }
 
 Deno.test("datum reader constructs empty and tagged vectors", async () => {
@@ -209,12 +209,12 @@ Deno.test("datum reader keeps vector elements live through a collection", async 
   writeWord(memory, root, retained.payload);
   memory[root + 2] = 0; // Clear extension byte.
   memory[root + 3] = 0x17;
-  writeWord(memory, assembled.address("SRTGBASE"), root);
-  writeWord(memory, assembled.address("SRTGEND"), root + 4);
-  const classIndex = memory[assembled.address("SRTCLIDX")];
+  writeWord(memory, assembled.address("G_BASE"), root);
+  writeWord(memory, assembled.address("G_END"), root + 4);
+  const classIndex = memory[assembled.address("CL_CLASS")];
   writeWord(
     memory,
-    assembled.address("SRTCFREE") + classIndex * 2,
+    assembled.address("CL_FREE") + classIndex * 2,
     0,
   );
   memory[assembled.address("SLAB_ADD")] = 0x37; // SCF: no new page for this proof.
@@ -230,7 +230,7 @@ Deno.test("datum reader keeps vector elements live through a collection", async 
   const result = readDatum(assembled, memory, cpu);
   assert.equal(result.tag, 7);
   assert.equal(memory[result.payload], 4);
-  assert.ok(readWord(memory, assembled.address("SRTGCNT")) > 0);
+  assert.ok(readWord(memory, assembled.address("CNT_GC")) > 0);
   for (const [index, expected] of [1, 3, 5, 7].entries()) {
     const value = vectorElement(memory, result.payload, index);
     assert.equal(value.tag, 1);
@@ -245,14 +245,14 @@ Deno.test("datum reader keeps vector elements live through a collection", async 
       payload: expected + 1,
     });
   }
-  assert.equal(memory[assembled.address("SRTDRACT")], 0);
-  assert.equal(memory[assembled.address("SRTDRFC")], 0);
-  assert.equal(memory[assembled.address("SRTDRVC")], 0);
+  assert.equal(memory[assembled.address("DR_LIVE")], 0);
+  assert.equal(memory[assembled.address("DR_DEPTH")], 0);
+  assert.equal(memory[assembled.address("DR_SLOTS")], 0);
   assert.equal(
-    readWord(memory, assembled.address("SRTDRVP")),
+    readWord(memory, assembled.address("DR_SP")),
     assembled.address("RT_DRVLO"),
   );
-  assert.equal(readWord(memory, assembled.address("SRTDRFP")), 0);
+  assert.equal(readWord(memory, assembled.address("DR_FRAME")), 0);
 });
 
 Deno.test("datum reader cleans up when vector allocation is exhausted", async () => {
@@ -271,8 +271,8 @@ Deno.test("datum reader cleans up when vector allocation is exhausted", async ()
     assert.ok(++sizeSteps < 100_000, "VEC_SIZE did not return");
     assembled.runtime.step();
   }
-  const classIndex = memory[assembled.address("SRTCLIDX")];
-  writeWord(memory, assembled.address("SRTCFREE") + classIndex * 2, 0);
+  const classIndex = memory[assembled.address("CL_CLASS")];
+  writeWord(memory, assembled.address("CL_FREE") + classIndex * 2, 0);
   memory[assembled.address("SLAB_ADD")] = 0x37; // SCF: no page is available.
   memory[assembled.address("SLAB_ADD") + 1] = 0xc9; // RET after the failure.
 
@@ -282,25 +282,25 @@ Deno.test("datum reader cleans up when vector allocation is exhausted", async ()
   );
   initialiseReader(assembled, memory);
 
-  const error = assembled.address("SRTERROR");
+  const error = assembled.address("ERROR");
   memory[error] = 0xcd; // Call the production cleanup routine.
-  writeWord(memory, error + 1, assembled.address("SRTDCLN"));
+  writeWord(memory, error + 1, assembled.address("DR_CLEAR"));
   memory[error + 3] = 0x37; // Return the allocation error to this test.
   memory[error + 4] = 0xc9;
   const result = readDatum(assembled, memory, cpu, true, 2_000_000);
   assert.equal(result.carry, 1);
-  assert.ok(readWord(memory, assembled.address("SRTGCNT")) > 0);
-  assert.equal(memory[assembled.address("SRTDRACT")], 0);
-  assert.equal(memory[assembled.address("SRTDRFC")], 0);
-  assert.equal(memory[assembled.address("SRTDRVC")], 0);
-  assert.equal(memory[assembled.address("SRTDRACC")], 0);
+  assert.ok(readWord(memory, assembled.address("CNT_GC")) > 0);
+  assert.equal(memory[assembled.address("DR_LIVE")], 0);
+  assert.equal(memory[assembled.address("DR_DEPTH")], 0);
+  assert.equal(memory[assembled.address("DR_SLOTS")], 0);
+  assert.equal(memory[assembled.address("DR_HELD")], 0);
   assert.equal(
-    readWord(memory, assembled.address("SRTDRVP")),
+    readWord(memory, assembled.address("DR_SP")),
     assembled.address("RT_DRVLO"),
   );
-  assert.equal(readWord(memory, assembled.address("SRTDRFP")), 0);
-  assert.equal(memory[assembled.address("SRTDRLEN")], 0);
-  assert.equal(memory[assembled.address("SRTDSLN")], 0);
-  assert.equal(memory[assembled.address("SRTINST")], 0);
-  assert.equal(memory[assembled.address("SRTINCR")], 0);
+  assert.equal(readWord(memory, assembled.address("DR_FRAME")), 0);
+  assert.equal(memory[assembled.address("DR_LEN")], 0);
+  assert.equal(memory[assembled.address("DR_SIZE")], 0);
+  assert.equal(memory[assembled.address("IN_STATE")], 0);
+  assert.equal(memory[assembled.address("IN_CR")], 0);
 });

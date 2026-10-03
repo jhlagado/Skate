@@ -6,24 +6,24 @@
 ; Completed lists are folded through the eight-byte pair allocator.
 
 ; Push a parsed value onto the reader's bounded construction stack.
-SRTDRPUT:
-        LD (SRTDRTAG),A             ; Save the tag while checking the cursor.
-        LD (SRTDVAL),HL            ; Save the payload beside it.
-        LD A,(SRTDRVC)              ; The aggregate construction limit is 64 values.
+DR_PUSH:
+        LD (DR_TAG),A               ; Save the tag while checking the cursor.
+        LD (DR_VAL),HL             ; Save the payload beside it.
+        LD A,(DR_SLOTS)             ; The aggregate construction limit is 64 values.
         CP 64
-        JP NC,SRTERROR
-        LD HL,(SRTDRVP)             ; Advance by one four-byte value record.
+        JP NC,ERROR
+        LD HL,(DR_SP)               ; Advance by one four-byte value record.
         LD DE,4
         ADD HL,DE
         LD DE,RT_DRVHI
         OR A
         SBC HL,DE
-        JP C,SRTDRPUS               ; A cursor below the end remains in range.
-        JP Z,SRTDRPUS               ; Equality names the legitimate 64th slot.
-        JP SRTERROR                 ; A cursor beyond the fixed band is invalid.
-SRTDRPUS:
-        LD HL,(SRTDRVP)             ; Publish payload before tag and cursor.
-        LD DE,(SRTDVAL)
+        JP C,.STORE                 ; A cursor below the end remains in range.
+        JP Z,.STORE                 ; Equality names the legitimate 64th slot.
+        JP ERROR                    ; A cursor beyond the fixed band is invalid.
+.STORE:
+        LD HL,(DR_SP)               ; Publish payload before tag and cursor.
+        LD DE,(DR_VAL)
         LD (HL),E
         INC HL
         LD (HL),D
@@ -31,30 +31,30 @@ SRTDRPUS:
         XOR A
         LD (HL),A                   ; The extension byte stays clear.
         INC HL
-        LD A,(SRTDRTAG)
+        LD A,(DR_TAG)
         LD (HL),A
         INC HL
-        LD (SRTDRVP),HL
-        LD A,(SRTDRVC)
+        LD (DR_SP),HL
+        LD A,(DR_SLOTS)
         INC A
-        LD (SRTDRVC),A
-        LD A,(SRTDRTAG)
-        LD HL,(SRTDVAL)
+        LD (DR_SLOTS),A
+        LD A,(DR_TAG)
+        LD HL,(DR_VAL)
         OR A                       ; A successful push must clear carry.
         RET
 
 ; Pop the most recent reader value while preserving all older list values.
-SRTDRPOP:
-        LD A,(SRTDRVC)              ; An empty frame is a malformed list.
+DR_POP:
+        LD A,(DR_SLOTS)             ; An empty frame is a malformed list.
         OR A
-        JP Z,SRTERROR
+        JP Z,ERROR
         DEC A
-        LD (SRTDRVC),A
-        LD HL,(SRTDRVP)
+        LD (DR_SLOTS),A
+        LD HL,(DR_SP)
         LD DE,4
         OR A
         SBC HL,DE
-        LD (SRTDRVP),HL
+        LD (DR_SP),HL
         LD E,(HL)
         INC HL
         LD D,(HL)
@@ -67,59 +67,59 @@ SRTDRPOP:
 
 ; Fold the current frame's values into a proper or dotted list.
 ; A contains heads plus an optional tail; B is nonzero for a dotted tail.
-SRTDRBLD:
-        LD (SRTDRNR),A              ; Keep the number while pair allocation runs.
+DR_BUILD:
+        LD (DR_FOLD),A              ; Keep the number while pair allocation runs.
         LD A,B
-        LD (SRTDRDOT),A             ; The tail is popped before the list heads.
+        LD (DR_DOT),A               ; The tail is popped before the list heads.
         LD A,1
-        LD (SRTDRACC),A             ; The accumulator is a separate exact root.
-        LD A,(SRTDRDOT)
+        LD (DR_HELD),A              ; The accumulator is a separate exact root.
+        LD A,(DR_DOT)
         OR A
-        JR Z,SRTDRNIL
-        CALL SRTDRPOP               ; A dotted tail is the initial CDR value.
-        JP C,SRTERROR
-        LD (SRTDATAG),A
-        LD (SRTDAVAL),HL
-        LD A,(SRTDRNR)
+        JR Z,.PROPER
+        CALL DR_POP                 ; A dotted tail is the initial CDR value.
+        JP C,ERROR
+        LD (DR_ATAG),A
+        LD (DR_ACC),HL
+        LD A,(DR_FOLD)
         DEC A
-        LD (SRTDRNR),A
-        JR SRTDRBLP
-SRTDRNIL:
+        LD (DR_FOLD),A
+        JR .LOOP
+.PROPER:
         XOR A
-        LD (SRTDATAG),A
+        LD (DR_ATAG),A
         LD HL,0FE02H                ; The empty list is the initial proper CDR.
-        LD (SRTDAVAL),HL
-SRTDRBLP:
-        LD A,(SRTDRNR)
+        LD (DR_ACC),HL
+.LOOP:
+        LD A,(DR_FOLD)
         OR A
-        JR Z,SRTDRBDN
-        CALL SRTDRPOP               ; The preceding value becomes the new CAR.
-        LD (SRTQCTAG),A             ; Pair construction already owns these fields.
-        LD (SRTQCAR),HL
-        LD A,(SRTDATAG)
-        LD (SRTQDTAG),A
-        LD HL,(SRTDAVAL)
-        LD (SRTQCDR),HL
+        JR Z,.DONE
+        CALL DR_POP                 ; The preceding value becomes the new CAR.
+        LD (QT_CTAG),A              ; Pair construction already owns these fields.
+        LD (QT_CAR),HL
+        LD A,(DR_ATAG)
+        LD (QT_DTAG),A
+        LD HL,(DR_ACC)
+        LD (QT_CDR),HL
         CALL PAIR_NEW               ; The common constructor roots both operands.
-        JP C,SRTERROR               ; Propagate allocation failure to the reader.
-        LD (SRTDATAG),A            ; The new pair becomes the next accumulator.
-        LD (SRTDAVAL),HL
-        LD A,(SRTDRNR)
+        JP C,ERROR                  ; Propagate allocation failure to the reader.
+        LD (DR_ATAG),A             ; The new pair becomes the next accumulator.
+        LD (DR_ACC),HL
+        LD A,(DR_FOLD)
         DEC A
-        LD (SRTDRNR),A
-        JR SRTDRBLP
-SRTDRBDN:
+        LD (DR_FOLD),A
+        JR .LOOP
+.DONE:
         XOR A
-        LD (SRTDRACC),A             ; The caller now owns the completed value.
-        LD A,(SRTDATAG)
-        LD HL,(SRTDAVAL)
+        LD (DR_HELD),A              ; The caller now owns the completed value.
+        LD A,(DR_ATAG)
+        LD HL,(DR_ACC)
         RET
 
 ; Open a list frame at the current reader value-stack cursor.
-SRTDFOPN:
-        LD A,(SRTDRFC)
+DR_OPEN:
+        LD A,(DR_DEPTH)
         CP 32
-        JP NC,SRTERROR              ; The reader has a bounded nesting depth.
+        JP NC,ERROR                 ; The reader has a bounded nesting depth.
         LD L,A
         LD H,0
         ADD HL,HL                   ; Eight bytes describe one frame.
@@ -127,8 +127,8 @@ SRTDFOPN:
         ADD HL,HL
         LD DE,RT_DRFLO
         ADD HL,DE
-        LD (SRTDRFP),HL
-        LD DE,(SRTDRVP)             ; Save the value-stack base for diagnostics.
+        LD (DR_FRAME),HL
+        LD DE,(DR_SP)               ; Save the value-stack base for diagnostics.
         LD (HL),E
         INC HL
         LD (HL),D
@@ -137,148 +137,148 @@ SRTDFOPN:
         LD (HL),A                   ; State zero expects the first list head.
         INC HL
         LD (HL),A                   ; No values belong to this frame yet.
-        LD A,(SRTDRFC)
+        LD A,(DR_DEPTH)
         INC A
-        LD (SRTDRFC),A
+        LD (DR_DEPTH),A
         OR A                       ; A successful frame open clears carry.
         RET
 
 ; Add one completed child value to the current list frame.
-SRTDFADD:
-        LD HL,(SRTDRFP)
+DR_CHILD:
+        LD HL,(DR_FRAME)
         LD DE,3
         ADD HL,DE
         LD A,(HL)
         INC A
         CP 65
-        JP NC,SRTERROR              ; A single list cannot exceed 64 values.
+        JP NC,ERROR                 ; A single list cannot exceed 64 values.
         LD (HL),A
         DEC HL                       ; Reach the frame state byte.
         LD A,(HL)
         CP 2
-        JR Z,SRTDRFTL                ; The value fills a dotted tail.
+        JR Z,.TAIL                   ; The value fills a dotted tail.
         OR A
         RET NZ                       ; State one remains ordinary list data.
         INC A
         LD (HL),A                   ; The first value changes state to one.
         OR A
         RET
-SRTDRFTL:
+.TAIL:
         INC A
         LD (HL),A                   ; State three requires the closing delimiter.
         OR A
         RET
 
 ; Close the current list frame and select its parent frame, if any.
-SRTDFCLS:
-        LD A,(SRTDRFC)
+DR_CLOSE:
+        LD A,(DR_DEPTH)
         DEC A
-        LD (SRTDRFC),A
-        JR Z,SRTDFZER
-        LD HL,(SRTDRFP)
+        LD (DR_DEPTH),A
+        JR Z,.EMPTY
+        LD HL,(DR_FRAME)
         LD DE,8
         OR A
         SBC HL,DE
-        LD (SRTDRFP),HL
+        LD (DR_FRAME),HL
         OR A
         RET
-SRTDFZER:
+.EMPTY:
         XOR A
-        LD (SRTDRFP),A
-        LD (SRTDRFP+1),A
+        LD (DR_FRAME),A
+        LD (DR_FRAME+1),A
         RET
 
 ; Parse one complete parenthesised list and return its tagged value.
-SRTDRLST:
-        CALL SRTDFOPN              ; The frame remains live through every child.
-        JP C,SRTERROR
-SRTDRLLP:
-        CALL SRTDRSK                 ; Whitespace and comments precede each child.
-        JP C,SRTERROR               ; EOF before ')' leaves a malformed list.
-        CALL SRTDRPK
+DR_LIST:
+        CALL DR_OPEN               ; The frame remains live through every child.
+        JP C,ERROR
+.LOOP:
+        CALL DR_SKIP                 ; Whitespace and comments precede each child.
+        JP C,ERROR                  ; EOF before ')' leaves a malformed list.
+        CALL DR_PEEK
         CP ')'                       ; A close finishes proper or dotted data.
-        JP Z,SRTDLCLS
+        JP Z,.CLOSE
         CP '.'                       ; A dot changes the frame to tail state.
-        JP Z,SRTDLDOT
-        CALL SRTDRVAL                ; Nested lists recurse through the same path.
+        JP Z,.DOT
+        CALL DR_DATUM                ; Nested lists recurse through the same path.
         LD B,A
-        JP C,SRTERROR
-        LD A,(SRTDEOF)
+        JP C,ERROR
+        LD A,(DR_EOF)
         OR A
-        JP NZ,SRTERROR               ; EOF cannot be a child inside a list.
+        JP NZ,ERROR                  ; EOF cannot be a child inside a list.
         LD A,B
-        CALL SRTDRPUT
-        JP C,SRTERROR
-        CALL SRTDFADD
-        JP C,SRTERROR
-        JR SRTDRLLP
+        CALL DR_PUSH
+        JP C,ERROR
+        CALL DR_CHILD
+        JP C,ERROR
+        JR .LOOP
 
 ; Read one dotted-list tail and require ')' immediately afterward.
-SRTDLDOT:
-        LD HL,(SRTDRFP)
+.DOT:
+        LD HL,(DR_FRAME)
         LD DE,2
         ADD HL,DE
         LD A,(HL)
         CP 1
-        JP NZ,SRTERROR               ; Dot requires at least one preceding head.
-        CALL SRTDRTK                 ; Consume the dot retained by the peek.
-        JP C,SRTERROR               ; A dot cannot be followed by end of input.
-        CALL SRTDRPK                ; A punctuation dot must end at a delimiter.
-        JP C,SRTERROR
-        CALL SRTDISDL
-        JP NZ,SRTERROR              ; Reject `(1 .2)` instead of reinterpreting it.
-        LD HL,(SRTDRFP)
+        JP NZ,ERROR                  ; Dot requires at least one preceding head.
+        CALL DR_TAKE                 ; Consume the dot retained by the peek.
+        JP C,ERROR                  ; A dot cannot be followed by end of input.
+        CALL DR_PEEK                ; A punctuation dot must end at a delimiter.
+        JP C,ERROR
+        CALL DR_DELIM
+        JP NZ,ERROR                 ; Reject `(1 .2)` instead of reinterpreting it.
+        LD HL,(DR_FRAME)
         LD DE,2
         ADD HL,DE
         LD A,2
         LD (HL),A                   ; State two expects exactly one tail datum.
-        CALL SRTDRSK
-        JP C,SRTERROR
-        CALL SRTDRPK
+        CALL DR_SKIP
+        JP C,ERROR
+        CALL DR_PEEK
         CP ')'
-        JP Z,SRTERROR               ; A dotted tail cannot be empty.
+        JP Z,ERROR                  ; A dotted tail cannot be empty.
         CP '.'
-        JP Z,SRTERROR               ; A second dot is malformed punctuation.
-        CALL SRTDRVAL
+        JP Z,ERROR                  ; A second dot is malformed punctuation.
+        CALL DR_DATUM
         LD B,A
-        JP C,SRTERROR
-        LD A,(SRTDEOF)
+        JP C,ERROR
+        LD A,(DR_EOF)
         OR A
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         LD A,B
-        CALL SRTDRPUT
-        JP C,SRTERROR
-        CALL SRTDFADD               ; State two becomes state three.
-        JP C,SRTERROR
-        CALL SRTDRSK
-        JP C,SRTERROR
-        CALL SRTDRPK
+        CALL DR_PUSH
+        JP C,ERROR
+        CALL DR_CHILD               ; State two becomes state three.
+        JP C,ERROR
+        CALL DR_SKIP
+        JP C,ERROR
+        CALL DR_PEEK
         CP ')'
-        JP NZ,SRTERROR               ; No datum may follow a dotted tail.
+        JP NZ,ERROR                  ; No datum may follow a dotted tail.
 
 ; Consume ')' and fold the frame's values into pair records.
-SRTDLCLS:
-        CALL SRTDRTK                 ; Consume the closing delimiter.
-        LD HL,(SRTDRFP)
+.CLOSE:
+        CALL DR_TAKE                 ; Consume the closing delimiter.
+        LD HL,(DR_FRAME)
         LD DE,2
         ADD HL,DE
         LD A,(HL)
         CP 2
-        JP Z,SRTERROR                ; Dot without a tail is malformed.
+        JP Z,ERROR                   ; Dot without a tail is malformed.
         LD B,0
         CP 3
-        JR NZ,SRTDRLPR
-        INC B                         ; SRTDRBLD receives a dotted-list flag.
-SRTDRLPR:
+        JR NZ,.FOLD
+        INC B                         ; DR_BUILD receives a dotted-list flag.
+.FOLD:
         INC HL                        ; Reach the frame value count.
         LD A,(HL)
-        CALL SRTDRBLD
-        JP C,SRTERROR
-        LD (SRTDRTAG),A              ; Preserve the completed list across frame pop.
-        LD (SRTDVAL),HL
-        CALL SRTDFCLS
-        JP C,SRTERROR
-        LD A,(SRTDRTAG)
-        LD HL,(SRTDVAL)
+        CALL DR_BUILD
+        JP C,ERROR
+        LD (DR_TAG),A                ; Preserve the completed list across frame pop.
+        LD (DR_VAL),HL
+        CALL DR_CLOSE
+        JP C,ERROR
+        LD A,(DR_TAG)
+        LD HL,(DR_VAL)
         OR A
         RET

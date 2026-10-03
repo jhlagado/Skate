@@ -14,7 +14,7 @@ STR_NEW:
         RET C
 .GOT:
         LD (STR_DST),HL
-        LD (SRTOBJ),HL
+        LD (FRM_CLOS),HL
         CALL GC_OBJON               ; Record the exact block start for validation.
         CALL STR_SETM             ; Set the adjacent string marker bit.
         LD HL,(STR_DST)
@@ -37,19 +37,19 @@ STR_NEW:
         AND 0FCH
         LD L,A
 .CLASS:
-        LD (SRTCLSZ),HL
+        LD (CL_SIZE),HL
         SRL H
         RR L
         SRL H
         RR L
         DEC L
         LD A,L
-        LD (SRTCLIDX),A
+        LD (CL_CLASS),A
         RET
 
 ; Mark a managed string as a live leaf during collection.
 STR_MARK:
-        LD (SRTCLOBJ),HL
+        LD (CL_OBJ),HL
         CALL STR_CHK
         RET C
         CALL GC_SEEN
@@ -60,10 +60,10 @@ STR_MARK:
 ; Test the string marker adjacent to an exact closure allocation start.
 ; Z means the object is not a managed string.
 STR_TEST:
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         CALL GC_OBJAT
         LD C,A
-        LD DE,SRTCLBM
+        LD DE,CL_MAP
         ADD HL,DE
         LD A,(HL)
         AND C
@@ -75,13 +75,13 @@ STR_TEST:
         AND C
         RET
 
-; Set the string marker for the object in SRTOBJ.
+; Set the string marker for the object in FRM_CLOS.
 STR_SETM:
-        LD HL,(SRTOBJ)
-        LD (SRTCLOBJ),HL
+        LD HL,(FRM_CLOS)
+        LD (CL_OBJ),HL
         CALL GC_OBJAT
         LD C,A
-        LD DE,SRTCLBM
+        LD DE,CL_MAP
         ADD HL,DE
         LD A,C
         ADD A,A
@@ -93,10 +93,10 @@ STR_SETM:
 
 ; Clear the string marker before a dead block returns to a closure free list.
 STR_CLRM:
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         CALL GC_OBJAT
         LD C,A
-        LD DE,SRTCLBM
+        LD DE,CL_MAP
         ADD HL,DE
         LD A,C
         ADD A,A
@@ -111,30 +111,30 @@ STR_CLRM:
 
 ; Validate a managed string's start, class extent and length byte.
 STR_CHK:
-        LD (SRTCLOBJ),HL
+        LD (CL_OBJ),HL
         LD DE,RT_HEAP
         OR A
         SBC HL,DE
         JP C,.BAD
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         LD A,L
         AND 3
         JP NZ,.BAD
-        LD DE,(SRTHEAPP)
+        LD DE,(HEAP_LIM)
         OR A
         SBC HL,DE
         JP NC,.BAD
         CALL STR_TEST
         JP Z,.BAD
-        LD HL,(SRTCLOBJ)
-        LD (SRTCLBAS),HL
+        LD HL,(CL_OBJ)
+        LD (CL_BASE),HL
         CALL SLAB_AT
-        LD A,(SRTCLPGI)
+        LD A,(CL_PAGE)
         CP 80H
         JP NC,.BAD
         LD L,A
         LD H,0
-        LD DE,SRTCLOWN
+        LD DE,CL_OWNER
         ADD HL,DE
         LD A,(HL)
         CP 1
@@ -142,10 +142,10 @@ STR_CHK:
         CP 41H
         JP NC,.BAD               ; Strings use only the one-page classes.
         DEC A
-        LD (SRTCLIDX),A
+        LD (CL_CLASS),A
         CALL SLAB_GET
-        LD HL,(SRTCLOBJ)
-        LD DE,(SRTCLPGA)
+        LD HL,(CL_OBJ)
+        LD DE,(CL_PBASE)
         OR A
         SBC HL,DE
         JP C,.BAD
@@ -154,13 +154,13 @@ STR_CHK:
         JP NZ,.BAD
         LD A,L
         LD (STR_OFF),A
-        LD A,(SRTCLIDX)
+        LD A,(CL_CLASS)
         INC A
         LD L,A
         LD H,0
         ADD HL,HL
         ADD HL,HL
-        LD (SRTCLSZ),HL
+        LD (CL_SIZE),HL
         LD A,(STR_OFF)
         LD E,A
         LD D,0
@@ -174,12 +174,12 @@ STR_CHK:
         OR A
         JP NZ,.BAD
 .FITS:
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         LD A,(HL)
         LD L,A
         LD H,0
         INC HL
-        LD DE,(SRTCLSZ)
+        LD DE,(CL_SIZE)
         OR A
         SBC HL,DE
         JP C,.GOOD
@@ -188,6 +188,6 @@ STR_CHK:
         SCF
         RET
 .GOOD:
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         OR A
         RET

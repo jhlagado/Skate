@@ -86,7 +86,7 @@ PRIM_CNT: DB 0                     ; Argument count across the operator push.
 
 ; Slot helpers.  Generated code names a global or a procedure local with one
 ; byte after the CALL: CALL G_LOAD, DB slot.  Each helper steps the return
-; address over that byte.  Globals live in the fixed area at SRTGBASE.
+; address over that byte.  Globals live in the fixed area at G_BASE.
 
 ; Load global SLOT into A:HL.
 G_LOAD:
@@ -99,7 +99,7 @@ G_FETCH:
         LD H,0
         ADD HL,HL
         ADD HL,HL
-        LD DE,(SRTGBASE)
+        LD DE,(G_BASE)
         ADD HL,DE
         JP RT_LOAD
 
@@ -133,7 +133,7 @@ G_PUT:
         LD H,0
         ADD HL,HL
         ADD HL,HL
-        LD DE,(SRTGBASE)
+        LD DE,(G_BASE)
         ADD HL,DE
         EX DE,HL                   ; DE is the slot.
         POP HL
@@ -170,19 +170,19 @@ L_SET:
 ; A contains the argument count and the native stack contains only arguments.
 INV_OP:
         POP IX                    ; Save this helper's generated continuation.
-        LD (SRTRET),IX            ; Packet helpers use IX for their own return.
+        LD (FRM_SAVE),IX          ; Packet helpers use IX for their own return.
         LD B,A                    ; Preserve the generated argument count.
-        LD HL,(SRTENV)            ; Save the caller environment for a closure call.
-        LD (SRTCENV),HL
-        LD HL,(SRTDESC)           ; Save the caller descriptor before dispatch.
-        LD (SRTCDESC),HL
-        LD A,(SRTSLOTS)            ; The caller map remains a precise root.
-        LD (SRTCENVN),A
+        LD HL,(ENV_CUR)           ; Save the caller environment for a closure call.
+        LD (ENV_RET),HL
+        LD HL,(DESC_CUR)          ; Save the caller descriptor before dispatch.
+        LD (DESC_RET),HL
+        LD A,(SLOT_CNT)            ; The caller map remains a precise root.
+        LD (ENV_RCNT),A
         LD A,B
-        LD (SRTARGC),A            ; The count remains available to the packet pass.
+        LD (ARG_CNT),A            ; The count remains available to the packet pass.
         CALL PKT_PACK             ; Pack arguments, then recover the saved value.
-        JP C,SRTERROR
-        LD IX,(SRTRET)
+        JP C,ERROR
+        LD IX,(FRM_SAVE)
         JR INV_GO                 ; Share primitive and closure dispatch.
 
 ; Call a fixed-arity procedure descriptor. A contains the argument count and
@@ -190,83 +190,83 @@ INV_OP:
 ; SCPUSH. The descriptor records the body address and formal slot addresses.
 INV_CALL:
         POP IX                    ; Save this helper's return address in IX.
-        LD (SRTRET),IX            ; FRM_PACK uses IX for its own helper return.
+        LD (FRM_SAVE),IX          ; FRM_PACK uses IX for its own helper return.
         LD B,A                    ; Preserve the generated argument count.
-        LD HL,(SRTENV)            ; Save the caller environment for the new frame.
-        LD (SRTCENV),HL           ; The body may invoke another closure.
-        LD HL,(SRTDESC)           ; Save the caller descriptor before dispatch.
-        LD (SRTCDESC),HL
-        LD A,(SRTSLOTS)            ; Save the caller map's exact slot extent.
-        LD (SRTCENVN),A
+        LD HL,(ENV_CUR)           ; Save the caller environment for the new frame.
+        LD (ENV_RET),HL           ; The body may invoke another closure.
+        LD HL,(DESC_CUR)          ; Save the caller descriptor before dispatch.
+        LD (DESC_RET),HL
+        LD A,(SLOT_CNT)            ; Save the caller map's exact slot extent.
+        LD (ENV_RCNT),A
         LD A,B
-        LD (SRTARGC),A            ; The count remains available to the packet pass.
+        LD (ARG_CNT),A            ; The count remains available to the packet pass.
         CALL FRM_PACK              ; Move reverse-pushed values into the packet.
-        JP C,SRTERROR              ; A malformed packet is a runtime failure.
-        LD IX,(SRTRET)             ; Recover the generated continuation after packing.
+        JP C,ERROR                 ; A malformed packet is a runtime failure.
+        LD IX,(FRM_SAVE)           ; Recover the generated continuation after packing.
 INV_GO:
-        LD (SRTATMP),A             ; Keep the callee tag while selecting its path.
-        LD (SRTVAL),HL             ; Keep the callee payload for both paths.
+        LD (ARG_TAG),A             ; Keep the callee tag while selecting its path.
+        LD (ARG_VAL),HL            ; Keep the callee payload for both paths.
         OR A                       ; Tag zero may identify a predefined primitive.
         JR Z,INV_PRIM              ; Validate its reserved payload and dispatch it.
         XOR A                       ; A closure or invalid value clears apply dispatch.
         LD (APPLY_IN),A
-        LD A,(SRTATMP)              ; Restore the tag before the closure check.
+        LD A,(ARG_TAG)              ; Restore the tag before the closure check.
         CP 2                       ; Tag two identifies a closure object.
         JP Z,.CLOSURE
         CP 8                       ; Tag eight identifies an active escape token.
         JP Z,INV_ESC
-        JP SRTERROR                ; Other scalar values cannot be called.
+        JP ERROR                   ; Other scalar values cannot be called.
 .CLOSURE:
-        LD HL,(SRTVAL)             ; Restore the closure object payload.
-        LD (SRTOBJ),HL            ; FRM_PACK returns the closure object payload.
+        LD HL,(ARG_VAL)            ; Restore the closure object payload.
+        LD (FRM_CLOS),HL          ; FRM_PACK returns the closure object payload.
         LD E,(HL)                  ; Read the descriptor pointer from its header.
         INC HL
         LD D,(HL)
-        LD (SRTDESC),DE            ; Keep the descriptor for arity and body lookup.
+        LD (DESC_CUR),DE           ; Keep the descriptor for arity and body lookup.
         INC HL
         INC HL                     ; The object payload now names its environment.
-        LD HL,(SRTDESC)            ; REST_CHK consumes the descriptor address.
+        LD HL,(DESC_CUR)           ; REST_CHK consumes the descriptor address.
         CALL REST_CHK             ; Validate the callee tag and descriptor arity.
-        JP C,SRTERROR              ; Do not jump through an arbitrary value.
-        LD HL,(SRTDESC)            ; Descriptor byte three fixes the map extent.
+        JP C,ERROR                 ; Do not jump through an arbitrary value.
+        LD HL,(DESC_CUR)           ; Descriptor byte three fixes the map extent.
         LD DE,3
         ADD HL,DE
         LD A,(HL)
-        LD (SRTSLOTS),A
+        LD (SLOT_CNT),A
         LD L,A                     ; Widen the slot count before doubling it.
         LD H,0
         ADD HL,HL
-        LD (SRTBYTES),HL
+        LD (FRM_CLEN),HL
         CALL ENV_NEW               ; Build an activation map below the stack.
         CALL REST_ARG              ; Copy packet values into the formal slots.
-        JP C,SRTERROR              ; A descriptor slot outside the image is invalid.
+        JP C,ERROR                 ; A descriptor slot outside the image is invalid.
         XOR A                      ; The closure now owns the argument values.
-        LD (SRTARGC),A             ; Retire the packet before entering its body.
+        LD (ARG_CNT),A             ; Retire the packet before entering its body.
         PUSH IX                    ; Preserve the generated caller return address.
-        LD DE,(SRTOLDSP)           ; Release the activation map when the body returns.
+        LD DE,(FRM_SP)             ; Release the activation map when the body returns.
         PUSH DE                    ; The old stack boundary follows the return word.
-        LD DE,(SRTCENV)            ; Preserve the caller environment below the frame.
+        LD DE,(ENV_RET)            ; Preserve the caller environment below the frame.
         PUSH DE                    ; FRM_RET restores it after the body returns.
-        LD HL,(SRTCDESC)           ; Keep the caller descriptor for the epilogue.
+        LD HL,(DESC_RET)           ; Keep the caller descriptor for the epilogue.
         PUSH HL                    ; The epilogue restores this descriptor state.
-        LD HL,(SRTDESC)            ; Read the descriptor body pointer.
+        LD HL,(DESC_CUR)           ; Read the descriptor body pointer.
         LD E,(HL)                  ; Body address low byte is descriptor offset zero.
         INC HL                     ; Advance to the body address high byte.
         LD D,(HL)                  ; DE now names the generated procedure body.
         LD HL,FRM_RET              ; Body RET returns through this frame epilogue.
         PUSH HL                    ; Keep descriptor and caller return below it.
-        LD HL,(SRTENV)             ; The map base identifies this fixed frame.
-        LD (SRTFRAME),HL           ; Exact roots can derive suspended frames from it.
+        LD HL,(ENV_CUR)            ; The map base identifies this fixed frame.
+        LD (FRM_BASE),HL           ; Exact roots can derive suspended frames from it.
         EX DE,HL                   ; HL receives the target body address.
         JP (HL)                    ; Enter without adding a second native return.
 
 ; Route a tag-eight escape token to its dynamic one-shot handler.
 INV_ESC:
-        LD HL,(SRTVAL)             ; Port values share tag eight with escapes.
+        LD HL,(ARG_VAL)            ; Port values share tag eight with escapes.
         LD A,H
         CP 0F0H
-        JP NC,SRTERROR             ; The F000H port namespace is never callable.
-        JP SRTCEESC
+        JP NC,ERROR                ; The F000H port namespace is never callable.
+        JP EC_ESC
 
 ; Route a primitive callee through the checked packet dispatcher.
 INV_PRIM:
@@ -276,23 +276,23 @@ INV_PRIM:
         JR Z,.DISPATCH
         XOR A
         LD (APPLY_IN),A
-        LD IX,(SRTRET)             ; The inner primitive returns to the outer call.
+        LD IX,(FRM_SAVE)           ; The inner primitive returns to the outer call.
 .DISPATCH:
         JP PRIM_RUN                ; The generated continuation remains in IX.
 
 ; Validate a predefined primitive payload and retain its zero-based kind.
 INV_KIND:
-        LD HL,(SRTVAL)             ; Primitive values use the reserved FE20H range.
+        LD HL,(ARG_VAL)            ; Primitive values use the reserved FE20H range.
         LD A,H
         CP 0FEH
-        JP NZ,SRTERROR             ; A tag-zero value outside the range is not callable.
+        JP NZ,ERROR                ; A tag-zero value outside the range is not callable.
         LD A,L
         CP 20H
-        JP C,SRTERROR
+        JP C,ERROR
         CP PRIM_LIM                ; Kinds run to the end of the standard set.
-        JP NC,SRTERROR
+        JP NC,ERROR
         SUB 20H
-        LD (SRTPID),A              ; Kind zero is addition; kind three is zero?.
+        LD (PRIM_ID),A             ; Kind zero is addition; kind three is zero?.
         XOR A
         RET
 
@@ -300,18 +300,18 @@ INV_KIND:
 ; the target.  The current activation map is reused, so a tail loop does not
 ; allocate a new pointer array on every iteration.
 INV_TAIL:
-        LD HL,(SRTDESC)            ; Retain the current descriptor for reuse checks.
-        LD (SRTCURD),HL
+        LD HL,(DESC_CUR)           ; Retain the current descriptor for reuse checks.
+        LD (DESC_OLD),HL
         LD B,A                     ; Preserve the generated argument count.
-        LD A,(SRTSLOTS)            ; Preserve the current map extent for the guard.
-        LD (SRTCURS),A
+        LD A,(SLOT_CNT)            ; Preserve the current map extent for the guard.
+        LD (FRM_SPAN),A
         LD A,B
-        LD (SRTARGC),A             ; The tail packet uses the generated count.
+        LD (ARG_CNT),A             ; The tail packet uses the generated count.
         CALL FRM_PACK              ; Parse arguments while the current frame remains.
-        JP C,SRTERROR             ; A malformed tail packet is terminal.
+        JP C,ERROR                ; A malformed tail packet is terminal.
 INV_TLGO:
-        LD (SRTATMP),A             ; Keep the target tag while selecting its path.
-        LD (SRTVAL),HL             ; Keep the target payload for both paths.
+        LD (ARG_TAG),A             ; Keep the target tag while selecting its path.
+        LD (ARG_VAL),HL            ; Keep the target payload for both paths.
         CP 8                       ; A tail escape invokes the active one-shot record.
         JP Z,INV_ESC               ; It discards the current procedure frame safely.
         OR A                       ; A predefined primitive has no closure object.
@@ -323,7 +323,7 @@ INV_TLGO:
 ; Apply's primitive tail path keeps the active frame on the native stack.
 .APPLY:
         CALL INV_KIND               ; Revalidate the primitive target.
-        LD A,(SRTPID)               ; Inspect the target after validation.
+        LD A,(PRIM_ID)              ; Inspect the target after validation.
         CP 45                       ; A nested apply must keep spreading in tail mode.
         JR Z,.NESTED                ; Leave its frame epilogue for the next target.
         POP IX                      ; Remove the active frame epilogue before return.
@@ -331,34 +331,34 @@ INV_TLGO:
 .NESTED:
         JP APPLY                     ; Preserve tail mode while applying the next target.
 .CLOSURE:
-        LD A,(SRTATMP)              ; Restore the target tag after the mode check.
+        LD A,(ARG_TAG)              ; Restore the target tag after the mode check.
         CP 2                       ; Only closure objects reach the existing tail path.
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         XOR A                       ; The apply-tail marker is no longer needed.
         LD (APPLY_TL),A
-        LD HL,(SRTVAL)             ; Restore the closure object payload.
-        LD (SRTOBJ),HL            ; Resolve the target closure object.
+        LD HL,(ARG_VAL)            ; Restore the closure object payload.
+        LD (FRM_CLOS),HL          ; Resolve the target closure object.
         LD E,(HL)                  ; Read its descriptor pointer.
         INC HL
         LD D,(HL)
-        LD (SRTDESC),DE            ; Keep the target descriptor for validation.
+        LD (DESC_CUR),DE           ; Keep the target descriptor for validation.
         INC HL
         INC HL
-        LD HL,(SRTDESC)
+        LD HL,(DESC_CUR)
         CALL REST_CHK             ; Validate the target procedure and arity.
-        JP C,SRTERROR             ; Do not reuse a frame for an invalid target.
-        LD HL,(SRTDESC)            ; Load the target's bounded pointer-map extent.
+        JP C,ERROR                ; Do not reuse a frame for an invalid target.
+        LD HL,(DESC_CUR)           ; Load the target's bounded pointer-map extent.
         LD DE,3
         ADD HL,DE
         LD A,(HL)
-        LD (SRTSLOTS),A
+        LD (SLOT_CNT),A
         LD L,A                     ; Widen the target slot count before doubling.
         LD H,0
         ADD HL,HL
-        LD (SRTBYTES),HL
-        LD A,(SRTCURS)             ; The active array must hold the target shape.
+        LD (FRM_CLEN),HL
+        LD A,(FRM_SPAN)            ; The active array must hold the target shape.
         LD B,A
-        LD A,(SRTSLOTS)
+        LD A,(SLOT_CNT)
         CP B
         JR Z,.FITS                 ; An equal shape fits the active map exactly.
         JR NC,.BAD                 ; A larger target cannot fit the active map.
@@ -368,30 +368,30 @@ INV_TLGO:
         CALL ENV_OWN               ; Reuse owned cells or allocate missing entries.
         JR .ARGS
 .BAD:
-        JP SRTERROR                ; Reject a tail shape that cannot fit in place.
+        JP ERROR                   ; Reject a tail shape that cannot fit in place.
 .ARGS:
         CALL REST_ARG              ; Install the target's formal values.
-        JP C,SRTERROR             ; Reject an invalid descriptor slot.
+        JP C,ERROR                ; Reject an invalid descriptor slot.
         XOR A                      ; The tail target now owns the argument values.
-        LD (SRTARGC),A             ; Retire the packet before entering its body.
+        LD (ARG_CNT),A             ; Retire the packet before entering its body.
         POP DE                    ; Discard the current body epilogue address.
         POP DE                    ; Recover the caller descriptor for the target.
-        LD (SRTCDESC),DE
+        LD (DESC_RET),DE
         POP DE                    ; Recover the caller environment below this frame.
-        LD (SRTCENV),DE
+        LD (ENV_RET),DE
         POP DE                    ; Recover the stack boundary below this frame.
-        LD (SRTOLDSP),DE
+        LD (FRM_SP),DE
         POP IX                    ; Recover the caller return below this frame.
         PUSH IX                   ; Preserve the original caller return word.
-        LD DE,(SRTOLDSP)           ; Keep the reused activation map above the frame.
+        LD DE,(FRM_SP)             ; Keep the reused activation map above the frame.
         PUSH DE
-        LD DE,(SRTCENV)            ; Preserve the caller environment below the frame.
+        LD DE,(ENV_RET)            ; Preserve the caller environment below the frame.
         PUSH DE
-        LD HL,(SRTCDESC)          ; Keep the caller descriptor on the new frame.
+        LD HL,(DESC_RET)          ; Keep the caller descriptor on the new frame.
         PUSH HL                   ; The target returns through FRM_RET.
         LD HL,FRM_RET             ; Install the target's single epilogue.
         PUSH HL                   ; Tail recursion therefore uses constant stack.
-        LD HL,(SRTDESC)           ; Read the target body address.
+        LD HL,(DESC_CUR)          ; Read the target body address.
         LD E,(HL)                 ; Body address low byte.
         INC HL                    ; Advance to the high body byte.
         LD D,(HL)                 ; Complete the target body address.
@@ -401,15 +401,15 @@ INV_TLGO:
 ; Tail transfer for a saved operator.  Arguments are native-stack values and
 ; the operator was saved in the side stack before their expressions ran.
 INV_OPTL:
-        LD HL,(SRTDESC)            ; Retain the current descriptor for reuse checks.
-        LD (SRTCURD),HL
+        LD HL,(DESC_CUR)           ; Retain the current descriptor for reuse checks.
+        LD (DESC_OLD),HL
         LD B,A                     ; Preserve the generated argument count.
-        LD A,(SRTSLOTS)            ; Preserve the current map extent for the guard.
-        LD (SRTCURS),A
+        LD A,(SLOT_CNT)            ; Preserve the current map extent for the guard.
+        LD (FRM_SPAN),A
         LD A,B
-        LD (SRTARGC),A             ; The side-stack packet uses the generated count.
+        LD (ARG_CNT),A             ; The side-stack packet uses the generated count.
         CALL PKT_PACK              ; Pack arguments, then recover the saved value.
-        JP C,SRTERROR
+        JP C,ERROR
         JP INV_TLGO                ; Share closure and primitive tail handling.
 
 ; A tail candidate is emitted as CALL until the compiler knows it is final.

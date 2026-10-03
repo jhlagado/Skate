@@ -8,16 +8,16 @@ GC_VAR:
         LD A,H
         OR L
         RET Z
-        LD (SRTBADDR),HL
+        LD (BND_CELL),HL
         LD DE,RT_HEAP
         OR A
         SBC HL,DE
         JR C,.BAD
-        LD HL,(SRTBADDR)
+        LD HL,(BND_CELL)
         LD DE,CELL_SZ
         ADD HL,DE
         JR C,.BAD                  ; A wrapped binding extent is invalid.
-        LD DE,(SRTHEAPP)
+        LD DE,(HEAP_LIM)
         OR A
         SBC HL,DE
         JR C,.IN_HEAP
@@ -26,23 +26,23 @@ GC_VAR:
 .IN_HEAP:
         CALL GC_ISVAR
         JR Z,.BAD
-        LD HL,(SRTBADDR)
+        LD HL,(BND_CELL)
         LD DE,3
         ADD HL,DE
         LD A,(HL)
-        LD (SRTBFLG),A
+        LD (BND_FLAG),A
         AND BND_USED
         RET Z
-        LD A,(SRTBFLG)
+        LD A,(BND_FLAG)
         AND BND_MARK
         JR NZ,.MARKED
-        LD A,(SRTBFLG)
+        LD A,(BND_FLAG)
         OR BND_MARK
         LD (HL),A
-        LD A,(SRTBFLG)
+        LD A,(BND_FLAG)
         AND BND_INIT
         RET Z
-        LD HL,(SRTBADDR)
+        LD HL,(BND_CELL)
         LD E,(HL)
         INC HL
         LD D,(HL)
@@ -80,35 +80,35 @@ GC_VALUE:
 ; descriptor and environment extent.  The start bitmap rejects pointers into
 ; an object's payload or into a binding cell that happens to look similar.
 GC_OBJOK:
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         LD DE,RT_HEAP
         OR A
         SBC HL,DE
         JR C,.BAD
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         LD A,L                     ; Closure starts occupy even map units only.
         AND 3                      ; An address 2 mod 4 names a string-marker bit.
         JR NZ,.BAD                 ; Require four-byte alignment before the map test.
         LD DE,2
         ADD HL,DE
-        LD DE,(SRTHEAPP)
+        LD DE,(HEAP_LIM)
         OR A
         SBC HL,DE
         JR C,.HEADER
         JR Z,.HEADER
         JR .BAD
 .HEADER:
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         LD E,(HL)
         INC HL
         LD D,(HL)
-        LD (SRTCLDSC),DE
-        LD HL,(SRTCLDSC)
+        LD (CL_DESC),DE
+        LD HL,(CL_DESC)
         LD DE,0100H
         OR A
         SBC HL,DE
         JR C,.BAD
-        LD HL,(SRTCLDSC)
+        LD HL,(CL_DESC)
         LD DE,DESC_MAP
         ADD HL,DE
         JR C,.BAD                  ; The descriptor extent must fit in 16 bits.
@@ -120,27 +120,27 @@ GC_OBJOK:
         JR C,.BAD
         ADD HL,DE                  ; The end of both masks.
         JR C,.BAD
-        LD DE,(SRTIMGE)
+        LD DE,(RT_LIMIT)
         OR A
         SBC HL,DE
         JR C,.EXTENT
         JR Z,.EXTENT
         JR .BAD
 .EXTENT:
-        LD HL,(SRTCLDSC)
+        LD HL,(CL_DESC)
         LD DE,3
         ADD HL,DE
         LD A,(HL)
-        LD (SRTCLN),A
+        LD (CL_COUNT),A
         LD L,A
         LD H,0
         ADD HL,HL
         LD DE,2
         ADD HL,DE
-        LD DE,(SRTCLOBJ)
+        LD DE,(CL_OBJ)
         ADD HL,DE
         JR C,.BAD                  ; A wrapped closure extent is invalid.
-        LD DE,(SRTHEAPP)
+        LD DE,(HEAP_LIM)
         OR A
         SBC HL,DE
         JR C,.GOOD
@@ -184,23 +184,23 @@ GC_OBJAT:
         LD A,1
         RET
 
-; Test whether SRTCLOBJ is a recorded closure allocation start.
+; Test whether CL_OBJ is a recorded closure allocation start.
 GC_ISOBJ:
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         CALL GC_OBJAT
         LD C,A
-        LD DE,SRTCLBM
+        LD DE,CL_MAP
         ADD HL,DE
         LD A,(HL)
         AND C
         RET
 
-; Test whether SRTCLOBJ has already entered this collection's worklist.
+; Test whether CL_OBJ has already entered this collection's worklist.
 GC_SEEN:
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         CALL GC_OBJAT
         LD C,A
-        LD DE,SRTCLMK
+        LD DE,GC_MARKS
         ADD HL,DE
         LD A,(HL)
         AND C
@@ -208,24 +208,24 @@ GC_SEEN:
 
 ; Set the current collection's closure mark bit.
 GC_VISIT:
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         CALL GC_OBJAT
         LD C,A
-        LD DE,SRTCLMK
+        LD DE,GC_MARKS
         ADD HL,DE
         LD A,(HL)
         OR C
         LD (HL),A
         LD A,1
-        LD (SRTMNEW),A             ; Fallback passes must revisit new closures.
+        LD (GC_FOUND),A            ; Fallback passes must revisit new closures.
         RET
 
 ; Publish a newly allocated closure start for later exact validation.
 GC_OBJON:
-        LD HL,(SRTOBJ)
+        LD HL,(FRM_CLOS)
         CALL GC_OBJAT
         LD C,A
-        LD DE,SRTCLBM
+        LD DE,CL_MAP
         ADD HL,DE
         LD A,(HL)
         OR C
@@ -234,7 +234,7 @@ GC_OBJON:
 
 ; Clear all closure marks at the beginning of a collection.
 GC_RESET:
-        LD HL,SRTCLMK
+        LD HL,GC_MARKS
         LD BC,0900H
 .LOOP:
         LD A,(HL)
@@ -246,34 +246,34 @@ GC_RESET:
         OR C
         JR NZ,.LOOP
         XOR A
-        LD (SRTCLER),A
+        LD (CL_FULL),A
         RET
 
 ; Queue a validated closure without entering its capture graph recursively.
 GC_QUEUE:
-        LD (SRTCLOBJ),HL
+        LD (CL_OBJ),HL
         CALL GC_OBJOK
         RET C
         CALL GC_SEEN
         RET NZ
         CALL GC_VISIT
-        LD DE,(SRTMSTK)
+        LD DE,(GC_QTOP)
         LD A,D
         CP 0D4H
         JR NC,.FULL
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         LD A,L
         LD (DE),A
         INC DE
         LD A,H
         LD (DE),A
         INC DE
-        LD (SRTMSTK),DE
+        LD (GC_QTOP),DE
         RET
 .FULL:
         LD A,1
-        LD (SRTMOVER),A            ; The closure scan will trace this marked object.
-        LD (SRTCLER),A             ; Retain the diagnostic overflow indication.
+        LD (GC_OVER),A             ; The closure scan will trace this marked object.
+        LD (CL_FULL),A             ; Retain the diagnostic overflow indication.
         RET
 
 ; Trace one queued closure through the descriptor capture mask.  Every
@@ -281,28 +281,28 @@ GC_QUEUE:
 GC_CAPS:
         CALL GC_OBJOK
         RET C
-        LD HL,(SRTCLDSC)
+        LD HL,(CL_DESC)
         CALL DESC_CAP
-        LD (SRTCLMP),HL
+        LD (CL_MASKP),HL
         OR A
         RET Z                      ; Nothing is captured.
         LD B,A
         XOR A
-        LD (SRTCLSLT),A
+        LD (CL_SLOT),A
 .BYTE:
-        LD HL,(SRTCLMP)
+        LD HL,(CL_MASKP)
         LD A,(HL)
         INC HL
-        LD (SRTCLMP),HL
-        LD (SRTCLMV),A
+        LD (CL_MASKP),HL
+        LD (CL_MASK),A
         LD C,8
 .BIT:
-        LD A,(SRTCLMV)
+        LD A,(CL_MASK)
         AND 1
         JR Z,.NEXT
-        LD A,(SRTCLN)
+        LD A,(CL_COUNT)
         LD E,A
-        LD A,(SRTCLSLT)
+        LD A,(CL_SLOT)
         CP E
         JR NC,.NEXT
         LD L,A
@@ -310,48 +310,48 @@ GC_CAPS:
         ADD HL,HL
         LD DE,2
         ADD HL,DE
-        LD DE,(SRTCLOBJ)
+        LD DE,(CL_OBJ)
         ADD HL,DE
         LD E,(HL)
         INC HL
         LD D,(HL)
         EX DE,HL
-        LD (SRTCLPTR),HL
+        LD (GC_BIND),HL
         PUSH BC
-        LD HL,(SRTCLMP)
+        LD HL,(CL_MASKP)
         PUSH HL
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         PUSH HL
-        LD HL,(SRTCLDSC)
+        LD HL,(CL_DESC)
         PUSH HL
-        LD A,(SRTCLN)
+        LD A,(CL_COUNT)
         PUSH AF
-        LD A,(SRTCLSLT)
+        LD A,(CL_SLOT)
         PUSH AF
-        LD A,(SRTCLMV)
+        LD A,(CL_MASK)
         PUSH AF
-        LD HL,(SRTCLPTR)
+        LD HL,(GC_BIND)
         CALL GC_VAR
         POP AF
-        LD (SRTCLMV),A
+        LD (CL_MASK),A
         POP AF
-        LD (SRTCLSLT),A
+        LD (CL_SLOT),A
         POP AF
-        LD (SRTCLN),A
+        LD (CL_COUNT),A
         POP HL
-        LD (SRTCLDSC),HL
+        LD (CL_DESC),HL
         POP HL
-        LD (SRTCLOBJ),HL
+        LD (CL_OBJ),HL
         POP HL
-        LD (SRTCLMP),HL
+        LD (CL_MASKP),HL
         POP BC
 .NEXT:
-        LD A,(SRTCLMV)
+        LD A,(CL_MASK)
         SRL A
-        LD (SRTCLMV),A
-        LD A,(SRTCLSLT)
+        LD (CL_MASK),A
+        LD A,(CL_SLOT)
         INC A
-        LD (SRTCLSLT),A
+        LD (CL_SLOT),A
         DEC C
         JR NZ,.BIT
         DJNZ .BYTE
@@ -362,7 +362,7 @@ GC_CAPS:
 ; closure extent.  Repeating the pass reaches captures discovered later in
 ; the scan without recursing through the native stack.
 GC_OBJS:
-        LD HL,(SRTHEAPP)           ; Scan only the configured managed address span.
+        LD HL,(HEAP_LIM)           ; Scan only the configured managed address span.
         LD DE,RT_HEAP
         OR A
         SBC HL,DE
@@ -371,10 +371,10 @@ GC_OBJS:
         LD B,H                     ; Each visit tests one even closure address.
         LD C,L
         LD HL,RT_HEAP
-        LD (SRTCLSCN),HL
+        LD (CL_SCANP),HL
 .LOOP:
-        LD HL,(SRTCLSCN)
-        LD (SRTCLOBJ),HL
+        LD HL,(CL_SCANP)
+        LD (CL_OBJ),HL
         PUSH BC
         CALL GC_ISOBJ
         JR Z,.NEXT
@@ -382,15 +382,15 @@ GC_OBJS:
         JR Z,.NEXT
         CALL STR_TEST
         JR NZ,.NEXT
-        LD HL,(SRTCLOBJ)           ; Restore the scanned object after string classification.
+        LD HL,(CL_OBJ)             ; Restore the scanned object after string classification.
         XOR A
         CALL VEC_HOOK
 .NEXT:
         POP BC
-        LD HL,(SRTCLSCN)
+        LD HL,(CL_SCANP)
         INC HL
         INC HL
-        LD (SRTCLSCN),HL
+        LD (CL_SCANP),HL
         DEC BC
         LD A,B
         OR C

@@ -10,7 +10,7 @@ Deno.test("an unmapped binding cell stops before any cell bytes are written", as
   // A damaged free list hands HEAP_NEW a cell outside the binding start map.
   const bad = 0xd702;
   writeWord(memory, bad, 0);
-  writeWord(memory, assembled.address("SRTBHEAD"), bad);
+  writeWord(memory, assembled.address("BND_FREE"), bad);
   memory.fill(0x5a, 0xa700, 0xa710);
   memory.fill(0x5a, bad, bad + 4);
   writeWord(memory, bad, 0);
@@ -18,7 +18,7 @@ Deno.test("an unmapped binding cell stops before any cell bytes are written", as
   cpu.pc = assembled.address("HEAP_NEW");
   cpu.sp = 0xdff0;
   writeWord(memory, cpu.sp, 0xef00);
-  const error = assembled.address("SRTERROR");
+  const error = assembled.address("ERROR");
   let steps = 0;
   while (cpu.pc !== 0xef00 && cpu.pc !== error) {
     assert.ok(++steps < 1_000_000, "HEAP_NEW did not finish");
@@ -35,9 +35,9 @@ Deno.test("an unmapped binding cell stops before any cell bytes are written", as
 
 Deno.test("GC_VARON returns the cell address with carry on failure", async () => {
   const { assembled, memory, call } = await managedRuntime();
-  writeWord(memory, assembled.address("SRTCELLP"), 0xd702);
+  writeWord(memory, assembled.address("HEAP_OBJ"), 0xd702);
   const result = call("GC_VARON");
   assert.equal(result.carry, 1);
   assert.equal(result.payload, 0xd702);
-  assert.equal(readWord(memory, assembled.address("SRTCELLP")), 0xd702);
+  assert.equal(readWord(memory, assembled.address("HEAP_OBJ")), 0xd702);
 });

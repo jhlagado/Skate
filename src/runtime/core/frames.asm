@@ -2,7 +2,7 @@
 ; Entry points: FRM_PACK, FRM_CELL, FRM_LOAD/FRM_INIT and FRM_RET.
 ; Included in runtime order by ../core.asm.
 
-; Move the reverse-pushed argument values into SRTARGPK.  The callee remains
+; Move the reverse-pushed argument values into ARG_PKT.  The callee remains
 ; below the packet and is returned in A:HL for REST_CHK.
 FRM_PACK:
         POP IX                   ; Save the FRM_PACK call return above the values.
@@ -15,15 +15,15 @@ FRM_PACK:
 .LOOP:
         POP HL                   ; Recover the argument payload word.
         POP AF                   ; Recover the argument tag word.
-        LD (SRTATMP),A            ; Preserve the tag while addressing the packet.
-        LD (SRTVAL),HL            ; Preserve the payload while multiplying the index.
+        LD (ARG_TAG),A            ; Preserve the tag while addressing the packet.
+        LD (ARG_VAL),HL           ; Preserve the payload while multiplying the index.
         LD L,C                    ; Widen the reverse packet index.
         LD H,0                    ; Each packet value occupies four bytes.
         ADD HL,HL                 ; Two-byte offset.
         ADD HL,HL                 ; Four-byte offset.
-        LD DE,SRTARGPK            ; Add the packet base.
+        LD DE,ARG_PKT             ; Add the packet base.
         ADD HL,DE                 ; HL points at the packet value.
-        LD DE,(SRTVAL)             ; Restore the payload.
+        LD DE,(ARG_VAL)            ; Restore the payload.
         LD (HL),E                 ; Store payload low.
         INC HL                    ; Advance to payload high.
         LD (HL),D                 ; Store payload high.
@@ -31,7 +31,7 @@ FRM_PACK:
         XOR A
         LD (HL),A                 ; It stays clear.
         INC HL                    ; Advance to the flags and tag.
-        LD A,(SRTATMP)            ; Packet values are always live.
+        LD A,(ARG_TAG)            ; Packet values are always live.
         OR CELL_VAL
         LD (HL),A                 ; Publish the complete argument record.
         DEC C                     ; The preceding source argument has a lower index.
@@ -39,12 +39,12 @@ FRM_PACK:
 .CALLEE:
         POP HL                   ; Recover the callee payload.
         POP AF                   ; Recover the callee tag.
-        LD (SRTATMP),A
-        LD A,(SRTARGC)           ; The callee and every argument leave the shadow stack.
+        LD (ARG_TAG),A
+        LD A,(ARG_CNT)           ; The callee and every argument leave the shadow stack.
         INC A
         LD B,A
         CALL ROOT_CUT
-        LD A,(SRTATMP)
+        LD A,(ARG_TAG)
         PUSH IX                  ; Restore the FRM_PACK call return.
         RET                      ; The caller selects closure or primitive dispatch.
 
@@ -53,7 +53,7 @@ FRM_CELL:
         LD L,A                    ; Widen the zero-based slot index.
         LD H,0
         ADD HL,HL                 ; Two bytes hold each cell pointer.
-        LD DE,(SRTENV)
+        LD DE,(ENV_CUR)
         ADD HL,DE
         LD E,(HL)                 ; Recover the cell pointer low byte.
         INC HL
@@ -104,13 +104,13 @@ RT_EMPTY:
 
 ; Return from a generated procedure and restore the caller's frame words.
 FRM_RET:
-        LD (SRTVAL),HL           ; Save the body result while removing frame words.
-        LD (SRTATMP),A           ; Preserve its tag across the frame restore.
+        LD (ARG_VAL),HL          ; Save the body result while removing frame words.
+        LD (ARG_TAG),A           ; Preserve its tag across the frame restore.
         POP HL                   ; Remove the target descriptor below the body return.
-        LD (SRTDESC),HL          ; Restore the enclosing descriptor for nested calls.
+        LD (DESC_CUR),HL         ; Restore the enclosing descriptor for nested calls.
         POP HL                   ; Restore the caller environment pointer.
-        LD (SRTENV),HL           ; Nested closures resume their defining environment.
-        LD HL,(SRTDESC)           ; The descriptor, not the map, carries the shape.
+        LD (ENV_CUR),HL          ; Nested closures resume their defining environment.
+        LD HL,(DESC_CUR)          ; The descriptor, not the map, carries the shape.
         LD A,H
         OR L
         JR Z,.TOP
@@ -121,18 +121,18 @@ FRM_RET:
 .TOP:
         XOR A
 .SLOTS:
-        LD (SRTSLOTS),A
-        LD (SRTCENVN),A
-        LD HL,(SRTENV)
-        LD (SRTFRAME),HL         ; The caller map now identifies the active frame.
+        LD (SLOT_CNT),A
+        LD (ENV_RCNT),A
+        LD HL,(ENV_CUR)
+        LD (FRM_BASE),HL         ; The caller map now identifies the active frame.
         POP DE                   ; Restore the stack boundary below the map.
-        LD (SRTOLDSP),DE
+        LD (FRM_SP),DE
         POP HL                   ; Recover the original caller return address.
         EX DE,HL                 ; Keep the return address while releasing the map.
-        LD HL,(SRTOLDSP)
+        LD HL,(FRM_SP)
         LD SP,HL
         EX DE,HL                 ; Restore the return address for the final RET.
         PUSH HL                  ; Leave that address ready for the final RET.
-        LD HL,(SRTVAL)           ; Restore the body payload for the caller.
-        LD A,(SRTATMP)           ; Restore the body tag for the caller.
+        LD HL,(ARG_VAL)          ; Restore the body payload for the caller.
+        LD A,(ARG_TAG)           ; Restore the body tag for the caller.
         RET                      ; Return directly to the generated call site.

@@ -25,8 +25,8 @@ Deno.test("native text input folds repeated CR and split CR/LF", async () => {
   const cursor = 0xf204;
   memory.set([13, 13, 10, 65], queue);
   installBdosReader(memory, cursor, queue);
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
 
   function readChar() {
     cpu.pc = assembled.address("PKT_GETC");
@@ -69,12 +69,12 @@ Deno.test("native direct CP/M output accepts byte FF", async () => {
   memory[capture] = 0;
 
   cpu.a = 0xff;
-  cpu.pc = assembled.address("SRTCH");
+  cpu.pc = assembled.address("OUT_CHAR");
   cpu.sp = 0xdff0;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
   while (cpu.pc !== 0xef00) {
-    assert.ok(++steps < 50_000_000, "SRTCH did not return");
+    assert.ok(++steps < 50_000_000, "OUT_CHAR did not return");
     assembled.runtime.step();
   }
   assert.equal(cpu.sp, 0xdff2);

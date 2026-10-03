@@ -10,7 +10,7 @@ PAGE_INI:
         XOR A                      ; Invalidate any previous domain before checks.
         LD (PAGE_OK),A             ; A failed reinitialisation must not leave it live.
         LD (PAGE_IMG),HL           ; Retain the exact unrounded image end.
-        LD HL,(SRTHEAPP)           ; The caller may select a lower managed ceiling.
+        LD HL,(HEAP_LIM)           ; The caller may select a lower managed ceiling.
         LD DE,RT_HIGH              ; It must still include the first high page.
         OR A                       ; Clear carry before the lower-bound check.
         SBC HL,DE
@@ -18,7 +18,7 @@ PAGE_INI:
         LD A,L                     ; The ceiling must end on a page boundary.
         OR A
         JP NZ,PAGE_ERR
-        LD HL,(SRTHEAPP)           ; Check the configured ceiling against the TPA map.
+        LD HL,(HEAP_LIM)           ; Check the configured ceiling against the TPA map.
         LD DE,RT_HIEND
         OR A
         SBC HL,DE
@@ -26,7 +26,7 @@ PAGE_INI:
         JR Z,.TOP_OK
         JP PAGE_ERR                ; A ceiling above the qualified TPA is invalid.
 .TOP_OK:
-        LD HL,(SRTHEAPP)           ; Derive the number of pages after the map band.
+        LD HL,(HEAP_LIM)           ; Derive the number of pages after the map band.
         LD DE,RT_HIGH
         OR A
         SBC HL,DE

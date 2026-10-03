@@ -299,7 +299,7 @@ SCENDPK:
         RET C                      ; SCDIAG selects the source diagnostic.
         LD HL,(SCFORMN)            ; Reject an empty source before publication.
         LD A,H                     ; Test both bytes of the form count.
-        OR L                       ; A zero count has no result for SRTPRINT.
+        OR L                       ; A zero count has no result for OUT_SHOW.
         JP Z,SCENDSYN              ; Report the same syntax error as other empties.
         JP SCRET                   ; Append RET and return to the command driver.
 

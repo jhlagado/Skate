@@ -47,17 +47,17 @@ STD_DISP:
 ; Require exactly A arguments.
 PKT_NARG:
         LD B,A
-        LD A,(SRTARGC)
+        LD A,(ARG_CNT)
         CP B
         RET Z
-        JP SRTERROR
+        JP ERROR
 
 ; Read the first or second packet value into A:HL.
 PKT_ARG0:
-        LD HL,SRTARGPK
+        LD HL,ARG_PKT
         JP PKT_VAL
 PKT_ARG1:
-        LD HL,SRTARGPK+4
+        LD HL,ARG_PKT+4
         JP PKT_VAL
 
 STD_YES:
@@ -133,7 +133,7 @@ STD_SET:
         CALL PKT_ARG0
         CALL PAIR_CHK              ; Reject anything but a live pair.
         POP BC
-        JP C,SRTERROR
+        JP C,ERROR
         LD B,0
         ADD HL,BC                  ; HL is the selected cell.
         PUSH HL
@@ -353,14 +353,14 @@ STD_CODE:
 
 ; char=? char<? char>? char<=? char>=? over two or more characters.
 STD_CHR:
-        LD A,(SRTPID)
+        LD A,(PRIM_ID)
         SUB 63
         LD (STD_REL),A
-        LD A,(SRTARGC)
+        LD A,(ARG_CNT)
         CP 2
-        JP C,SRTERROR
+        JP C,ERROR
         LD B,A
-        LD HL,SRTARGPK
+        LD HL,ARG_PKT
 .CHECK:
         PUSH BC                    ; Validate every argument first.
         PUSH HL
@@ -368,14 +368,14 @@ STD_CHR:
         CALL STD_BYTE
         POP HL
         POP BC
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         LD DE,4
         ADD HL,DE
         DJNZ .CHECK
-        LD A,(SRTARGC)
+        LD A,(ARG_CNT)
         DEC A
         LD B,A
-        LD HL,SRTARGPK
+        LD HL,ARG_PKT
 .PAIRS:
         LD A,(HL)                  ; Left character byte.
         LD DE,4
@@ -394,14 +394,14 @@ STD_CHR:
 
 ; string=? string<? string>? string<=? string>=? over two or more strings.
 STD_STR:
-        LD A,(SRTPID)
+        LD A,(PRIM_ID)
         SUB 68
         LD (STD_REL),A
-        LD A,(SRTARGC)
+        LD A,(ARG_CNT)
         CP 2
-        JP C,SRTERROR
+        JP C,ERROR
         LD B,A
-        LD HL,SRTARGPK
+        LD HL,ARG_PKT
 .CHECK:
         PUSH BC
         PUSH HL
@@ -409,14 +409,14 @@ STD_STR:
         CALL STR_ARG
         POP HL
         POP BC
-        JP C,SRTERROR
+        JP C,ERROR
         LD DE,4
         ADD HL,DE
         DJNZ .CHECK
-        LD A,(SRTARGC)
+        LD A,(ARG_CNT)
         DEC A
         LD B,A
-        LD HL,SRTARGPK
+        LD HL,ARG_PKT
         LD (STD_PTR),HL
 .PAIRS:
         PUSH BC
@@ -448,7 +448,7 @@ STD_NAME:
         CALL PKT_NARG
         CALL PKT_ARG0
         CP 4
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         LD A,5
         PUSH IX
         RET
@@ -459,11 +459,11 @@ STD_SYM:
         CALL PKT_NARG
         CALL PKT_ARG0
         CALL STR_ARG
-        JP C,SRTERROR
+        JP C,ERROR
         LD C,(HL)
         LD B,0
         INC HL
-        CALL SRTSYMIN
+        CALL DR_FIND
         PUSH IX
         RET
 
@@ -473,7 +473,7 @@ STD_NUM:
         CALL PKT_NARG
         CALL PKT_ARG0
         CP 3
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         LD A,H
         LD (STD_SIGN),A
         BIT 7,H
@@ -508,7 +508,7 @@ STD_NUM:
         LD (STR_LEN),A
         LD (STD_PTR),DE
         CALL STR_NEW               ; May collect; nothing here is a heap value.
-        JP C,SRTERROR
+        JP C,ERROR
         LD A,(STR_LEN)
         LD (HL),A
         INC HL
@@ -544,15 +544,15 @@ STD_FMOD:
         CALL PKT_NARG
         CALL PKT_ARG1
         CP 3
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         LD (STD_DIV),HL
         CALL PKT_ARG0
         CP 3
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         LD DE,(STD_DIV)
         LD B,3
         CALL NUM_REM               ; Rejects division by zero.
-        JP C,SRTERROR
+        JP C,ERROR
         LD A,H
         OR L
         JR Z,.DONE
@@ -580,7 +580,7 @@ STD_ABS:
         JR NZ,.NEGATE
         LD A,L
         OR A
-        JP Z,SRTERROR
+        JP Z,ERROR
 .NEGATE:
         XOR A
         SUB L
@@ -594,7 +594,7 @@ STD_ABS:
         RET
 .FLOAT:
         CALL PRIM_NUM              ; Reject the reserved immediates.
-        JP C,SRTERROR
+        JP C,ERROR
         CALL PKT_ARG0
         RES 7,H                    ; Clear the binary16 sign bit.
         XOR A
@@ -615,7 +615,7 @@ STD_LEN:
         PUSH BC
         CALL PAIR_CDR
         POP BC
-        JP C,SRTERROR              ; An improper list has no length.
+        JP C,ERROR                 ; An improper list has no length.
         INC BC
         JR .LOOP
 .DONE:
@@ -668,18 +668,18 @@ STD_REV:
         CALL STD_NIL
         RET Z
         CALL PAIR_CAR
-        JP C,SRTERROR              ; Only a proper list can be reversed.
-        LD (SRTQCAR),HL
-        LD (SRTQCTAG),A
+        JP C,ERROR                 ; Only a proper list can be reversed.
+        LD (QT_CAR),HL
+        LD (QT_CTAG),A
         LD A,(STD_LTAG)
         LD HL,(STD_LIST)
         CALL PAIR_CDR
         LD (STD_LIST),HL
         LD (STD_LTAG),A
         LD HL,(STD_ACC)
-        LD (SRTQCDR),HL
+        LD (QT_CDR),HL
         LD A,(STD_ATAG)
-        LD (SRTQDTAG),A
+        LD (QT_DTAG),A
         CALL PAIR_NEW
         LD (STD_ACC),HL
         LD (STD_ATAG),A
@@ -691,7 +691,7 @@ STD_REV:
 ; being built are held on the operator side stack so a collection cannot
 ; reclaim them; the cells after the head are reachable from it.
 STD_JOIN:
-        LD A,(SRTARGC)
+        LD A,(ARG_CNT)
         OR A
         JR NZ,.SOME
         LD HL,0FE02H               ; (append) is the empty list.
@@ -704,7 +704,7 @@ STD_JOIN:
         LD H,0
         ADD HL,HL
         ADD HL,HL
-        LD DE,SRTARGPK
+        LD DE,ARG_PKT
         ADD HL,DE
         LD (STD_PTR),HL            ; The last argument's packet record.
         CALL PKT_VAL
@@ -737,18 +737,18 @@ STD_JOIN:
         CALL STD_NIL
         JP Z,.LINK
         CALL PAIR_CAR
-        JP C,SRTERROR              ; Only proper lists can be copied.
-        LD (SRTQCAR),HL
-        LD (SRTQCTAG),A
+        JP C,ERROR                 ; Only proper lists can be copied.
+        LD (QT_CAR),HL
+        LD (QT_CTAG),A
         LD A,(STD_LTAG)
         LD HL,(STD_LIST)
         CALL PAIR_CDR
         LD (STD_LIST),HL
         LD (STD_LTAG),A
         LD HL,0FE02H               ; Each new cell starts as a one-element list.
-        LD (SRTQCDR),HL
+        LD (QT_CDR),HL
         XOR A
-        LD (SRTQDTAG),A
+        LD (QT_DTAG),A
         CALL PAIR_NEW              ; A:HL is the new cell.
         EX DE,HL
         LD HL,(STD_ACC)
@@ -810,7 +810,7 @@ STD_PUT:
 
 ; Address of the newest operator side-stack record.
 OPS_TOP:
-        LD HL,(SRTOPS)
+        LD HL,(OPS_SP)
         LD DE,-4
         ADD HL,DE
         RET
@@ -844,7 +844,7 @@ STD_TAIL:
 STD_NTH:
         CALL STD_DROP
         CALL PAIR_CAR
-        JP C,SRTERROR
+        JP C,ERROR
         PUSH IX
         RET
 
@@ -854,9 +854,9 @@ STD_DROP:
         CALL PKT_NARG
         CALL PKT_ARG1
         CP 3
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         BIT 7,H
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         LD B,H
         LD C,L
         PUSH BC
@@ -871,7 +871,7 @@ STD_DROP:
         PUSH BC
         CALL PAIR_CDR
         POP BC
-        JP C,SRTERROR
+        JP C,ERROR
         DEC BC
         JR .LOOP
 .DONE:
@@ -898,13 +898,13 @@ STD_FIND:
         CALL STD_NIL
         JP Z,STD_NO
         CALL PAIR_CAR
-        JP C,SRTERROR
+        JP C,ERROR
         CALL STD_LIKE
         JR NC,.FOUND
         LD HL,(STD_LIST)
         LD A,(STD_LTAG)
         CALL PAIR_CDR
-        JP C,SRTERROR
+        JP C,ERROR
         JR .LOOP
 .FOUND:
         LD HL,(STD_LIST)
@@ -932,17 +932,17 @@ STD_LOOK:
         CALL STD_NIL
         JP Z,STD_NO
         CALL PAIR_CAR
-        JP C,SRTERROR
+        JP C,ERROR
         LD (STD_ENT),HL
         LD (STD_ETAG),A
         CALL PAIR_CAR              ; Every entry must be a pair.
-        JP C,SRTERROR
+        JP C,ERROR
         CALL STD_LIKE
         JR NC,.FOUND
         LD HL,(STD_LIST)
         LD A,(STD_LTAG)
         CALL PAIR_CDR
-        JP C,SRTERROR
+        JP C,ERROR
         JR .LOOP
 .FOUND:
         LD HL,(STD_ENT)
@@ -981,7 +981,7 @@ STD_CHAR:
         CALL PKT_NARG
         CALL PKT_ARG0
         CALL STD_BYTE
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         LD A,L
         RET
 
@@ -1040,9 +1040,9 @@ STD_SUBS:
         CALL PKT_NARG
         CALL PKT_ARG0
         CALL STR_ARG
-        JP C,SRTERROR
+        JP C,ERROR
         LD (STD_PTR),HL
-        LD HL,SRTARGPK+8
+        LD HL,ARG_PKT+8
         CALL PKT_VAL
         CALL .INDEX
         LD (STD_END),A
@@ -1052,17 +1052,17 @@ STD_SUBS:
         LD B,A
         LD A,(STD_END)
         CP B
-        JP C,SRTERROR              ; The end may not precede the start.
+        JP C,ERROR                 ; The end may not precede the start.
         LD C,A
         LD HL,(STD_PTR)
         LD A,(HL)
         CP C
-        JP C,SRTERROR              ; The end may not pass the string.
+        JP C,ERROR                 ; The end may not pass the string.
         LD A,C
         SUB B
         LD (STR_LEN),A
         CALL STR_NEW               ; The source stays rooted in the packet.
-        JP C,SRTERROR
+        JP C,ERROR
         LD A,(STR_LEN)
         LD (HL),A
         INC HL
@@ -1081,10 +1081,10 @@ STD_SUBS:
         JP STR_RET
 .INDEX:
         CP 3                       ; An index is a byte-sized exact integer.
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         LD A,H
         OR A
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         LD A,L
         RET
 
@@ -1095,7 +1095,7 @@ STD_SUBS:
 STD_CASE:
         EX DE,HL                   ; DE is the datum payload.
         LD C,A
-        LD HL,(SRTOPS)
+        LD HL,(OPS_SP)
         DEC HL                     ; The key record's flags and tag.
         LD A,(HL)
         AND 0FH

@@ -20,15 +20,15 @@ PKT_PACK:
 .LOOP:
         POP HL                   ; Recover one reverse-pushed argument payload.
         POP AF                   ; Recover its tag word.
-        LD (SRTATMP),A           ; Preserve the tag while addressing the packet.
-        LD (SRTVAL),HL           ; Preserve the payload while multiplying the index.
+        LD (ARG_TAG),A           ; Preserve the tag while addressing the packet.
+        LD (ARG_VAL),HL          ; Preserve the payload while multiplying the index.
         LD L,C
         LD H,0
         ADD HL,HL
         ADD HL,HL
-        LD DE,SRTARGPK
+        LD DE,ARG_PKT
         ADD HL,DE
-        LD DE,(SRTVAL)
+        LD DE,(ARG_VAL)
         LD (HL),E
         INC HL
         LD (HL),D
@@ -36,36 +36,36 @@ PKT_PACK:
         XOR A
         LD (HL),A                ; The extension byte stays clear.
         INC HL
-        LD A,(SRTATMP)
+        LD A,(ARG_TAG)
         OR CELL_VAL              ; A live record and its tag.
         LD (HL),A
         DEC C
         DJNZ .LOOP
 .OPERATOR:
         CALL OPS_POP             ; Recover the value evaluated before arguments.
-        LD (SRTATMP),A
-        LD A,(SRTARGC)           ; Arguments have been copied out of the native stack.
+        LD (ARG_TAG),A
+        LD A,(ARG_CNT)           ; Arguments have been copied out of the native stack.
         LD B,A
         CALL ROOT_CUT
-        LD A,(SRTATMP)
+        LD A,(ARG_TAG)
         PUSH IX                  ; Restore the PKT_PACK helper return address.
         RET
 
 ; Save A:HL on the fixed side stack used for operator values. The area between
 ; the heap ceiling and native-stack guard does not consume either resource.
 OPS_PUSH:
-        LD (SRTATMP),A           ; Preserve the value tag while finding the top.
-        LD (SRTVAL),HL           ; Preserve the payload across the bounds check.
-        LD HL,(SRTOPS)           ; The side cursor grows upward in four-byte steps.
+        LD (ARG_TAG),A           ; Preserve the value tag while finding the top.
+        LD (ARG_VAL),HL          ; Preserve the payload across the bounds check.
+        LD HL,(OPS_SP)           ; The side cursor grows upward in four-byte steps.
         LD DE,4
         ADD HL,DE
         LD DE,RT_OPHI
         OR A
         SBC HL,DE
-        JP NC,SRTERROR            ; Too many nested operators is a runtime error.
-        LD (SRTNEXT),HL           ; Retain the checked new cursor.
-        LD HL,(SRTOPS)
-        LD DE,(SRTVAL)
+        JP NC,ERROR               ; Too many nested operators is a runtime error.
+        LD (DESC_PTR),HL          ; Retain the checked new cursor.
+        LD HL,(OPS_SP)
+        LD DE,(ARG_VAL)
         LD (HL),E
         INC HL
         LD (HL),D
@@ -73,24 +73,24 @@ OPS_PUSH:
         XOR A
         LD (HL),A                 ; The extension byte stays clear.
         INC HL
-        LD A,(SRTATMP)
+        LD A,(ARG_TAG)
         LD (HL),A                 ; The tag; the cursor, not a flag, marks it live.
         INC HL
-        LD (SRTOPS),HL
+        LD (OPS_SP),HL
         RET
 
 ; Pop the most recent operator value from the fixed side stack.
 OPS_POP:
-        LD HL,(SRTOPS)
+        LD HL,(OPS_SP)
         LD DE,RT_OPLO
         OR A
         SBC HL,DE
-        JP Z,SRTERROR             ; A missing operator is a malformed call.
-        LD HL,(SRTOPS)
+        JP Z,ERROR                ; A missing operator is a malformed call.
+        LD HL,(OPS_SP)
         LD DE,4
         OR A
         SBC HL,DE
-        LD (SRTOPS),HL
+        LD (OPS_SP),HL
         LD E,(HL)
         INC HL
         LD D,(HL)
@@ -107,9 +107,9 @@ OPS_POP:
 PRIM_RUN:
         XOR A                       ; Normal primitive calls do not use apply-tail mode.
         LD (APPLY_TL),A
-        LD (SRTRET),IX              ; Every packet result returns through the clearer.
+        LD (FRM_SAVE),IX            ; Every packet result returns through the clearer.
         LD IX,.RETIRE               ; The clearer removes the packet roots first.
-        LD A,(SRTPID)              ; Kinds zero through three are numeric primitives.
+        LD A,(PRIM_ID)             ; Kinds zero through three are numeric primitives.
         CP 4
         JP C,PRIM_ALU              ; +, -, *, and zero? share numeric validation.
         CP 14
@@ -131,21 +131,21 @@ PRIM_RUN:
         JP Z,APPLY                    ; Apply spreads a checked proper list into a call.
         JP C,VEC_PRIM                 ; Vector operations use the preceding range.
         CP 54
-        JP C,SRTPORTS                 ; Standard ports follow the vector services.
+        JP C,PORT_OP                  ; Standard ports follow the vector services.
         CP 60
-        JP C,SRTFILE                   ; File ports use the same provider boundary.
+        JP C,FILE_OP                   ; File ports use the same provider boundary.
         CP PRIM_LIM-20H
         JP C,STD_DISP                  ; Standard procedures added later.
-        JP SRTERROR                ; The reserved range has no other services.
+        JP ERROR                   ; The reserved range has no other services.
 
 ; Primitive paths use PUSH IX/RET, so one common continuation can retire the
 ; packet after the operation has finished and any constructor GC has returned.
 .RETIRE:
-        LD (SRTATMP),A
-        LD (SRTVAL),HL
+        LD (ARG_TAG),A
+        LD (ARG_VAL),HL
         XOR A
-        LD (SRTARGC),A
-        LD A,(SRTATMP)
-        LD HL,(SRTVAL)
-        LD IX,(SRTRET)
+        LD (ARG_CNT),A
+        LD A,(ARG_TAG)
+        LD HL,(ARG_VAL)
+        LD IX,(FRM_SAVE)
         JP (IX)

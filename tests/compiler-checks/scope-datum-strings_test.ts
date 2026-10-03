@@ -32,13 +32,13 @@ function readDatum(
   cpu: Awaited<ReturnType<typeof managedRuntime>>["cpu"],
   terminalError = false,
 ) {
-  cpu.pc = assembled.address("SRTDRRD");
+  cpu.pc = assembled.address("DR_READ");
   cpu.sp = 0xdff2;
   cpu.ix = 0xef00;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
   while (cpu.pc !== 0xef00) {
-    assert.ok(++steps < 50_000_000, "SRTDRRD did not return");
+    assert.ok(++steps < 50_000_000, "DR_READ did not return");
     assembled.runtime.step();
   }
   if (terminalError) {
@@ -56,28 +56,28 @@ function readDatum(
 async function readDatumError(bytes: readonly number[]) {
   const { assembled, memory, cpu } = await managedRuntime();
   installBdosReader(memory, bytes);
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
-  memory[assembled.address("SRTINST")] = 0;
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
   // Preserve the real cleanup hook before returning to the test trap.  A
   // direct SCF/JP replacement would leave reader roots and lookahead state
   // untested on the error path.
-  const error = assembled.address("SRTERROR");
-  memory[error] = 0xcd; // CALL SRTDCLN.
-  writeWord(memory, error + 1, assembled.address("SRTDCLN"));
+  const error = assembled.address("ERROR");
+  memory[error] = 0xcd; // CALL DR_CLEAR.
+  writeWord(memory, error + 1, assembled.address("DR_CLEAR"));
   memory[error + 3] = 0x37; // SCF.
   memory[error + 4] = 0xc3; // JP the test trap.
   writeWord(memory, error + 5, 0xef00);
   const result = readDatum(assembled, memory, cpu, true);
   assert.equal(result.carry, 1);
-  assert.equal(memory[assembled.address("SRTDRACT")], 0);
-  assert.equal(memory[assembled.address("SRTDRRC")], 0);
-  assert.equal(memory[assembled.address("SRTDRFC")], 0);
-  assert.equal(memory[assembled.address("SRTDRVC")], 0);
-  assert.equal(memory[assembled.address("SRTDRACC")], 0);
-  assert.equal(memory[assembled.address("SRTDSLN")], 0);
-  assert.equal(memory[assembled.address("SRTINST")], 0);
-  assert.equal(memory[assembled.address("SRTINCR")], 0);
+  assert.equal(memory[assembled.address("DR_LIVE")], 0);
+  assert.equal(memory[assembled.address("DR_ROOTS")], 0);
+  assert.equal(memory[assembled.address("DR_DEPTH")], 0);
+  assert.equal(memory[assembled.address("DR_SLOTS")], 0);
+  assert.equal(memory[assembled.address("DR_HELD")], 0);
+  assert.equal(memory[assembled.address("DR_SIZE")], 0);
+  assert.equal(memory[assembled.address("IN_STATE")], 0);
+  assert.equal(memory[assembled.address("IN_CR")], 0);
 }
 
 function stringBytes(memory: Uint8Array, payload: number) {
@@ -103,9 +103,9 @@ Deno.test("datum reader allocates strings and decodes the source escapes", async
       '"hello" "" "a\\n\\r\\t\\"\\\\\\x00;\\xFF;" 42 ',
     )),
   );
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
-  memory[assembled.address("SRTINST")] = 0;
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
 
   const hello = readDatum(assembled, memory, cpu);
   assert.equal(hello.tag, 6);
@@ -142,9 +142,9 @@ Deno.test("datum reader allocates strings and decodes the source escapes", async
 Deno.test("datum reader accepts 255 decoded bytes and rejects the 256th", async () => {
   const { assembled, memory, cpu } = await managedRuntime();
   installBdosReader(memory, [34, ...new Array(255).fill(65), 34, 0x1a]);
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
-  memory[assembled.address("SRTINST")] = 0;
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
 
   const result = readDatum(assembled, memory, cpu);
   assert.equal(result.tag, 6);
@@ -171,8 +171,8 @@ Deno.test("managed strings survive collection while a 255-byte value is rooted",
   writeWord(memory, rooted, longString.payload);
   memory[rooted + 2] = 0; // Clear extension byte.
   memory[rooted + 3] = 0x16;
-  writeWord(memory, assembled.address("SRTGBASE"), rooted);
-  writeWord(memory, assembled.address("SRTGEND"), rooted + 4);
+  writeWord(memory, assembled.address("G_BASE"), rooted);
+  writeWord(memory, assembled.address("G_END"), rooted + 4);
 
   // A 128-byte payload is a one-object class, so the next allocation of the
   // same size must collect the discarded value before it can proceed.
@@ -185,12 +185,12 @@ Deno.test("managed strings survive collection while a 255-byte value is rooted",
   const exhausted = exhaustManagedPages(call);
   assert.ok(exhausted > 0, "page pool should contain resident runtime pages");
   installBdosReader(memory, [34, ...new Array(128).fill(0x42), 34, 0x1a]);
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
-  memory[assembled.address("SRTINST")] = 0;
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
   const replacement = readDatum(assembled, memory, cpu);
   assert.equal(replacement.tag, 6);
-  assert.equal(readWord(memory, assembled.address("SRTGCNT")), 1);
+  assert.equal(readWord(memory, assembled.address("CNT_GC")), 1);
   assert.equal(call("STR_CHK", longString.payload).carry, 0);
   assert.deepEqual(
     stringBytes(memory, longString.payload),
@@ -207,24 +207,24 @@ Deno.test("datum string allocation failure runs the reader cleanup hook", async 
   const { assembled, memory, cpu, call } = await managedRuntime();
   exhaustManagedPages(call);
   installBdosReader(memory, [34, 65, 34, 0x1a]);
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
-  memory[assembled.address("SRTINST")] = 0;
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
 
-  const error = assembled.address("SRTERROR");
-  memory[error] = 0xcd; // CALL SRTDCLN.
-  writeWord(memory, error + 1, assembled.address("SRTDCLN"));
+  const error = assembled.address("ERROR");
+  memory[error] = 0xcd; // CALL DR_CLEAR.
+  writeWord(memory, error + 1, assembled.address("DR_CLEAR"));
   memory[error + 3] = 0x37; // SCF.
   memory[error + 4] = 0xc3; // JP the test trap.
   writeWord(memory, error + 5, 0xef00);
   const result = readDatum(assembled, memory, cpu, true);
   assert.equal(result.carry, 1);
-  assert.equal(memory[assembled.address("SRTDRACT")], 0);
-  assert.equal(memory[assembled.address("SRTDRRC")], 0);
-  assert.equal(memory[assembled.address("SRTDRFC")], 0);
-  assert.equal(memory[assembled.address("SRTDRVC")], 0);
-  assert.equal(memory[assembled.address("SRTDRACC")], 0);
-  assert.equal(memory[assembled.address("SRTDSLN")], 0);
+  assert.equal(memory[assembled.address("DR_LIVE")], 0);
+  assert.equal(memory[assembled.address("DR_ROOTS")], 0);
+  assert.equal(memory[assembled.address("DR_DEPTH")], 0);
+  assert.equal(memory[assembled.address("DR_SLOTS")], 0);
+  assert.equal(memory[assembled.address("DR_HELD")], 0);
+  assert.equal(memory[assembled.address("DR_SIZE")], 0);
 });
 
 Deno.test("datum reader rejects malformed strings and raw controls", async () => {

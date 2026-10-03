@@ -31,11 +31,11 @@ Deno.test("vector overflow fallback preserves every rooted pair", async () => {
     memory[root + 2] = 0; // Clear extension byte.
     memory[root + 3] = 0x17;
   }
-  writeWord(memory, assembled.address("SRTGBASE"), roots);
-  writeWord(memory, assembled.address("SRTGEND"), roots + count * 4);
+  writeWord(memory, assembled.address("G_BASE"), roots);
+  writeWord(memory, assembled.address("G_END"), roots + count * 4);
 
   call("GC");
-  assert.equal(memory[assembled.address("SRTMOVER")], 1);
+  assert.equal(memory[assembled.address("GC_OVER")], 1);
   for (const pair of pairs) {
     assert.equal(memory[pair + 3] & 0x40, 0x40, `pair ${pair.toString(16)}`);
   }

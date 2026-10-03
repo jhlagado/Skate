@@ -4,23 +4,23 @@
 
 ; not and the type predicates return canonical boolean values.
 PRIM_NOT:
-        LD A,(SRTARGC)
+        LD A,(ARG_CNT)
         CP 1
-        JP NZ,SRTERROR
-        LD HL,SRTARGPK
+        JP NZ,ERROR
+        LD HL,ARG_PKT
         CALL PKT_VAL
         CALL RT_TEST
         JP Z,PKT_YES
         JP PKT_NO
 PRIM_IS:
-        LD A,(SRTARGC)
+        LD A,(ARG_CNT)
         CP 1
-        JP NZ,SRTERROR
-        LD HL,SRTARGPK
+        JP NZ,ERROR
+        LD HL,ARG_PKT
         CALL PKT_VAL
-        LD (SRTNVAL),HL
-        LD (SRTNTAG),A
-        LD A,(SRTPID)
+        LD (NUM_VAL),HL
+        LD (NUM_TAG),A
+        LD A,(PRIM_ID)
         CP 22
         JP Z,.NUMBER
         CP 23
@@ -35,36 +35,36 @@ PRIM_IS:
         JP Z,.CHAR
         JP .EOF
 .NUMBER:
-        LD A,(SRTNTAG)
-        LD HL,(SRTNVAL)
+        LD A,(NUM_TAG)
+        LD HL,(NUM_VAL)
         CALL PRIM_NUM
         JP C,PKT_NO
         JP PKT_YES
 .BOOLEAN:
-        LD A,(SRTNTAG)
+        LD A,(NUM_TAG)
         OR A
         JP NZ,PKT_NO
-        LD HL,(SRTNVAL)
+        LD HL,(NUM_VAL)
         LD DE,0FE00H
         OR A
         SBC HL,DE
         JP Z,PKT_YES
-        LD HL,(SRTNVAL)
+        LD HL,(NUM_VAL)
         LD DE,0FE01H
         OR A
         SBC HL,DE
         JP Z,PKT_YES
         JP PKT_NO
 .SYMBOL:
-        LD A,(SRTNTAG)
+        LD A,(NUM_TAG)
         CP 4
         JP Z,PKT_YES
         JP PKT_NO
 .PROC:
-        LD A,(SRTNTAG)
+        LD A,(NUM_TAG)
         CP 8
         JR NZ,.PROC_TAG
-        LD HL,(SRTNVAL)
+        LD HL,(NUM_VAL)
         LD A,H
         CP 0F0H
         JP NC,PKT_NO                ; Port tokens are opaque, not procedures.
@@ -74,7 +74,7 @@ PRIM_IS:
         JP Z,PKT_YES
         OR A
         JP NZ,PKT_NO
-        LD HL,(SRTNVAL)
+        LD HL,(NUM_VAL)
         LD A,H
         CP 0FEH
         JP NZ,PKT_NO
@@ -85,29 +85,29 @@ PRIM_IS:
         JP C,PKT_YES
         JP PKT_NO
 .STRING:
-        LD A,(SRTNTAG)
+        LD A,(NUM_TAG)
         CP 5
         JP Z,PKT_YES
         CP 6
         JP NZ,PKT_NO
-        LD HL,(SRTNVAL)
+        LD HL,(NUM_VAL)
         CALL STR_CHK
         JP C,PKT_NO
         JP PKT_YES
 .CHAR:
-        LD A,(SRTNTAG)
+        LD A,(NUM_TAG)
         OR A
         JP NZ,PKT_NO
-        LD HL,(SRTNVAL)
+        LD HL,(NUM_VAL)
         LD A,H
         CP 0FFH
         JP Z,PKT_YES
         JP PKT_NO
 .EOF:
-        LD A,(SRTNTAG)
+        LD A,(NUM_TAG)
         OR A
         JP NZ,PKT_NO
-        LD HL,(SRTNVAL)
+        LD HL,(NUM_VAL)
         LD DE,0FE03H
         OR A
         SBC HL,DE

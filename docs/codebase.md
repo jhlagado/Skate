@@ -272,7 +272,7 @@ it, so a program pays only for the modules it can reach.
 The core must never read a module's state or run its code except through a
 primitive the scan detects. Variables the core shares with the I/O module
 live in `io-state.asm`; the exit and error paths close a file only when
-`SRTFOACT` says one is open.
+`OUT_FILE` says one is open.
 
 ## Following common features
 

@@ -32,13 +32,13 @@ function readDatum(
   cpu: Awaited<ReturnType<typeof managedRuntime>>["cpu"],
   terminalError = false,
 ) {
-  cpu.pc = assembled.address("SRTDRRD");
+  cpu.pc = assembled.address("DR_READ");
   cpu.sp = 0xdff2;
   cpu.ix = 0xef00;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
   while (cpu.pc !== 0xef00) {
-    assert.ok(++steps < 50_000_000, "SRTDRRD did not return");
+    assert.ok(++steps < 50_000_000, "DR_READ did not return");
     assembled.runtime.step();
   }
   if (terminalError) assert.ok(cpu.sp <= 0xdff2);
@@ -52,36 +52,36 @@ function prepare(
   bytes: readonly number[],
 ) {
   installBdosReader(memory, bytes);
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
-  memory[assembled.address("SRTINST")] = 0;
-  writeWord(memory, assembled.address("SRTSYMB"), 0);
-  writeWord(memory, assembled.address("SRTSYME"), 0);
-  writeWord(memory, assembled.address("SRTSYAP"), 0);
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
+  writeWord(memory, assembled.address("DR_DIR"), 0);
+  writeWord(memory, assembled.address("DR_DEND"), 0);
+  writeWord(memory, assembled.address("DR_TOP"), 0);
 }
 
 async function datumError(bytes: readonly number[]) {
   const { assembled, memory, cpu } = await managedRuntime();
   prepare(memory, assembled, bytes);
-  const error = assembled.address("SRTERROR");
+  const error = assembled.address("ERROR");
   memory[error] = 0xcd;
-  writeWord(memory, error + 1, assembled.address("SRTDCLN"));
+  writeWord(memory, error + 1, assembled.address("DR_CLEAR"));
   memory[error + 3] = 0x37;
   memory[error + 4] = 0xc3;
   writeWord(memory, error + 5, 0xef00);
   const result = readDatum(assembled, memory, cpu, true);
   assert.equal(result.carry, 1);
-  assert.equal(memory[assembled.address("SRTDRACT")], 0);
-  assert.equal(memory[assembled.address("SRTSYAP")], 0);
+  assert.equal(memory[assembled.address("DR_LIVE")], 0);
+  assert.equal(memory[assembled.address("DR_TOP")], 0);
 }
 
 function installErrorTrap(
   assembled: Awaited<ReturnType<typeof managedRuntime>>["assembled"],
   memory: Uint8Array,
 ) {
-  const error = assembled.address("SRTERROR");
+  const error = assembled.address("ERROR");
   memory[error] = 0xcd;
-  writeWord(memory, error + 1, assembled.address("SRTDCLN"));
+  writeWord(memory, error + 1, assembled.address("DR_CLEAR"));
   memory[error + 3] = 0x37;
   memory[error + 4] = 0xc3;
   writeWord(memory, error + 5, 0xef00);
@@ -117,15 +117,15 @@ Deno.test("datum reader searches every published literal", async () => {
   memory[directory] = 2;
   writeWord(memory, directory + 1, alpha);
   writeWord(memory, directory + 3, beta);
-  writeWord(memory, assembled.address("SRTSYMB"), directory);
-  writeWord(memory, assembled.address("SRTSYME"), directory + 5);
+  writeWord(memory, assembled.address("DR_DIR"), directory);
+  writeWord(memory, assembled.address("DR_DEND"), directory + 5);
   memory[alpha] = 5;
   memory.set(new TextEncoder().encode("alpha"), alpha + 1);
   memory[beta] = 4;
   memory.set(new TextEncoder().encode("beta"), beta + 1);
   const result = readDatum(assembled, memory, cpu);
   assert.deepEqual(result, { carry: 0, tag: 4, payload: beta });
-  assert.equal(readWord(memory, assembled.address("SRTSYAP")), 0);
+  assert.equal(readWord(memory, assembled.address("DR_TOP")), 0);
 });
 
 Deno.test("datum reader interns a directory miss after all entries", async () => {
@@ -137,38 +137,38 @@ Deno.test("datum reader interns a directory miss after all entries", async () =>
   memory[directory] = 2;
   writeWord(memory, directory + 1, alpha);
   writeWord(memory, directory + 3, beta);
-  writeWord(memory, assembled.address("SRTSYMB"), directory);
-  writeWord(memory, assembled.address("SRTSYME"), directory + 5);
+  writeWord(memory, assembled.address("DR_DIR"), directory);
+  writeWord(memory, assembled.address("DR_DEND"), directory + 5);
   memory[alpha] = 5;
   memory.set(new TextEncoder().encode("alpha"), alpha + 1);
   memory[beta] = 4;
   memory.set(new TextEncoder().encode("beta"), beta + 1);
   const result = readDatum(assembled, memory, cpu);
   assert.equal(result.tag, 4);
-  assert.equal(result.payload, assembled.address("SRTSYA"));
+  assert.equal(result.payload, assembled.address("DR_ARENA"));
   assert.equal(
-    readWord(memory, assembled.address("SRTSYAP")),
-    assembled.address("SRTSYA") + 6,
+    readWord(memory, assembled.address("DR_TOP")),
+    assembled.address("DR_ARENA") + 6,
   );
 });
 
 Deno.test("datum reader permits an arena record ending at its limit", async () => {
   const { assembled, memory, cpu } = await managedRuntime();
-  const arenaEnd = assembled.address("SRTSYAE");
+  const arenaEnd = assembled.address("DR_LIMIT");
   const arenaStart = arenaEnd - 6;
   prepare(memory, assembled, [
     ...new TextEncoder().encode("alpha beta"),
     0x1a,
   ]);
   installErrorTrap(assembled, memory);
-  writeWord(memory, assembled.address("SRTSYAP"), arenaStart);
+  writeWord(memory, assembled.address("DR_TOP"), arenaStart);
   const first = readDatum(assembled, memory, cpu);
   assert.equal(first.payload, arenaStart);
-  assert.equal(readWord(memory, assembled.address("SRTSYAP")), arenaEnd);
+  assert.equal(readWord(memory, assembled.address("DR_TOP")), arenaEnd);
   const second = readDatum(assembled, memory, cpu, true);
   assert.equal(second.carry, 1);
-  assert.equal(memory[assembled.address("SRTDRACT")], 0);
-  assert.equal(readWord(memory, assembled.address("SRTSYAP")), arenaEnd);
+  assert.equal(memory[assembled.address("DR_LIVE")], 0);
+  assert.equal(readWord(memory, assembled.address("DR_TOP")), arenaEnd);
 });
 
 Deno.test("datum reader accepts the 31-byte symbol limit", async () => {

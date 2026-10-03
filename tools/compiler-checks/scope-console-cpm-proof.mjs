@@ -36,13 +36,13 @@ const provider = await loadAssembly(
 );
 assert.equal(compiler.image.base, 0);
 assert.equal(provider.image.bytes.length - 0x100, compiler.address("SRTLEN"));
-const heapPointerAddress = provider.address("SRTHEAPP");
-const lowStackAddress = provider.address("SRTLOWSP");
-const bindingAllocationAddress = provider.address("SRTBCNT");
-const closureAllocationAddress = provider.address("SRTCCNT");
-const pairAllocationAddress = provider.address("SRTPCNT");
-const collectionCountAddress = provider.address("SRTGCNT");
-const frameCountAddress = provider.address("SRTACNT");
+const heapPointerAddress = provider.address("HEAP_LIM");
+const lowStackAddress = provider.address("RT_LOWSP");
+const bindingAllocationAddress = provider.address("CNT_BIND");
+const closureAllocationAddress = provider.address("CNT_CLOS");
+const pairAllocationAddress = provider.address("CNT_PAIR");
+const collectionCountAddress = provider.address("CNT_GC");
+const frameCountAddress = provider.address("CNT_MAPS");
 const stackGuardBase = 0xd400;
 const stackTop = 0xe400;
 let disk = installCpm22File(backing, {

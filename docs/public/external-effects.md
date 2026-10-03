@@ -59,7 +59,7 @@ requiring a particular video or sound backend.
 ## Generated Z80 console vectors
 
 The generated runtime image contains the CP/M console adapter for the ordinary
-CP/M profile. Two 16-bit pointer cells, `SRTIOPUT` and `SRTIOGET`, select
+CP/M profile. Two 16-bit pointer cells, `CON_PUT` and `CON_GET`, select
 its byte output and input services. A native or WASM machine profile may replace
 these addresses before starting the image. The service receives or returns a
 byte in `A`, returns with a balanced stack, and clears carry on success or sets

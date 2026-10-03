@@ -4,7 +4,7 @@
 
 ; Dispatch pair, list and console output primitives.
 PRIM_DAT:
-        LD A,(SRTPID)
+        LD A,(PRIM_ID)
         CP 4
         JP Z,PKT_CONS
         CP 5
@@ -25,4 +25,4 @@ PRIM_DAT:
         JP Z,PKT_SHOW
         CP 13
         JP Z,PKT_CRLF
-        JP SRTERROR
+        JP ERROR

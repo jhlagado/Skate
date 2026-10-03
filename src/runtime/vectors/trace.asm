@@ -3,29 +3,29 @@
 
 ; Mark a vector allocation as a reachable queued leaf/container.
 VEC_MARK:
-        LD (SRTCLOBJ),HL           ; Keep the object base for map operations.
+        LD (CL_OBJ),HL             ; Keep the object base for map operations.
         CALL VEC_CHK               ; Validate before setting any mark bit.
         RET C
         CALL GC_SEEN               ; A previously queued vector needs no duplicate.
         RET NZ
         CALL GC_VISIT              ; Set the shared closure mark map.
-        LD DE,(SRTMSTK)            ; Queue the object for element tracing.
+        LD DE,(GC_QTOP)            ; Queue the object for element tracing.
         LD A,D
         CP 0D4H
         JR NC,.FULL                ; Defer children when the bounded queue is full.
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         LD A,L
         LD (DE),A
         INC DE
         LD A,H
         LD (DE),A
         INC DE
-        LD (SRTMSTK),DE
+        LD (GC_QTOP),DE
         RET
 .FULL:
         LD A,1
-        LD (SRTMOVER),A            ; The fallback scan will revisit this vector.
-        LD (SRTCLER),A             ; Retain the existing overflow diagnostic bit.
+        LD (GC_OVER),A             ; The fallback scan will revisit this vector.
+        LD (CL_FULL),A             ; Retain the existing overflow diagnostic bit.
         RET
 ; Trace every tagged element of a queued vector.
 VEC_SCAN:
@@ -33,7 +33,7 @@ VEC_SCAN:
         RET C
         LD A,(VEC_LEN)
         LD (VEC_LEFT),A            ; Keep the loop count outside the value ABI.
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         INC HL                     ; Skip the vector length byte.
         LD (VEC_PTR),HL            ; Keep the element cursor across each mark.
 .LOOP:
@@ -58,10 +58,10 @@ VEC_SCAN:
 
 ; Test the vector marker in the odd bit of the persistent mark map.
 VEC_TEST:
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         CALL GC_OBJAT
         LD C,A
-        LD DE,SRTCLMK
+        LD DE,GC_MARKS
         ADD HL,DE
         LD A,C
         ADD A,A
@@ -73,10 +73,10 @@ VEC_TEST:
 ; Set the vector marker in the odd bit of the persistent mark map.
 VEC_SETM:
         LD HL,(VEC_OBJ)
-        LD (SRTCLOBJ),HL
+        LD (CL_OBJ),HL
         CALL GC_OBJAT
         LD C,A
-        LD DE,SRTCLMK
+        LD DE,GC_MARKS
         ADD HL,DE
         LD A,C
         ADD A,A

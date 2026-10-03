@@ -1,16 +1,16 @@
 ; Runtime promotion of captured activation slots into managed cells.
 ; Entry points: SLOT_BOX and SLOT_CAP.
 SLOT_BOX:
-        LD (SRTSNUM),A              ; Preserve the slot across a collecting call.
+        LD (SLOT_NUM),A             ; Preserve the slot across a collecting call.
         CALL SLOT_AT
-        LD (SRTSADR),HL
+        LD (SLOT_CUR),HL
         LD DE,3
         ADD HL,DE
         LD A,(HL)
-        LD (SRTSFLG),A
+        LD (SLOT_REP),A
         AND SLOT_PTR
         RET NZ                      ; The slot already names its managed cell.
-        LD HL,(SRTSADR)
+        LD HL,(SLOT_CUR)
         LD E,(HL)
         INC HL
         LD D,(HL)
@@ -18,26 +18,26 @@ SLOT_BOX:
         INC HL                      ; Skip the extension byte.
         LD A,(HL)
         AND 0FH
-        LD (SRTSVTAG),A
-        LD (SRTSVAL),DE
+        LD (SLOT_TAG),A
+        LD (SLOT_VAL),DE
         CALL HEAP_NEW               ; The active inline value remains the root.
-        LD (SRTCELLP),HL
-        LD A,(SRTSNUM)              ; Recompute scratch clobbered by a collecting call.
+        LD (HEAP_OBJ),HL
+        LD A,(SLOT_NUM)             ; Recompute scratch clobbered by a collecting call.
         CALL SLOT_AT
-        LD (SRTSADR),HL
+        LD (SLOT_CUR),HL
         LD DE,3
         ADD HL,DE
         LD A,(HL)
-        LD (SRTSFLG),A
+        LD (SLOT_REP),A
         AND CELL_VAL
         JR Z,.PUBLISH               ; An uninitialized cell is already cleared.
-        LD DE,(SRTCELLP)
-        LD HL,(SRTSVAL)
-        LD A,(SRTSVTAG)
+        LD DE,(HEAP_OBJ)
+        LD HL,(SLOT_VAL)
+        LD A,(SLOT_TAG)
         CALL HEAP_PUT                ; No allocation occurs during publication.
 .PUBLISH:
-        LD HL,(SRTSADR)
-        LD DE,(SRTCELLP)
+        LD HL,(SLOT_CUR)
+        LD DE,(HEAP_OBJ)
         LD A,E
         LD (HL),A                   ; Replace the payload with the cell pointer.
         INC HL
@@ -51,44 +51,44 @@ SLOT_BOX:
         LD (HL),A                   ; Publish the representation only after the cell.
         RET
 
-; Promote every slot selected by the descriptor in SRTNEWD's capture mask.
+; Promote every slot selected by the descriptor in DESC_NEW's capture mask.
 SLOT_CAP:
-        LD HL,(SRTNEWD)
+        LD HL,(DESC_NEW)
         CALL DESC_CAP
-        LD (SRTMASKP),HL
+        LD (MASK_PTR),HL
         OR A
         RET Z                      ; Nothing is captured.
-        LD (SRTMASKN),A
+        LD (MASK_CNT),A
         XOR A
-        LD (SRTSLOTI),A
+        LD (MASK_IDX),A
 .BYTE:
-        LD HL,(SRTMASKP)
+        LD HL,(MASK_PTR)
         LD A,(HL)
         INC HL
-        LD (SRTMASKP),HL
-        LD (SRTMASKV),A
+        LD (MASK_PTR),HL
+        LD (MASK_VAL),A
         LD A,8
-        LD (SRTBITN),A
+        LD (MASK_BIT),A
 .BIT:
-        LD A,(SRTMASKV)
+        LD A,(MASK_VAL)
         AND 1
         JR Z,.NEXT
-        LD A,(SRTSLOTI)
+        LD A,(MASK_IDX)
         CALL SLOT_BOX
 .NEXT:
-        LD A,(SRTMASKV)
+        LD A,(MASK_VAL)
         SRL A
-        LD (SRTMASKV),A
-        LD A,(SRTSLOTI)
+        LD (MASK_VAL),A
+        LD A,(MASK_IDX)
         INC A
-        LD (SRTSLOTI),A
-        LD A,(SRTBITN)
+        LD (MASK_IDX),A
+        LD A,(MASK_BIT)
         DEC A
-        LD (SRTBITN),A
+        LD (MASK_BIT),A
         JR NZ,.BIT
-        LD A,(SRTMASKN)
+        LD A,(MASK_CNT)
         DEC A
-        LD (SRTMASKN),A
+        LD (MASK_CNT),A
         JR NZ,.BYTE
         RET
 

@@ -34,7 +34,7 @@ function readDatum(
   terminalError = false,
   maxSteps = 50_000_000,
 ) {
-  cpu.pc = assembled.address("SRTDRRD");
+  cpu.pc = assembled.address("DR_READ");
   cpu.sp = 0xdff2;
   cpu.ix = 0xef00;
   writeWord(memory, cpu.sp, 0xef00);
@@ -42,7 +42,7 @@ function readDatum(
   while (cpu.pc !== 0xef00) {
     assert.ok(
       ++steps < maxSteps,
-      `SRTDRRD did not return at PC=$${cpu.pc.toString(16)}`,
+      `DR_READ did not return at PC=$${cpu.pc.toString(16)}`,
     );
     assembled.runtime.step();
   }
@@ -77,12 +77,12 @@ function readChar(
 function readDatumError(bytes: readonly number[]) {
   return managedRuntime().then(({ assembled, memory, cpu }) => {
     installBdosReader(memory, bytes);
-    memory[assembled.address("SRTARGC")] = 0;
-    memory[assembled.address("SRTINCR")] = 0;
-    memory[assembled.address("SRTINST")] = 0;
+    memory[assembled.address("ARG_CNT")] = 0;
+    memory[assembled.address("IN_CR")] = 0;
+    memory[assembled.address("IN_STATE")] = 0;
     // Turn the terminal error into a checked return for malformed-input tests.
-    memory[assembled.address("SRTERROR")] = 0x37; // SCF.
-    memory[assembled.address("SRTERROR") + 1] = 0xc9; // RET.
+    memory[assembled.address("ERROR")] = 0x37; // SCF.
+    memory[assembled.address("ERROR") + 1] = 0xc9; // RET.
     const result = readDatum(assembled, memory, cpu, true, 2_000_000);
     assert.equal(result.carry, 1);
   });
@@ -95,20 +95,20 @@ function addDigit(
   magnitude: number,
   digit: number,
 ) {
-  writeWord(memory, assembled.address("SRTDRNUM"), magnitude);
+  writeWord(memory, assembled.address("DR_MAG"), magnitude);
   cpu.a = digit;
-  cpu.pc = assembled.address("SRTDADD");
+  cpu.pc = assembled.address("DR_DIGIT");
   cpu.sp = 0xdff2;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
   while (cpu.pc !== 0xef00) {
-    assert.ok(++steps < 1_000, "SRTDADD did not return");
+    assert.ok(++steps < 1_000, "DR_DIGIT did not return");
     assembled.runtime.step();
   }
   assert.equal(cpu.sp, 0xdff4);
   return {
     carry: cpu.flags.C,
-    magnitude: readWord(memory, assembled.address("SRTDRNUM")),
+    magnitude: readWord(memory, assembled.address("DR_MAG")),
   };
 }
 
@@ -130,9 +130,9 @@ Deno.test("datum reader returns scalar integers, booleans and characters", async
       "-32768 32767 #t #f #\\A ",
     )),
   );
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
-  memory[assembled.address("SRTINST")] = 0;
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
 
   const integers = readDatum(assembled, memory, cpu);
   assert.equal(integers.tag, 3);
@@ -161,9 +161,9 @@ Deno.test("datum reader preserves port lookahead across read-char", async () => 
     memory,
     [...Array.from(new TextEncoder().encode("42 #t")), 0x1a],
   );
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
-  memory[assembled.address("SRTINST")] = 0;
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
 
   assert.deepEqual(
     readDatum(assembled, memory, cpu),
@@ -221,9 +221,9 @@ Deno.test("datum reader rejects malformed, overflowing and non-ASCII input", asy
 Deno.test("datum reader accepts the 64-byte numeric spelling limit", async () => {
   const { assembled, memory, cpu } = await managedRuntime();
   installBdosReader(memory, [...new Array(64).fill(0x30), 0x1a]);
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
-  memory[assembled.address("SRTINST")] = 0;
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
   assert.deepEqual(readDatum(assembled, memory, cpu), {
     assembled,
     memory,
@@ -240,17 +240,17 @@ Deno.test("datum reader shares lookahead across successive reads and sticky EOF"
   );
   bytes.push(0x1a);
   const { cursor } = installBdosReader(memory, bytes);
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
-  memory[assembled.address("SRTINST")] = 0;
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
 
   function readDatum() {
-    cpu.pc = assembled.address("SRTDRRD");
+    cpu.pc = assembled.address("DR_READ");
     cpu.sp = 0xdff2;
     cpu.ix = 0xef00;
     let steps = 0;
     while (cpu.pc !== 0xef00) {
-      assert.ok(++steps < 50_000_000, "successive SRTDRRD did not return");
+      assert.ok(++steps < 50_000_000, "successive DR_READ did not return");
       assembled.runtime.step();
     }
     assert.equal(cpu.sp, 0xdff2);
@@ -268,7 +268,7 @@ Deno.test("datum reader shares lookahead across successive reads and sticky EOF"
   const afterEof = memory[cursor] | (memory[cursor + 1] << 8);
   assert.deepEqual(readDatum(), eof);
   assert.equal(memory[cursor] | (memory[cursor + 1] << 8), afterEof);
-  assert.equal(memory[assembled.address("SRTINST")], 2);
+  assert.equal(memory[assembled.address("IN_STATE")], 2);
 });
 
 Deno.test("datum reader constructs proper, nested and dotted lists", async () => {
@@ -277,9 +277,9 @@ Deno.test("datum reader constructs proper, nested and dotted lists", async () =>
     memory,
     [...Array.from(new TextEncoder().encode("(1 2 (3 . 4)) (5 . 6)")), 0x1a],
   );
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
-  memory[assembled.address("SRTINST")] = 0;
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
 
   const outer = readDatum(assembled, memory, cpu);
   assert.equal(outer.tag, 1, `tag=${outer.tag} payload=${outer.payload}`);
@@ -334,9 +334,9 @@ Deno.test("datum reader accepts the 64-value aggregate limit", async () => {
   const { assembled, memory, cpu, call } = await managedRuntime(true);
   const source = `(${Array(64).fill("1").join(" ")})\x1a`;
   installBdosReader(memory, Array.from(new TextEncoder().encode(source)));
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
-  memory[assembled.address("SRTINST")] = 0;
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
 
   const result = readDatum(assembled, memory, cpu);
   let value = { tag: result.tag, payload: result.payload };
@@ -359,7 +359,7 @@ Deno.test("datum reader accepts the 64-value aggregate limit", async () => {
 
 Deno.test("datum reader keeps nested values and its accumulator live through GC", async () => {
   const { assembled, memory, cpu, call } = await managedRuntime(true);
-  memory[assembled.address("SRTPSLIM")] = 2;
+  memory[assembled.address("PS_LIMIT")] = 2;
   for (let index = 0; index < 100; index++) {
     assert.equal(call("PAIR_NEW").carry, 0);
   }
@@ -368,11 +368,11 @@ Deno.test("datum reader keeps nested values and its accumulator live through GC"
     memory,
     Array.from(new TextEncoder().encode("((1 . 2) 3 4 5)\x1a")),
   );
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
-  memory[assembled.address("SRTINST")] = 0;
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
   const result = readDatum(assembled, memory, cpu);
-  assert.equal(readWord(memory, assembled.address("SRTGCNT")), 1);
+  assert.equal(readWord(memory, assembled.address("CNT_GC")), 1);
   assert.equal(result.tag, 1);
 
   const nested = pairPart(call, cpu, "PAIR_CAR", result.payload);
@@ -399,7 +399,7 @@ Deno.test("datum reader keeps nested values and its accumulator live through GC"
 
 Deno.test("datum reader clears roots when pair allocation fails", async () => {
   const { assembled, memory, cpu, call } = await managedRuntime(true);
-  memory[assembled.address("SRTPSLIM")] = 1;
+  memory[assembled.address("PS_LIMIT")] = 1;
   const roots = 0xd700;
   const pairs: number[] = [];
   for (let index = 0; index < 32; index++) {
@@ -413,39 +413,39 @@ Deno.test("datum reader clears roots when pair allocation fails", async () => {
     memory[root + 2] = 0; // Clear extension byte.
     memory[root + 3] = 0x11;
   }
-  writeWord(memory, assembled.address("SRTGBASE"), roots);
-  writeWord(memory, assembled.address("SRTGEND"), roots + pairs.length * 4);
+  writeWord(memory, assembled.address("G_BASE"), roots);
+  writeWord(memory, assembled.address("G_END"), roots + pairs.length * 4);
 
   installBdosReader(memory, Array.from(new TextEncoder().encode("(1 2)\x1a")));
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
-  memory[assembled.address("SRTINST")] = 0;
-  memory[assembled.address("SRTOUT")] = 0x37; // SCF.
-  memory[assembled.address("SRTOUT") + 1] = 0xc9; // RET.
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
+  memory[assembled.address("OUT_FAIL")] = 0x37; // SCF.
+  memory[assembled.address("OUT_FAIL") + 1] = 0xc9; // RET.
 
   const result = readDatum(assembled, memory, cpu, true, 2_000_000);
   assert.equal(result.carry, 1);
-  assert.equal(readWord(memory, assembled.address("SRTGCNT")), 1);
-  assert.equal(memory[assembled.address("SRTDRACT")], 0);
-  assert.equal(memory[assembled.address("SRTDRFC")], 0);
-  assert.equal(memory[assembled.address("SRTDRVC")], 0);
-  assert.equal(memory[assembled.address("SRTDRACC")], 0);
+  assert.equal(readWord(memory, assembled.address("CNT_GC")), 1);
+  assert.equal(memory[assembled.address("DR_LIVE")], 0);
+  assert.equal(memory[assembled.address("DR_DEPTH")], 0);
+  assert.equal(memory[assembled.address("DR_SLOTS")], 0);
+  assert.equal(memory[assembled.address("DR_HELD")], 0);
   assert.equal(
-    readWord(memory, assembled.address("SRTDRVP")),
+    readWord(memory, assembled.address("DR_SP")),
     assembled.address("RT_DRVLO"),
   );
-  assert.equal(readWord(memory, assembled.address("SRTDRFP")), 0);
+  assert.equal(readWord(memory, assembled.address("DR_FRAME")), 0);
 });
 
 Deno.test("reader construction stack preserves tagged values", async () => {
   const { cpu, call } = await managedRuntime(true);
   cpu.a = 3;
   assert.deepEqual(
-    call("SRTDRPUT", 1),
+    call("DR_PUSH", 1),
     { carry: 0, tag: 3, payload: 1 },
   );
   assert.deepEqual(
-    call("SRTDRPOP"),
+    call("DR_POP"),
     { carry: 0, tag: 3, payload: 1 },
   );
 });
@@ -456,9 +456,9 @@ Deno.test("datum reader makes a dotted pair", async () => {
     ...Array.from(new TextEncoder().encode("(3 . 4)")),
     0x1a,
   ]);
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTINCR")] = 0;
-  memory[assembled.address("SRTINST")] = 0;
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
   const result = readDatum(assembled, memory, cpu);
   assert.equal(result.tag, 1);
   const head = pairPart(call, cpu, "PAIR_CAR", result.payload);

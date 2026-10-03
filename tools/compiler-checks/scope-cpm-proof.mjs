@@ -39,7 +39,7 @@ assert.ok(compiler.address("SCEND") < 0x10000);
 const runtimeLength = provider.image.bytes.length - 0x0100;
 assert.equal(runtimeLength, compiler.address("SRTLEN"));
 const runtimeImage = Uint8Array.from(provider.image.bytes);
-const ceilingAddress = provider.address("SRTHEAPP");
+const ceilingAddress = provider.address("HEAP_LIM");
 runtimeImage[ceilingAddress] = managedCeiling & 0xff;
 runtimeImage[ceilingAddress + 1] = managedCeiling >>> 8;
 let disk = installCpm22File(backing, {

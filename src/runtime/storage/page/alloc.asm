@@ -147,7 +147,7 @@ PAGE_REL:
         SBC HL,DE                  ; A carry selects the low physical extent.
         JR C,.LOW_ADDR             ; Validate and map a page in the low gap.
         LD HL,(PAGE_PTR)           ; Reject addresses in the protected upper region.
-        LD DE,(SRTHEAPP)           ; The selected ceiling bounds managed pages.
+        LD DE,(HEAP_LIM)           ; The selected ceiling bounds managed pages.
         OR A                       ; Clear carry before the upper-bound comparison.
         SBC HL,DE                  ; A nonnegative value lies at or above C000.
         JP NC,PAGE_BAD             ; Neither the stack nor page zero is managed.

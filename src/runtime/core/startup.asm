@@ -43,94 +43,94 @@ RT_BOOT:                          ; START in entry.asm set the boot stack.
         LD SP,RT_TOP              ; Use the full four-kilobyte guarded stack band.
         CALL RST_SET              ; Install the RST vectors generated code uses.
         LD HL,RT_TOP              ; The native stack begins at the fixed ceiling.
-        LD (SRTLOWSP),HL          ; Record its low-water mark for qualification.
+        LD (RT_LOWSP),HL          ; Record its low-water mark for qualification.
         LD HL,0                    ; Reset the runtime counters for this program.
-        LD (SRTBCNT),HL
-        LD (SRTCCNT),HL
-        LD (SRTPCNT),HL
-        LD (SRTGCNT),HL
-        LD (SRTACNT),HL
-        LD HL,(SRTIMGE)           ; Recover the compiler's final loaded image end.
+        LD (CNT_BIND),HL
+        LD (CNT_CLOS),HL
+        LD (CNT_PAIR),HL
+        LD (CNT_GC),HL
+        LD (CNT_MAPS),HL
+        LD HL,(RT_LIMIT)          ; Recover the compiler's final loaded image end.
         CALL PAGE_INI              ; Derive and initialise the page-domain metadata.
-        JP C,SRTERROR              ; Refuse to enter generated code without pages.
-        CALL SRTSYINI              ; Reset the pinned symbol arena for this program.
+        JP C,ERROR                 ; Refuse to enter generated code without pages.
+        CALL DR_INIT               ; Reset the pinned symbol arena for this program.
         CALL PAIR_INI              ; Reserve and clear the first eight-byte pair slab.
-        JP C,SRTERROR              ; Refuse to enter code without pair capacity.
+        JP C,ERROR                 ; Refuse to enter code without pair capacity.
         LD HL,RT_OPLO              ; The operator side stack starts above pair cells.
-        LD (SRTOPS),HL            ; Reset it for this generated program run.
+        LD (OPS_SP),HL            ; Reset it for this generated program run.
         LD HL,RT_QTLO              ; Reset the quoted-data stack cursor.
-        LD (SRTQSP),HL
+        LD (QT_SP),HL
         LD HL,RT_DRVLO              ; Reset the reader's separate value stack.
-        LD (SRTDRVP),HL
+        LD (DR_SP),HL
         XOR A                       ; No reader frames or construction result exist.
-        LD (SRTDRACT),A
-        LD (SRTDRFC),A
-        LD (SRTDRVC),A
-        LD (SRTDRACC),A
-        LD (SRTDRFP),A
-        LD (SRTDRFP+1),A
+        LD (DR_LIVE),A
+        LD (DR_DEPTH),A
+        LD (DR_SLOTS),A
+        LD (DR_HELD),A
+        LD (DR_FRAME),A
+        LD (DR_FRAME+1),A
         LD HL,RT_GCLO               ; Reset the collector worklist cursor.
-        LD (SRTMSTK),HL
+        LD (GC_QTOP),HL
         XOR A                      ; No caller environment exists at program entry.
-        LD (SRTCENVN),A
-        LD (SRTINCR),A             ; No CR is pending at program entry.
-        LD (SRTINST),A             ; No datum-reader lookahead is pending at entry.
-        LD (SRTINSEL),A             ; Start with the direct console input adapter.
-        LD (SRTOUTS),A              ; Start with the direct console output adapter.
-        LD (SRTFIACT),A            ; No CP/M input file is open at program entry.
-        LD (SRTFOACT),A           ; No CP/M output file is open at program entry.
-        LD (SRTFIMOD),A             ; Inactive file modes default to text.
-        LD (SRTFWMDE),A
-        LD (SRTNCT),A              ; No generated operands are pending at entry.
-        LD HL,SRTCLBM              ; Clear closure-start metadata for this run.
-        LD DE,SRTCLBM+1
+        LD (ENV_RCNT),A
+        LD (IN_CR),A               ; No CR is pending at program entry.
+        LD (IN_STATE),A            ; No datum-reader lookahead is pending at entry.
+        LD (IN_SRC),A               ; Start with the direct console input adapter.
+        LD (OUT_SEL),A              ; Start with the direct console output adapter.
+        LD (IN_FILE),A             ; No CP/M input file is open at program entry.
+        LD (OUT_FILE),A           ; No CP/M output file is open at program entry.
+        LD (IN_MODE),A              ; Inactive file modes default to text.
+        LD (OUT_MODE),A
+        LD (ROOT_CNT),A            ; No generated operands are pending at entry.
+        LD HL,CL_MAP               ; Clear closure-start metadata for this run.
+        LD DE,CL_MAP+1
         LD BC,08FFH
         LD (HL),A
         LDIR
-        LD HL,SRTCLMK              ; Clear closure mark metadata for this run.
-        LD DE,SRTCLMK+1
+        LD HL,GC_MARKS             ; Clear closure mark metadata for this run.
+        LD DE,GC_MARKS+1
         LD BC,08FFH
         LD (HL),A
         LDIR
-        LD HL,SRTBMB               ; Clear binding allocation-start metadata.
-        LD DE,SRTBMB+1
+        LD HL,BND_MAP              ; Clear binding allocation-start metadata.
+        LD DE,BND_MAP+1
         LD BC,047FH
         LD (HL),A
         LDIR
-        LD HL,SRTCFREE              ; Empty every rounded closure size class.
-        LD DE,SRTCFREE+1
+        LD HL,CL_FREE               ; Empty every rounded closure size class.
+        LD DE,CL_FREE+1
         LD BC,129
         XOR A
         LD (HL),A
         LDIR
-        LD HL,SRTCLOWN              ; No closure page has an owner, a live count
-        LD DE,SRTCLOWN+1            ; or a physical base, and no binding page is
-        LD BC,SRTPTEND-SRTCLOWN-1   ; assigned: the four tables are one block.
+        LD HL,CL_OWNER              ; No closure page has an owner, a live count
+        LD DE,CL_OWNER+1            ; or a physical base, and no binding page is
+        LD BC,CL_LIMIT-CL_OWNER-1   ; assigned: the four tables are one block.
         LD (HL),A
         LDIR
         LD HL,RT_HEAP               ; Keep a map base for the first allocation.
-        LD (SRTCLCUR),HL
+        LD (CL_TOP),HL
         LD HL,0                     ; Binding pages supply their own cursors.
-        LD (SRTBEND),HL
+        LD (BND_TOP),HL
         XOR A
-        LD (SRTBHEAD),A
-        LD (SRTBHEAD+1),A
-        LD (SRTCDESC),A            ; The top-level caller has no descriptor.
-        LD (SRTCDESC+1),A
-        LD (SRTFRAME),A            ; No suspended procedure frame exists yet.
-        LD (SRTFRAME+1),A
-        LD (SRTQACTV),A            ; No quoted-list accumulator is live yet.
+        LD (BND_FREE),A
+        LD (BND_FREE+1),A
+        LD (DESC_RET),A            ; The top-level caller has no descriptor.
+        LD (DESC_RET+1),A
+        LD (FRM_BASE),A            ; No suspended procedure frame exists yet.
+        LD (FRM_BASE+1),A
+        LD (QT_HELD),A             ; No quoted-list accumulator is live yet.
 RT_CALL:
         CALL 0000H                ; The compiler patches the generated entry.
         JP .EXIT                  ; Close open files, then warm-start CP/M.
 
 ; Leave the program after flushing and closing any open output file, so text
 ; written without close-port survives a normal exit.  Only the I/O module can
-; have opened one, and it is present whenever SRTFOACT is set.
+; have opened one, and it is present whenever OUT_FILE is set.
 .EXIT:
-        LD A,(SRTFOACT)
+        LD A,(OUT_FILE)
         OR A
-        CALL NZ,SRTFCLW            ; A close failure cannot be reported here.
+        CALL NZ,OUT_SHUT           ; A close failure cannot be reported here.
         JP 0                       ; Return to CP/M through the warm start.
 
 ; Refuse to run when CP/M's BDOS starts below RT_TOP.  Nothing above the loaded image
@@ -161,10 +161,10 @@ RT_LOAD:
         INC HL                    ; Advance to the flags and tag.
         LD A,(HL)                 ; Bit four records whether the binding is ready.
         AND CELL_VAL              ; Ignore the high escape mark kept for closures.
-        JP Z,SRTUNBD           ; Never return a fabricated value.
+        JP Z,RT_UNDEF          ; Never return a fabricated value.
         LD A,(HL)
         AND 0FH                   ; The stored tag.
-        LD (SRTTAG),A
+        LD (RT_TAG),A
         EX DE,HL                  ; Return the stored payload in HL.
         RET                       ; Return the value to generated code.
 
@@ -194,7 +194,7 @@ QT_CACHE:
 
 ; Store A:HL into the four-byte slot addressed by DE.
 RT_STORE:
-        LD (SRTTAG),A             ; Preserve the value tag while writing payload bytes.
+        LD (RT_TAG),A             ; Preserve the value tag while writing payload bytes.
         LD A,L                    ; Copy the payload low byte to the slot.
         LD (DE),A                 ; Publish the low byte first.
         INC DE                    ; Advance to the high payload byte.
@@ -205,7 +205,7 @@ RT_STORE:
         LD (DE),A                 ; It stays clear.
         INC DE                    ; Advance to the flags and tag.
         PUSH BC
-        LD A,(SRTTAG)
+        LD A,(RT_TAG)
         OR CELL_VAL               ; Initialized, with the caller's tag.
         LD B,A
         LD A,(DE)                 ; Preserve the escape mark and other flags.
@@ -213,22 +213,22 @@ RT_STORE:
         OR B
         POP BC
         LD (DE),A                 ; A later load can now observe the value.
-        LD A,(SRTTAG)             ; Return the stored value tag to generated code.
+        LD A,(RT_TAG)             ; Return the stored value tag to generated code.
         RET                       ; Return with the stored value still in HL.
 
 ; Store into an existing binding.  The initialized bit must already be set;
 ; mutation of an unbound global or local reports the ordinary UNBOUND error.
 RT_SET:
-        LD (SRTATMP),A             ; Preserve the new value tag across the check.
-        LD (SRTCELLP),DE          ; Preserve the destination while checking it.
+        LD (ARG_TAG),A             ; Preserve the new value tag across the check.
+        LD (HEAP_OBJ),DE          ; Preserve the destination while checking it.
         INC DE                    ; Skip the payload low byte.
         INC DE                    ; Skip the payload high byte.
         INC DE                    ; Skip the extension byte.
         LD A,(DE)                  ; Bit four records initialization.
         AND CELL_VAL
-        JP Z,SRTUNBD               ; A missing binding cannot be mutated.
-        LD DE,(SRTCELLP)           ; Restore the cell base for the normal store.
-        LD A,(SRTATMP)             ; Restore the caller's tag before storing.
+        JP Z,RT_UNDEF              ; A missing binding cannot be mutated.
+        LD DE,(HEAP_OBJ)           ; Restore the cell base for the normal store.
+        LD A,(ARG_TAG)             ; Restore the caller's tag before storing.
         CALL RT_STORE               ; Publish the new value and any escape mark.
         LD HL,0FE04H               ; Mutation expressions return UNSPECIFIED.
         XOR A                      ; Tag zero identifies the reserved immediate.
@@ -237,7 +237,7 @@ RT_SET:
 ; Return Z exactly when the value is #f, preserving A and HL for short-circuit
 ; forms.  Other tag-zero scalars, including numeric zero, are true.
 RT_TEST:
-        LD (SRTTAG),A             ; Keep the logical tag while checking payload.
+        LD (RT_TAG),A             ; Keep the logical tag while checking payload.
         OR A                      ; Nonzero tags are always true.
         JR NZ,.TRUE               ; Leave the original value untouched.
         PUSH HL                   ; Compare the scalar payload without changing it.
@@ -251,10 +251,10 @@ RT_TEST:
 .TRUE:
         LD A,1                    ; Record a true branch decision.
 .DONE:
-        LD (SRTBOOL),A            ; Keep the decision while restoring the tag.
-        LD A,(SRTBOOL)            ; Set flags from the branch decision.
+        LD (RT_BOOL),A            ; Keep the decision while restoring the tag.
+        LD A,(RT_BOOL)            ; Set flags from the branch decision.
         OR A                      ; Z means false, NZ means true.
-        LD A,(SRTTAG)        ; LD does not disturb the decision flags.
+        LD A,(RT_TAG)        ; LD does not disturb the decision flags.
         RET                       ; Generated JP Z/JR Z reads the preserved flags.
 
 ; Binary helpers pop two values in the order emitted by the compiler and call
@@ -268,30 +268,30 @@ RT_SUB:
 RT_MUL:
         LD A,2                    ; Operation two selects multiplication.
 RT_BINOP:
-        LD (SRTOP),A              ; Save the operation while popping operands.
+        LD (RT_OP),A              ; Save the operation while popping operands.
         POP IX                    ; Save the CALL return address above the values.
         POP DE                    ; Recover the right payload.
         POP BC                    ; Recover right AF; B is the right tag.
         POP HL                    ; Recover the left payload.
         POP AF                    ; Recover left AF; A is the left tag.
-        LD (SRTTAG),A             ; Preserve the left tag while selecting the op.
-        LD A,(SRTOP)              ; Select the checked operation.
+        LD (RT_TAG),A             ; Preserve the left tag while selecting the op.
+        LD A,(RT_OP)              ; Select the checked operation.
         OR A                      ; Addition is the zero operation.
         JR Z,.ADD                 ; Call NUM_ADD with the recovered ABI values.
         CP 1                      ; Subtraction is operation one.
         JR Z,.SUB                 ; Call NUM_SUB with the recovered ABI values.
-        LD A,(SRTTAG)             ; Restore the left tag for the numeric ABI.
+        LD A,(RT_TAG)             ; Restore the left tag for the numeric ABI.
         CALL NUM_MUL              ; Operation two is checked multiplication.
         JR .RESULT           ; Common carry handling and return.
 .ADD:
-        LD A,(SRTTAG)             ; Restore the left tag for the numeric ABI.
+        LD A,(RT_TAG)             ; Restore the left tag for the numeric ABI.
         CALL NUM_ADD              ; Checked addition uses A/B and HL/DE.
         JR .RESULT           ; Common carry handling and return.
 .SUB:
-        LD A,(SRTTAG)             ; Restore the left tag for the numeric ABI.
+        LD A,(RT_TAG)             ; Restore the left tag for the numeric ABI.
         CALL NUM_SUB              ; Checked subtraction uses A/B and HL/DE.
 .RESULT:
-        JP C,SRTERROR             ; Overflow or an invalid value is terminal.
+        JP C,ERROR                ; Overflow or an invalid value is terminal.
         LD B,2                    ; The two native operands are now consumed.
         CALL ROOT_CUT
         PUSH IX                   ; Restore the generated caller's return address.

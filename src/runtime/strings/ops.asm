@@ -9,12 +9,12 @@ STR_RET:
         RET
 ; Construct a managed string from zero through eight byte characters.
 STR_MAKE:
-        LD A,(SRTARGC)             ; The compiler packet supports at most eight values.
+        LD A,(ARG_CNT)             ; The compiler packet supports at most eight values.
         CP 9                       ; Eight characters fill the packet exactly.
-        JP NC,SRTERROR             ; Keep the runtime safe for a malformed caller.
+        JP NC,ERROR                ; Keep the runtime safe for a malformed caller.
         LD (STR_LEN),A            ; The argument count is the resulting byte length.
         LD B,A                     ; Validate every packet value before allocating.
-        LD HL,SRTARGPK
+        LD HL,ARG_PKT
 .CHECK:
         LD A,B
         OR A
@@ -27,21 +27,21 @@ STR_MAKE:
         LD A,(HL)
         INC HL
         AND 0FH                    ; Characters use the scalar tag.
-        JP NZ,SRTERROR             ; A string constructor accepts characters only.
+        JP NZ,ERROR                ; A string constructor accepts characters only.
         LD A,D
         CP 0FFH
-        JP NZ,SRTERROR             ; FFxx is the byte-character representation.
+        JP NZ,ERROR                ; FFxx is the byte-character representation.
         DJNZ .CHECK
 .ALLOC:
         CALL STR_NEW             ; Packet arguments remain roots during a GC retry.
-        JP C,SRTERROR
+        JP C,ERROR
         LD (STR_DST),HL          ; Retain the new object while filling its bytes.
         LD A,(STR_LEN)
         LD (HL),A                  ; The first byte is the managed length.
         INC HL
         LD (STR_DSTP),HL          ; Keep the destination cursor beside the object base.
         LD B,A
-        LD HL,SRTARGPK
+        LD HL,ARG_PKT
         LD (STR_SRCP),HL          ; The packet cursor is independent of the data cursor.
 .WRITE:
         LD A,B
@@ -63,18 +63,18 @@ STR_MAKE:
 
 ; Make a managed copy of either a literal or an existing managed string.
 STR_COPY:
-        LD A,(SRTARGC)
+        LD A,(ARG_CNT)
         CP 1
-        JP NZ,SRTERROR
-        LD HL,SRTARGPK
+        JP NZ,ERROR
+        LD HL,ARG_PKT
         CALL PKT_VAL
         CALL STR_ARG           ; Return the source pointer in HL.
-        JP C,SRTERROR
+        JP C,ERROR
         LD A,(HL)
         LD (STR_LEN),A
         LD (STR_SRC),HL
         CALL STR_NEW
-        JP C,SRTERROR
+        JP C,ERROR
         LD (STR_DST),HL
         LD A,(STR_LEN)
         LD (HL),A
@@ -89,20 +89,20 @@ STR_COPY:
 
 ; Concatenate two literal or managed strings into one managed string.
 STR_JOIN:
-        LD A,(SRTARGC)
+        LD A,(ARG_CNT)
         CP 2
-        JP NZ,SRTERROR
-        LD HL,SRTARGPK
+        JP NZ,ERROR
+        LD HL,ARG_PKT
         CALL PKT_VAL
         CALL STR_ARG
-        JP C,SRTERROR
+        JP C,ERROR
         LD (STR_LHS),HL
         LD A,(HL)
         LD (STR_LLEN),A
-        LD HL,SRTARGPK+4
+        LD HL,ARG_PKT+4
         CALL PKT_VAL
         CALL STR_ARG
-        JP C,SRTERROR
+        JP C,ERROR
         LD (STR_RHS),HL
         LD A,(HL)
         LD (STR_RLEN),A
@@ -110,10 +110,10 @@ STR_JOIN:
         LD B,A
         LD A,(STR_RLEN)
         ADD A,B
-        JP C,SRTERROR             ; A result above 255 cannot fit the length byte.
+        JP C,ERROR                ; A result above 255 cannot fit the length byte.
         LD (STR_LEN),A
         CALL STR_NEW
-        JP C,SRTERROR
+        JP C,ERROR
         LD (STR_DST),HL
         LD A,(STR_LEN)
         LD (HL),A
@@ -140,7 +140,7 @@ STR_ARG:
         CP 6
         JR NZ,.BAD
         LD HL,(STR_TMP)
-        LD (SRTCLOBJ),HL
+        LD (CL_OBJ),HL
         CALL STR_CHK
         JR C,.BAD
 .OK:

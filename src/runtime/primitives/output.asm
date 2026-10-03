@@ -5,26 +5,26 @@
 ; write and display return UNSPECIFIED after printing their one argument.
 PKT_EMIT:
         LD A,1
-        LD (SRTWMODE),A            ; write uses readable character syntax.
-        CALL SRTOUT1
+        LD (WR_MODE),A             ; write uses readable character syntax.
+        CALL OUT_ARG1
         CALL PKT_ONE
-        CALL SRTWRVAL
+        CALL WR_VALUE
         JP PKT_VOID
 PKT_SHOW:
         XOR A                      ; display prints strings and characters raw,
-        LD (SRTWMODE),A            ; including those nested inside compound values.
-        CALL SRTOUT1               ; Select the optional output port.
+        LD (WR_MODE),A             ; including those nested inside compound values.
+        CALL OUT_ARG1              ; Select the optional output port.
         CALL PKT_ONE               ; Load the one value to display.
-        CALL SRTWRVAL              ; Share the writer with display formatting.
+        CALL WR_VALUE              ; Share the writer with display formatting.
         JP PKT_VOID
 
 ; newline accepts no arguments and returns UNSPECIFIED.
 PKT_CRLF:
-        CALL SRTOUT0
+        CALL OUT_ARG0
         LD A,13
-        CALL SRTCH
+        CALL OUT_CHAR
         LD A,10
-        CALL SRTCH
+        CALL OUT_CHAR
 PKT_VOID:
         XOR A
         LD HL,0FE04H
@@ -47,7 +47,7 @@ PKT_VAL:
 ; after the checked operation has consumed the packet values.
 PRIM_TCO:
         CALL INV_KIND              ; Validate and classify the reserved payload.
-        LD A,(SRTPID)              ; Apply keeps the current frame for dynamic transfer.
+        LD A,(PRIM_ID)             ; Apply keeps the current frame for dynamic transfer.
         CP 45
         JR Z,.APPLY
         POP IX                     ; The current frame's epilogue is now the return.

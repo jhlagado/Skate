@@ -82,8 +82,8 @@ function initialiseSinglePairPage(
   );
   // Keep this fixture to one class page so the constructor must collect
   // instead of growing into the second managed extent.
-  memory[assembled.address("SRTPSLIM")] = 1;
-  return memory[assembled.address("SRTPSLT")] << 8;
+  memory[assembled.address("PS_LIMIT")] = 1;
+  return memory[assembled.address("PS_TABLE")] << 8;
 }
 
 function fillSinglePairPage(
@@ -101,8 +101,8 @@ function fillSinglePairPage(
     memory[address + CDR_META] = 0;
   }
   assert.deepEqual(memory.slice(end, end + 4), canary);
-  memory[assembled.address("SRTPSLT") + 2] = 0xff;
-  memory[assembled.address("SRTPSLHD")] = 0;
+  memory[assembled.address("PS_TABLE") + 2] = 0xff;
+  memory[assembled.address("PS_HEAD")] = 0;
 }
 
 function callRoutine(
@@ -152,7 +152,7 @@ Deno.test("packet cons preserves both scalar inputs through collection", async (
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu as CpuState;
   const pairPage = initialiseSinglePairPage(assembled, memory, cpu);
-  const packet = assembled.address("SRTARGPK");
+  const packet = assembled.address("ARG_PKT");
   const result = runEntry(
     assembled,
     "PKT_CONS",
@@ -160,7 +160,7 @@ Deno.test("packet cons preserves both scalar inputs through collection", async (
     cpu,
     () => {
       cpu.ix = 0xef00;
-      memory[assembled.address("SRTARGC")] = 2;
+      memory[assembled.address("ARG_CNT")] = 2;
       writeWord(memory, packet, 0x1234);
       memory[packet + 2] = 0; // Clear extension byte.
       memory[packet + 3] = 3;
@@ -200,7 +200,7 @@ Deno.test("quoted list construction survives collection at both allocations", as
       writeWord(memory, quoted + 4, 42);
       memory[quoted + 6] = 0; // Clear extension byte.
       memory[quoted + 7] = 3;
-      writeWord(memory, assembled.address("SRTQSP"), quoted + 8);
+      writeWord(memory, assembled.address("QT_SP"), quoted + 8);
       cpu.a = 2;
       cpu.b = 0;
     },
@@ -257,8 +257,8 @@ Deno.test("tracing preserves a linked list of more than one thousand pairs", asy
   writeWord(memory, 0xd700, records[0]);
   memory[0xd702] = 0; // Clear extension byte.
   memory[0xd703] = 0x11;
-  writeWord(memory, assembled.address("SRTGBASE"), 0xd700);
-  writeWord(memory, assembled.address("SRTGEND"), 0xd704);
+  writeWord(memory, assembled.address("G_BASE"), 0xd700);
+  writeWord(memory, assembled.address("G_END"), 0xd704);
   const result = callRoutine(assembled, "GC", memory, cpu, 50_000_000);
   assert.equal(result.sp, 0xdff2);
   for (let index = 0; index < records.length; index++) {

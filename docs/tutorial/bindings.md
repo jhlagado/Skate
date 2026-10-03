@@ -158,7 +158,7 @@ initialisation bit. Its final flag update is:
         AND 0FEH
         OR 1
         LD (DE),A
-        LD A,(SRTTAG)
+        LD A,(RT_TAG)
         RET
 ```
 
@@ -170,7 +170,7 @@ stored value available to the generated code.
 The separate initialisation bit prevents a load from treating an uninitialised
 slot as an ordinary value. Zero is a legitimate Scheme number and cannot stand
 in for that state. `RT_LOAD` reads the payload and tag, tests bit zero of the
-flags and branches to `SRTUNBD` if the slot is not ready. Otherwise it returns
+flags and branches to `RT_UNDEF` if the slot is not ready. Otherwise it returns
 the saved value in `A:HL`.
 
 ## Opening the body

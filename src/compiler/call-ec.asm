@@ -17,7 +17,7 @@ SCCALEF:
         RET C
         CALL SCEXPECT              ; call/ec takes exactly one target expression.
         RET C
-        LD HL,SRTCECAL             ; The runtime installs and invokes the escape frame.
+        LD HL,EC_CALL              ; The runtime installs and invokes the escape frame.
         JP SCCALL
 
 SCCALEE:

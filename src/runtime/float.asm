@@ -201,7 +201,7 @@ FLT_EMIT:
 
 ; Render the decimal digit array into the CP/M output buffer.
 .OUTPUT:
-        LD HL,SRTBUF                ; Begin the completed line at the shared buffer.
+        LD HL,OUT_BUF               ; Begin the completed line at the shared buffer.
         LD (.CURSOR),HL             ; .PUT appends each character here.
         LD A,(.SIGN)                ; A nonzero sign needs a leading minus character.
         OR A                        ; Test the saved binary16 sign.
@@ -303,12 +303,12 @@ FLT_EMIT:
 .FINISH:
         LD HL,(.CURSOR)             ; Locate the first byte after the final digit.
         LD (HL),'$'                 ; BDOS function 9 stops at the dollar byte.
-        LD DE,SRTBUF                ; DE selects the completed output buffer.
-        JP SRTTEXT                  ; Send only the value; newline is a separate primitive.
+        LD DE,OUT_BUF               ; DE selects the completed output buffer.
+        JP OUT_TEXT                 ; Send only the value; newline is a separate primitive.
 
 ; Print one of the fixed special-value messages selected by DE.
 .MESSAGE:
-        JP SRTTEXT                  ; Send +inf.0, -inf.0 or +nan.0 through the provider.
+        JP OUT_TEXT                 ; Send +inf.0, -inf.0 or +nan.0 through the provider.
 
 .NAN_MSG: DB "+nan.0$"              ; Canonical Scheme NaN spelling.
 .POS_MSG: DB "+inf.0$"              ; Positive infinity spelling.

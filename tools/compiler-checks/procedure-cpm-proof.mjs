@@ -32,13 +32,13 @@ assert.equal(compiler.address("SCMAIN"), 0x0100);
 assert.ok(compiler.address("SCEND") < 0x10000);
 const runtimeLength = provider.image.bytes.length - 0x0100;
 assert.equal(runtimeLength, compiler.address("SRTLEN"));
-const heapPointerAddress = provider.address("SRTHEAPP");
-const lowStackAddress = provider.address("SRTLOWSP");
-const bindingAllocationAddress = provider.address("SRTBCNT");
-const closureAllocationAddress = provider.address("SRTCCNT");
-const pairAllocationAddress = provider.address("SRTPCNT");
-const collectionCountAddress = provider.address("SRTGCNT");
-const frameCountAddress = provider.address("SRTACNT");
+const heapPointerAddress = provider.address("HEAP_LIM");
+const lowStackAddress = provider.address("RT_LOWSP");
+const bindingAllocationAddress = provider.address("CNT_BIND");
+const closureAllocationAddress = provider.address("CNT_CLOS");
+const pairAllocationAddress = provider.address("CNT_PAIR");
+const collectionCountAddress = provider.address("CNT_GC");
+const frameCountAddress = provider.address("CNT_MAPS");
 let disk = installCpm22File(backing, {
   name: "SKATE.COM",
   bytes: compiler.image.bytes.slice(0x0100),
@@ -966,7 +966,7 @@ try {
       generated,
       name,
     );
-    const imageEndOffset = provider.address("SRTIMGE") - 0x0100;
+    const imageEndOffset = provider.address("RT_LIMIT") - 0x0100;
     const publishedImageEnd = generated[imageEndOffset] |
       generated[imageEndOffset + 1] << 8;
     assert.equal(

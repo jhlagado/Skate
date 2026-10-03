@@ -14,7 +14,7 @@ VEC_NEW:
         RET C                      ; Preserve the capacity failure for the caller.
 .GOT:
         LD (VEC_OBJ),HL            ; Retain the exact block start.
-        LD (SRTOBJ),HL             ; GC_OBJON publishes the common start bitmap.
+        LD (FRM_CLOS),HL           ; GC_OBJON publishes the common start bitmap.
         CALL GC_OBJON               ; Publish the allocation start in the map.
         CALL VEC_SETM               ; Mark the block as a vector, not a closure.
         LD HL,(VEC_OBJ)            ; Return the block base to the constructor.
@@ -33,43 +33,43 @@ VEC_SIZE:
         LD A,L
         AND 0FCH                   ; Preserve H while clearing the low residue.
         LD L,A
-        LD (SRTCLSZ),HL            ; The class allocator consumes the rounded size.
+        LD (CL_SIZE),HL            ; The class allocator consumes the rounded size.
         SRL H
         RR L
         SRL H
         RR L
         DEC L                      ; Four bytes per class index, zero based.
         LD A,L
-        LD (SRTCLIDX),A            ; Publish the selected class for SLAB_NEW.
+        LD (CL_CLASS),A            ; Publish the selected class for SLAB_NEW.
         RET
 
 ; Validate HL as a vector address; the caller has already checked its tag.
 ; Carry clear returns the object base in HL. Scratch registers are clobbered.
 VEC_CHK:
-        LD (SRTCLOBJ),HL           ; Preserve the candidate across range checks.
+        LD (CL_OBJ),HL             ; Preserve the candidate across range checks.
         LD DE,RT_HEAP              ; Reject values below the managed pool.
         OR A
         SBC HL,DE
         JP C,.BAD
-        LD HL,(SRTCLOBJ)            ; Vector starts are aligned to four bytes.
+        LD HL,(CL_OBJ)              ; Vector starts are aligned to four bytes.
         LD A,L
         AND 3
         JP NZ,.BAD
-        LD DE,(SRTHEAPP)            ; Reject values at or above the pool end.
+        LD DE,(HEAP_LIM)            ; Reject values at or above the pool end.
         OR A
         SBC HL,DE
         JP NC,.BAD
         CALL VEC_TEST                ; Require the exact vector marker bit.
         JP Z,.BAD
-        LD HL,(SRTCLOBJ)            ; Find the owning logical closure page.
-        LD (SRTCLBAS),HL
+        LD HL,(CL_OBJ)              ; Find the owning logical closure page.
+        LD (CL_BASE),HL
         CALL SLAB_AT
-        LD A,(SRTCLPGI)
+        LD A,(CL_PAGE)
         CP 80H
         JP NC,.BAD                  ; A missing owner cannot describe a vector.
         LD L,A
         LD H,0
-        LD DE,SRTCLOWN
+        LD DE,CL_OWNER
         ADD HL,DE
         LD A,(HL)                   ; The owner byte is class index plus one.
         CP 1
@@ -77,21 +77,21 @@ VEC_CHK:
         CP 42H                      ; Class 64 is the two-page upper limit.
         JP NC,.BAD
         DEC A
-        LD (SRTCLIDX),A
+        LD (CL_CLASS),A
         CALL SLAB_GET                ; Recover the physical page base.
-        LD A,(SRTCLIDX)              ; Rebuild the exact class extent from its owner.
+        LD A,(CL_CLASS)              ; Rebuild the exact class extent from its owner.
         INC A
         LD L,A
         LD H,0
         ADD HL,HL
         ADD HL,HL
-        LD (SRTCLSZ),HL
-        LD HL,(SRTCLOBJ)
-        LD DE,(SRTCLPGA)
+        LD (CL_SIZE),HL
+        LD HL,(CL_OBJ)
+        LD DE,(CL_PBASE)
         OR A
         SBC HL,DE                   ; Compute the within-page object offset.
         JP C,.BAD
-        LD A,(SRTCLIDX)
+        LD A,(CL_CLASS)
         CP 40H
         JR Z,.TWO_PAGE              ; The 260-byte class may start only at zero.
         LD A,H
@@ -103,7 +103,7 @@ VEC_CHK:
         OR L
         JP NZ,.BAD                  ; The two-page class has one legal object start.
 .LEN_CHK:
-        LD HL,(SRTCLOBJ)            ; Read the length only after ownership is proven.
+        LD HL,(CL_OBJ)              ; Read the length only after ownership is proven.
         LD A,(HL)
         LD (VEC_LEN),A
         CP 65
@@ -113,14 +113,14 @@ VEC_CHK:
         ADD HL,HL                  ; Calculate count times four.
         ADD HL,HL
         INC HL                     ; Include the length byte in the used extent.
-        LD DE,(SRTCLSZ)
+        LD DE,(CL_SIZE)
         OR A
         SBC HL,DE
         JR C,.GOOD                  ; A smaller used extent fits the class block.
         JR Z,.GOOD                  ; An exact class-sized vector is also valid.
         JP .BAD                     ; A larger used extent is malformed.
 .GOOD:
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         OR A
         RET
 .BAD:

@@ -5,68 +5,68 @@
 ; stack keeps every child as an exact four-byte root until the final count is
 ; known. The existing vector allocator then owns the managed block.
 
-; Parse one datum vector after SRTDRHS has consumed its opening parenthesis.
-SRTDRVEC:
-        CALL SRTDFOPN              ; Reserve a frame and save the value cursor.
-        JP C,SRTERROR              ; Reject a nesting depth beyond the frame band.
-        LD HL,(SRTDRFP)            ; Select the new frame's state byte.
+; Parse one datum vector after .HASH has consumed its opening parenthesis.
+DR_VEC:
+        CALL DR_OPEN               ; Reserve a frame and save the value cursor.
+        JP C,ERROR                 ; Reject a nesting depth beyond the frame band.
+        LD HL,(DR_FRAME)           ; Select the new frame's state byte.
         INC HL
         INC HL
         LD A,4                     ; State four identifies a vector frame.
         LD (HL),A
-SRTDVLP:
-        CALL SRTDRSK               ; Skip whitespace and comments before a child.
-        JP C,SRTERROR              ; EOF before ')' is malformed vector data.
-        CALL SRTDRPK               ; Leave ')' in lookahead until the close path.
+.LOOP:
+        CALL DR_SKIP               ; Skip whitespace and comments before a child.
+        JP C,ERROR                 ; EOF before ')' is malformed vector data.
+        CALL DR_PEEK               ; Leave ')' in lookahead until the close path.
         CP ')'                     ; A close supplies the exact vector count.
-        JP Z,SRTDVCLS
-        CALL SRTDRVAL              ; Nested lists, strings and vectors are values.
+        JP Z,.CLOSE
+        CALL DR_DATUM              ; Nested lists, strings and vectors are values.
         LD B,A                     ; Preserve the child's tag across the status test.
-        JP C,SRTERROR              ; A malformed child aborts the whole vector.
-        LD A,(SRTDEOF)              ; EOF cannot be a vector element.
+        JP C,ERROR                 ; A malformed child aborts the whole vector.
+        LD A,(DR_EOF)               ; EOF cannot be a vector element.
         OR A
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         LD A,B                     ; Recover the child tag for the root push.
-        CALL SRTDRPUT              ; Keep the child rooted until vector allocation.
-        JP C,SRTERROR
-        CALL SRTDVADD              ; Count it in this vector's frame.
-        JP C,SRTERROR
-        JP SRTDVLP                 ; Continue until the closing delimiter.
+        CALL DR_PUSH               ; Keep the child rooted until vector allocation.
+        JP C,ERROR
+        CALL .COUNT                ; Count it in this vector's frame.
+        JP C,ERROR
+        JP .LOOP                   ; Continue until the closing delimiter.
 
 ; Increment the current vector count, rejecting the 65th element.
-SRTDVADD:
-        LD HL,(SRTDRFP)            ; Frame byte three contains the child count.
+.COUNT:
+        LD HL,(DR_FRAME)           ; Frame byte three contains the child count.
         INC HL
         INC HL
         INC HL
         LD A,(HL)
         INC A
         CP 65                      ; Datum vectors are bounded at 64 elements.
-        JP NC,SRTERROR
+        JP NC,ERROR
         LD (HL),A
         OR A                       ; A successful count update clears carry.
         RET
 
 ; Consume ')' and allocate/copy the completed vector.
-SRTDVCLS:
-        CALL SRTDRTK               ; Consume the closing delimiter.
-        LD HL,(SRTDRFP)            ; Read the vector's exact child count.
+.CLOSE:
+        CALL DR_TAKE               ; Consume the closing delimiter.
+        LD HL,(DR_FRAME)           ; Read the vector's exact child count.
         INC HL
         INC HL
         INC HL
         LD A,(HL)
         LD (VEC_REQ),A             ; The common allocator takes a byte count.
-        LD HL,(SRTDRFP)            ; Save the value-stack base across allocation.
+        LD HL,(DR_FRAME)           ; Save the value-stack base across allocation.
         LD E,(HL)
         INC HL
         LD D,(HL)
-        LD (SRTDVBS),DE
+        LD (.BASE),DE
         CALL VEC_NEW                ; Collection sees the reader stack as roots.
-        JP C,SRTERROR              ; Preserve the checked managed-capacity error.
-        CALL SRTDVPUT              ; Copy every tagged child without allocation.
+        JP C,ERROR                 ; Preserve the checked managed-capacity error.
+        CALL .COPY                 ; Copy every tagged child without allocation.
         LD A,(VEC_REQ)             ; Remove the child records from the reader stack.
         LD B,A
-        LD HL,(SRTDRVP)
+        LD HL,(DR_SP)
         LD E,A
         LD D,0
         SLA E                      ; Four bytes are stored for each child.
@@ -75,28 +75,28 @@ SRTDVCLS:
         RL D
         OR A
         SBC HL,DE
-        LD (SRTDRVP),HL
-        LD A,(SRTDRVC)
+        LD (DR_SP),HL
+        LD A,(DR_SLOTS)
         SUB B
-        LD (SRTDRVC),A
-        CALL SRTDFCLS              ; Return to the enclosing list/vector frame.
+        LD (DR_SLOTS),A
+        CALL DR_CLOSE              ; Return to the enclosing list/vector frame.
         LD A,7                     ; The completed object has the vector tag.
         LD HL,(VEC_OBJ)            ; Return the managed vector block address.
         OR A                       ; Clear carry after a complete vector.
         RET
 
 ; Copy reader-stack values into the allocated vector's four-byte elements.
-SRTDVPUT:
+.COPY:
         LD HL,(VEC_OBJ)            ; Publish the count before copying elements.
         LD A,(VEC_REQ)
         LD (HL),A
         INC HL
         LD (VEC_PTR),HL
-        LD HL,(SRTDVBS)            ; Source begins at this frame's saved cursor.
+        LD HL,(.BASE)              ; Source begins at this frame's saved cursor.
         LD (VEC_PKTP),HL
         LD A,(VEC_REQ)
         LD (VEC_LEFT),A
-SRTDVPLP:
+.NEXT:
         LD A,(VEC_LEFT)             ; Stop after all children have been copied.
         OR A
         RET Z
@@ -126,6 +126,6 @@ SRTDVPLP:
         LD A,(VEC_LEFT)
         DEC A
         LD (VEC_LEFT),A
-        JP SRTDVPLP
+        JP .NEXT
 
-SRTDVBS:   DW 0                    ; Value-stack base saved for vector copying.
+.BASE:   DW 0                      ; Value-stack base saved for vector copying.

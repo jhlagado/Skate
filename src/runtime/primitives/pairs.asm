@@ -4,25 +4,25 @@
 
 ; Read one packet argument and leave its value in A:HL.
 PKT_ONE:
-        LD A,(SRTARGC)
+        LD A,(ARG_CNT)
         CP 1
-        JP NZ,SRTERROR
-        LD HL,SRTARGPK
+        JP NZ,ERROR
+        LD HL,ARG_PKT
         JP PKT_VAL
 
 ; Build one pair from the two packet values.
 PKT_CONS:
-        LD A,(SRTARGC)
+        LD A,(ARG_CNT)
         CP 2
-        JP NZ,SRTERROR
-        LD HL,SRTARGPK
+        JP NZ,ERROR
+        LD HL,ARG_PKT
         CALL PKT_VAL
-        LD (SRTQCAR),HL
-        LD (SRTQCTAG),A
-        LD HL,SRTARGPK+4
+        LD (QT_CAR),HL
+        LD (QT_CTAG),A
+        LD HL,ARG_PKT+4
         CALL PKT_VAL
-        LD (SRTQCDR),HL
-        LD (SRTQDTAG),A
+        LD (QT_CDR),HL
+        LD (QT_DTAG),A
         CALL PAIR_NEW
         PUSH IX
         RET
@@ -31,13 +31,13 @@ PKT_CONS:
 PKT_CAR:
         CALL PKT_ONE
         CALL PAIR_CAR
-        JP C,SRTERROR
+        JP C,ERROR
         PUSH IX
         RET
 PKT_CDR:
         CALL PKT_ONE
         CALL PAIR_CDR
-        JP C,SRTERROR
+        JP C,ERROR
         PUSH IX
         RET
 
@@ -67,29 +67,29 @@ PKT_NULL:
 
 ; list consumes the bounded packet in source order and folds it into pairs.
 PKT_LIST:
-        LD A,(SRTARGC)             ; The packet holds zero through eight values.
+        LD A,(ARG_CNT)             ; The packet holds zero through eight values.
         CP 9                       ; Eight is the full packet, not an overflow.
-        JP NC,SRTERROR             ; Reject only a count beyond the eight records.
-        LD (SRTLCN),A
-        LD HL,SRTARGPK
-        LD (SRTLCP),HL
+        JP NC,ERROR                ; Reject only a count beyond the eight records.
+        LD (PKT_LEFT),A
+        LD HL,ARG_PKT
+        LD (PKT_PTR),HL
 .LOOP:
-        LD A,(SRTLCN)
+        LD A,(PKT_LEFT)
         OR A
         JR Z,.DONE
-        LD HL,(SRTLCP)
+        LD HL,(PKT_PTR)
         CALL PKT_VAL
         CALL QT_PUSH
-        LD HL,(SRTLCP)
+        LD HL,(PKT_PTR)
         LD DE,4
         ADD HL,DE
-        LD (SRTLCP),HL
-        LD A,(SRTLCN)
+        LD (PKT_PTR),HL
+        LD A,(PKT_LEFT)
         DEC A
-        LD (SRTLCN),A
+        LD (PKT_LEFT),A
         JR .LOOP
 .DONE:
-        LD A,(SRTARGC)
+        LD A,(ARG_CNT)
         LD B,0
         CALL QT_FOLD
         PUSH IX
@@ -97,24 +97,24 @@ PKT_LIST:
 
 ; eq? compares both logical tags and payloads.
 PKT_EQ:
-        LD A,(SRTARGC)
+        LD A,(ARG_CNT)
         CP 2
-        JP NZ,SRTERROR
-        LD HL,SRTARGPK
+        JP NZ,ERROR
+        LD HL,ARG_PKT
         CALL PKT_VAL
-        LD (SRTQCAR),HL
-        LD (SRTQCTAG),A
-        LD HL,SRTARGPK+4
+        LD (QT_CAR),HL
+        LD (QT_CTAG),A
+        LD HL,ARG_PKT+4
         CALL PKT_VAL
-        LD (SRTQCDR),HL
-        LD (SRTQDTAG),A
-        LD A,(SRTQCTAG)
+        LD (QT_CDR),HL
+        LD (QT_DTAG),A
+        LD A,(QT_CTAG)
         LD B,A
-        LD A,(SRTQDTAG)
+        LD A,(QT_DTAG)
         CP B
         JP NZ,PAIR_NO
-        LD HL,(SRTQCAR)
-        LD DE,(SRTQCDR)
+        LD HL,(QT_CAR)
+        LD DE,(QT_CDR)
         OR A
         SBC HL,DE
         JP NZ,PAIR_NO

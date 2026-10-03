@@ -4,21 +4,21 @@
 
 ; HL is the object. A=1 marks a root; A=0 classifies a queued allocation.
 VEC_HOOK:
-        LD (SRTCLOBJ),HL           ; Keep the queued object across bitmap probes.
+        LD (CL_OBJ),HL             ; Keep the queued object across bitmap probes.
         CP 1
         JP Z,VEC_MARK
         CALL STR_TEST               ; Strings are leaves and need no traversal.
         RET NZ
         CALL VEC_TEST               ; Test the vector marker on this allocation.
         JR Z,.CLOSURE
-        LD HL,(SRTCLOBJ)            ; Restore the object after VEC_TEST's map lookup.
+        LD HL,(CL_OBJ)              ; Restore the object after VEC_TEST's map lookup.
         CALL VEC_SCAN               ; Trace every tagged vector element.
         RET
 .CLOSURE:
         JP GC_CAPS                  ; The remaining managed allocation is a closure.
 ; Dispatch the vector primitive range selected by PRIM_RUN.
 VEC_PRIM:
-        LD A,(SRTPID)              ; Read the zero-based vector operation kind.
+        LD A,(PRIM_ID)             ; Read the zero-based vector operation kind.
         CP 39                      ; Kind thirty-nine is vector?.
         JP Z,.IS_VEC               ; Test one value without raising a type error.
         CP 40                      ; Kind forty is make-vector.
@@ -48,23 +48,23 @@ VEC_PRIM:
         RET                        ; Deliver the predicate result.
 ; Allocate a vector whose length is an exact integer and whose fill is optional.
 .MAKE:
-        LD A,(SRTARGC)             ; make-vector accepts one or two arguments.
+        LD A,(ARG_CNT)             ; make-vector accepts one or two arguments.
         CP 1                       ; Reject a missing length argument.
-        JP C,SRTERROR
+        JP C,ERROR
         CP 3                       ; Reject more than one optional fill value.
-        JP NC,SRTERROR
-        LD HL,SRTARGPK             ; Read the requested vector length.
+        JP NC,ERROR
+        LD HL,ARG_PKT              ; Read the requested vector length.
         CALL PKT_VAL               ; Return its payload in HL and tag in A.
         CP 3                       ; The length must be an exact integer.
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         LD A,H                     ; Only a small nonnegative count is supported.
         OR A
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         LD A,L                     ; Preserve the checked count for allocation.
         CP 65                      ; Class 64 is the largest supported vector.
-        JP NC,SRTERROR
+        JP NC,ERROR
         LD (VEC_REQ),A             ; Preserve the request across a collection retry.
-        LD A,(SRTARGC)             ; Select the supplied fill only for arity two.
+        LD A,(ARG_CNT)             ; Select the supplied fill only for arity two.
         CP 2
         JR Z,.FILL_ARG             ; Read and retain the optional fill value.
         XOR A                      ; The default fill is the canonical false value.
@@ -73,13 +73,13 @@ VEC_PRIM:
         LD (VEC_VAL),HL
         JR .ALLOC                  ; Allocate and initialise every element.
 .FILL_ARG:
-        LD HL,SRTARGPK+4           ; The optional fill is the second packet value.
+        LD HL,ARG_PKT+4            ; The optional fill is the second packet value.
         CALL PKT_VAL               ; Recover its complete tagged representation.
         LD (VEC_VAL),HL            ; Keep the payload across class allocation.
         LD (VEC_TAG),A             ; Keep the logical tag beside the payload.
 .ALLOC:
         CALL VEC_NEW                ; The packet remains an exact root during GC.
-        JP C,SRTERROR              ; Report exhaustion after one collection retry.
+        JP C,ERROR                 ; Report exhaustion after one collection retry.
         CALL VEC_FILL              ; Fill the newly allocated vector block.
         LD A,7                      ; Tag seven identifies a vector value.
         LD HL,(VEC_OBJ)             ; Return the managed object address.
@@ -87,12 +87,12 @@ VEC_PRIM:
         RET                        ; Deliver the new vector value.
 ; Construct a vector from the current packet, limited by its eight records.
 .VECTOR:
-        LD A,(SRTARGC)             ; The short constructor accepts zero through eight.
+        LD A,(ARG_CNT)             ; The short constructor accepts zero through eight.
         CP 9                       ; Eight values fill the packet exactly.
-        JP NC,SRTERROR             ; Only a malformed caller can exceed the packet.
+        JP NC,ERROR                ; Only a malformed caller can exceed the packet.
         LD (VEC_REQ),A             ; Preserve the request across a collection retry.
         CALL VEC_NEW                ; Packet values remain roots across a retry.
-        JP C,SRTERROR
+        JP C,ERROR
         CALL VEC_COPY              ; Copy each payload and tag into the block.
         LD A,7                      ; Tag seven identifies a vector value.
         LD HL,(VEC_OBJ)             ; Return the managed object address.
@@ -100,11 +100,11 @@ VEC_PRIM:
         RET                        ; Deliver the new vector value.
 ; Return the length of one checked vector.
 .LENGTH:
-        LD A,(SRTARGC)             ; vector-length accepts exactly one argument.
+        LD A,(ARG_CNT)             ; vector-length accepts exactly one argument.
         CP 1
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         CALL .ARG                   ; Validate the first packet value.
-        JP C,SRTERROR
+        JP C,ERROR
         LD A,(VEC_LEN)             ; Widen its count into an exact integer value.
         LD L,A
         LD H,0
@@ -113,15 +113,15 @@ VEC_PRIM:
         RET                        ; Deliver the length result.
 ; Read a vector element after validating the vector and its exact index.
 .REF:
-        LD A,(SRTARGC)             ; vector-ref requires a vector and an index.
+        LD A,(ARG_CNT)             ; vector-ref requires a vector and an index.
         CP 2
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         CALL .ARG                   ; Validate and retain the vector object.
-        JP C,SRTERROR
-        LD HL,SRTARGPK+4           ; The second packet value is the index.
+        JP C,ERROR
+        LD HL,ARG_PKT+4            ; The second packet value is the index.
         CALL PKT_VAL               ; Return its payload and tag.
         CALL VEC_IDX               ; Check its range against the vector length.
-        JP C,SRTERROR
+        JP C,ERROR
         CALL VEC_ADDR              ; Compute the selected element address.
         LD E,(HL)                  ; Recover the element payload low byte.
         INC HL
@@ -134,16 +134,16 @@ VEC_PRIM:
         RET                        ; Deliver the selected element.
 ; Replace a vector element and return the unspecified value.
 .SET:
-        LD A,(SRTARGC)             ; vector-set! requires vector, index and value.
+        LD A,(ARG_CNT)             ; vector-set! requires vector, index and value.
         CP 3
-        JP NZ,SRTERROR
+        JP NZ,ERROR
         CALL .ARG                   ; Validate and retain the vector object.
-        JP C,SRTERROR
-        LD HL,SRTARGPK+4           ; The second packet value is the index.
+        JP C,ERROR
+        LD HL,ARG_PKT+4            ; The second packet value is the index.
         CALL PKT_VAL               ; Return its payload and tag.
         CALL VEC_IDX               ; Check its range against the vector length.
-        JP C,SRTERROR
-        LD HL,SRTARGPK+8           ; The third packet value is the replacement.
+        JP C,ERROR
+        LD HL,ARG_PKT+8            ; The third packet value is the replacement.
         CALL PKT_VAL               ; Recover its complete tagged representation.
         LD (VEC_VAL),HL            ; Reuse fill scratch for the replacement payload.
         LD (VEC_TAG),A             ; Reuse fill scratch for the replacement tag.
@@ -165,7 +165,7 @@ VEC_PRIM:
         RET                        ; Deliver the mutation result.
 ; Validate the vector in the first packet record and retain its length.
 .ARG:
-        LD HL,SRTARGPK             ; The vector is always the first argument.
+        LD HL,ARG_PKT              ; The vector is always the first argument.
         CALL PKT_VAL               ; Return its payload and tag.
         CP 7                       ; Only the vector tag can select this helper.
         JR NZ,VEC_BAD              ; A non-vector is an operation type error.
@@ -244,7 +244,7 @@ VEC_COPY:
         LD (HL),A
         INC HL
         LD (VEC_PTR),HL            ; Keep the destination cursor in scratch.
-        LD HL,SRTARGPK             ; The packet begins at its first value record.
+        LD HL,ARG_PKT              ; The packet begins at its first value record.
         LD (VEC_PKTP),HL           ; Keep the source cursor beside the destination.
         LD A,(VEC_REQ)             ; Copy the bounded argument count.
         LD (VEC_LEFT),A

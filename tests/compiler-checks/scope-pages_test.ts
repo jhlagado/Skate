@@ -46,12 +46,12 @@ function runStartup(
   patchFailure: boolean,
 ) {
   const cpu = assembled.runtime.cpu;
-  writeWord(memory, assembled.address("SRTIMGE"), imageEnd);
+  writeWord(memory, assembled.address("RT_LIMIT"), imageEnd);
   const transfer = assembled.address("RT_CALL");
   memory[transfer] = 0xc3;
   writeWord(memory, transfer + 1, 0xef00);
   if (patchFailure) {
-    const failure = assembled.address("SRTERROR");
+    const failure = assembled.address("ERROR");
     memory[failure] = 0xc3;
     writeWord(memory, failure + 1, 0xef00);
   }
@@ -105,7 +105,7 @@ Deno.test("small images use the pages below the legacy map origin", async () => 
 
 Deno.test("a lower managed ceiling shortens the high extent without overlap", async () => {
   const { memory, call, assembled } = await pageRuntime();
-  writeWord(memory, assembled.address("SRTHEAPP"), 0xad00);
+  writeWord(memory, assembled.address("HEAP_LIM"), 0xad00);
   const lower = call("PAGE_INI", 0x8e01);
   assert.equal(lower.carry, 0);
   assert.equal(readWord(memory, assembled.address("PAGE_HI")), 2);
@@ -116,7 +116,7 @@ Deno.test("a lower managed ceiling shortens the high extent without overlap", as
   assert.equal(first.hl, 0xab00);
   assert.equal(call("PAGE_NEW", 1).carry, 1);
 
-  writeWord(memory, assembled.address("SRTHEAPP"), 0xc000);
+  writeWord(memory, assembled.address("HEAP_LIM"), 0xc000);
   const full = call("PAGE_INI", 0x8e01);
   assert.equal(full.carry, 0);
   assert.equal(readWord(memory, assembled.address("PAGE_HI")), 21);
@@ -130,10 +130,10 @@ Deno.test("runtime startup publishes page readiness and rejects an invalid image
   assert.equal(memory[assembled.address("PAGE_OK")], 1);
   assert.equal(readWord(memory, assembled.address("PAGE_ORG")), 0x8f00);
   assert.equal(readWord(memory, assembled.address("PAGE_CAP")), 20);
-  assert.equal(memory[assembled.address("SRTPSLBN")], 1);
+  assert.equal(memory[assembled.address("PS_COUNT")], 1);
   assert.ok(
     [...memory.slice(
-      assembled.address("SRTBMB"),
+      assembled.address("BND_MAP"),
       assembled.address("RT_HIGH"),
     )].every((value) => value === 0),
     "binding-start bitmap was not cleared at startup",

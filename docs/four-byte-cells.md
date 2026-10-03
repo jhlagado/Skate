@@ -175,7 +175,7 @@ metadata into the cell at once.
   keep their current formats unless a proof shows that they are value cells.
 * The source-level primitives, generated calling convention, rest and `apply`
   packet format, ports and `call/ec` behaviour remain unchanged. In
-  particular, `SRTARGPK` is not silently reinterpreted as a cell: it keeps its
+  particular, `ARG_PKT` is not silently reinterpreted as a cell: it keeps its
   existing tag and publication-byte positions until a separately reviewed ABI
   migration provides adapters.
 

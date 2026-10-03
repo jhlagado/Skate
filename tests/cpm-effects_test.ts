@@ -78,9 +78,9 @@ async function effectMachine() {
 Deno.test("CP/M direct output preserves bytes except its reserved FF selector", async () => {
   const machine = await effectMachine();
   for (const byte of [0x00, 0x09, 0x1b, 0x7e]) {
-    assert.deepEqual(machine.call("SEPUT", byte), { value: 0, carry: 0 });
+    assert.deepEqual(machine.call("FX_PUT", byte), { value: 0, carry: 0 });
   }
-  assert.deepEqual(machine.call("SEPUT", 0xff), { value: 1, carry: 1 });
+  assert.deepEqual(machine.call("FX_PUT", 0xff), { value: 1, carry: 1 });
   assert.deepEqual(machine.output, [0x00, 0x09, 0x1b, 0x7e]);
   assert.deepEqual(machine.calls, [6, 6, 6, 6]);
   assert.deepEqual(machine.argumentsSeen, [
@@ -96,10 +96,10 @@ Deno.test("CP/M direct input carries available control bytes and reports empty a
   machine.input.push(0x1b, 0x7e, 0xff);
   assert.deepEqual(
     [
-      machine.call("SEGET").value,
-      machine.call("SEGET").value,
-      machine.call("SEGET").value,
-      machine.call("SEGET").value,
+      machine.call("FX_GET").value,
+      machine.call("FX_GET").value,
+      machine.call("FX_GET").value,
+      machine.call("FX_GET").value,
     ],
     [0x1b, 0x7e, 0xff, 0x00],
   );

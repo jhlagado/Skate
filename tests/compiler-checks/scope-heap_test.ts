@@ -50,10 +50,10 @@ async function collectorFixture(rootCount: number) {
   const slabCount = 17;
   assert.ok(slabBase + slabCount * 0x100 <= 0x8000, "slabs overlap roots");
   const recordsPerSlab = PAIRS_PER_SLAB;
-  memory[assembled.address("SRTPSLBN")] = slabCount;
+  memory[assembled.address("PS_COUNT")] = slabCount;
   for (let slab = 0; slab < slabCount; slab++) {
     const base = slabBase + slab * 0x100;
-    const descriptor = assembled.address("SRTPSLT") + slab * 3;
+    const descriptor = assembled.address("PS_TABLE") + slab * 3;
     memory[descriptor] = base >>> 8;
     memory[descriptor + 1] = 0;
     memory[descriptor + 2] = 0xff;
@@ -78,8 +78,8 @@ async function collectorFixture(rootCount: number) {
     memory[root + 2] = 0; // Clear extension byte.
     memory[root + 3] = 0x11;
   }
-  writeWord(memory, assembled.address("SRTGBASE"), 0x8000);
-  writeWord(memory, assembled.address("SRTGEND"), 0x8000 + rootCount * 4);
+  writeWord(memory, assembled.address("G_BASE"), 0x8000);
+  writeWord(memory, assembled.address("G_END"), 0x8000 + rootCount * 4);
   const parent = recordAddress(rootCount - 1);
   const child = recordAddress(rootCount);
   writeWord(memory, parent + CDR_PAYLOAD, child);
@@ -187,7 +187,7 @@ Deno.test("pair allocator follows free chains across a second slab", async () =>
     firstBase + (PAIRS_PER_SLAB - 1) * PAIR_BYTES,
   );
   assert.equal(records[PAIRS_PER_SLAB], secondBase);
-  assert.equal(memory[assembled.address("SRTPSLBN")], 2);
+  assert.equal(memory[assembled.address("PS_COUNT")], 2);
 
   assert.equal(call("GC").carry, 0);
   const reused = call("PAIR_GET");
@@ -210,7 +210,7 @@ Deno.test("constructor roots survive collection and retain both inputs", async (
   assert.equal(callLabel(assembled, "PAIR_INI", memory, cpu).carry, 0);
   // Keep the fixture at one slab so the constructor exercises collection
   // instead of growing into the second managed extent.
-  memory[assembled.address("SRTPSLIM")] = 1;
+  memory[assembled.address("PS_LIMIT")] = 1;
 
   const records: number[] = [];
   for (let index = 0; index < PAIRS_PER_SLAB; index++) {
@@ -225,10 +225,10 @@ Deno.test("constructor roots survive collection and retain both inputs", async (
   memory[root + CAR_META] = 0x43;
   memory[root + CDR_META] = 0;
 
-  writeWord(memory, assembled.address("SRTQCAR"), root);
-  writeWord(memory, assembled.address("SRTQCDR"), 5678);
-  memory[assembled.address("SRTQCTAG")] = 1;
-  memory[assembled.address("SRTQDTAG")] = 3;
+  writeWord(memory, assembled.address("QT_CAR"), root);
+  writeWord(memory, assembled.address("QT_CDR"), 5678);
+  memory[assembled.address("QT_CTAG")] = 1;
+  memory[assembled.address("QT_DTAG")] = 3;
 
   const result = callLabel(assembled, "PAIR_NEW", memory, cpu);
   assert.equal(result.carry, 0);
@@ -245,10 +245,10 @@ Deno.test("constructor roots survive collection and retain both inputs", async (
   for (let index = 0; index < PAIRS_PER_SLAB - 2; index++) {
     assert.equal(callLabel(assembled, "PAIR_GET", memory, cpu).carry, 0);
   }
-  writeWord(memory, assembled.address("SRTQCAR"), 1234);
-  writeWord(memory, assembled.address("SRTQCDR"), 5678);
-  memory[assembled.address("SRTQCTAG")] = 3;
-  memory[assembled.address("SRTQDTAG")] = 3;
+  writeWord(memory, assembled.address("QT_CAR"), 1234);
+  writeWord(memory, assembled.address("QT_CDR"), 5678);
+  memory[assembled.address("QT_CTAG")] = 3;
+  memory[assembled.address("QT_DTAG")] = 3;
   const scalarPair = callLabel(assembled, "PAIR_NEW", memory, cpu).payload;
   assert.equal(memory[scalarPair] | memory[scalarPair + 1] << 8, 1234);
   assert.equal(
@@ -266,8 +266,8 @@ Deno.test("overflow fallback restores its slab cursor after child tracing", asyn
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
-  const table = assembled.address("SRTPSLT");
-  memory[assembled.address("SRTPSLBN")] = 2;
+  const table = assembled.address("PS_TABLE");
+  memory[assembled.address("PS_COUNT")] = 2;
   const first = (assembled.image.end + 0xff) & 0xff00;
   const second = first + 0x100;
   assert.ok(second + 0x100 <= 0x8000, "slabs overlap root workspace");
@@ -304,16 +304,16 @@ Deno.test("pair slabs return pages and reuse released descriptors", async () => 
   const before = memory[assembled.address("PAGE_CAP")] |
     memory[assembled.address("PAGE_CAP") + 1] << 8;
   assert.equal(callLabel(assembled, "PAIR_INI", memory, cpu).carry, 0);
-  const firstPairPage = memory[assembled.address("SRTPSLT")] << 8;
+  const firstPairPage = memory[assembled.address("PS_TABLE")] << 8;
   assert.equal(callLabel(assembled, "GC", memory, cpu).carry, 0);
   const after = memory[assembled.address("PAGE_CAP")] |
     memory[assembled.address("PAGE_CAP") + 1] << 8;
   assert.equal(after, before, "empty slab did not return its page");
-  assert.equal(memory[assembled.address("SRTPSLT")], 0);
+  assert.equal(memory[assembled.address("PS_TABLE")], 0);
   const reused = callLabel(assembled, "PAIR_GET", memory, cpu);
   assert.equal(reused.carry, 0);
   assert.equal(reused.payload, firstPairPage);
-  assert.equal(memory[assembled.address("SRTPSLBN")], 1);
+  assert.equal(memory[assembled.address("PS_COUNT")], 1);
 });
 
 Deno.test("pair slabs reuse a middle descriptor without losing live slabs", async () => {
@@ -343,7 +343,7 @@ Deno.test("pair slabs reuse a middle descriptor without losing live slabs", asyn
     memory[middleBase + slot * PAIR_BYTES + CAR_META] = 0;
   }
   assert.equal(callLabel(assembled, "PAIR_GC", memory, cpu).carry, 0);
-  const descriptor = assembled.address("SRTPSLT");
+  const descriptor = assembled.address("PS_TABLE");
   assert.notEqual(memory[descriptor], 0);
   assert.equal(memory[descriptor + 3], 0);
   assert.notEqual(memory[descriptor + 6], 0);
@@ -389,6 +389,6 @@ Deno.test("pair descriptor table reaches beyond thirty-two slabs", async () => {
     const result = callLabel(assembled, "PAIR_GET", memory, cpu);
     assert.equal(result.carry, 0, `allocation ${index} failed`);
   }
-  assert.equal(memory[assembled.address("SRTPSLBN")], 33);
+  assert.equal(memory[assembled.address("PS_COUNT")], 33);
   assert.equal(callLabel(assembled, "PAIR_GET", memory, cpu).carry, 0);
 });

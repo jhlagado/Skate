@@ -20,7 +20,7 @@ SCPIMG:
         ADD HL,DE                  ; HL now names the staged image end.
         CALL SCABS                 ; Convert the staged end to a COM address.
         LD (SCTARG),HL             ; Keep the absolute end across the patch address.
-        LD HL,0100H+SRTIMGE         ; Locate the runtime's image-end field.
+        LD HL,0100H+RT_LIMIT        ; Locate the runtime's image-end field.
         LD DE,(SCTARG)             ; Recover the absolute published image end.
         CALL SINKPTCH               ; Patch the runtime image end through the sink.
         CALL SCPROOTS               ; Publish exact global and literal root bounds.
@@ -36,7 +36,7 @@ SCPIMG:
 SCPROOTS:
         LD HL,(SCGRBASE)
         LD (SCTARG),HL
-        LD HL,0100H+SRTGBASE
+        LD HL,0100H+G_BASE
         CALL SCPROOTW
         LD HL,(SCGCOUNT)           ; Four bytes for each allocated global.
         ADD HL,HL
@@ -44,12 +44,12 @@ SCPROOTS:
         LD DE,(SCGRBASE)
         ADD HL,DE
         LD (SCTARG),HL
-        LD HL,0100H+SRTGEND
+        LD HL,0100H+G_END
         CALL SCPROOTW
         LD HL,(SCLBASE)            ; Static let slots precede the caches.
         CALL SCABS
         LD (SCTARG),HL
-        LD HL,0100H+SRTQROOT
+        LD HL,0100H+QT_START
         CALL SCPROOTW
         LD A,(SCQCNT)
         LD L,A
@@ -60,7 +60,7 @@ SCPROOTS:
         ADD HL,DE
         CALL SCABS
         LD (SCTARG),HL
-        LD HL,0100H+SRTQENDR
+        LD HL,0100H+QT_STOP
         CALL SCPROOTW
         RET
 
@@ -74,13 +74,13 @@ SCPSTAB:
         LD HL,(SCSYMBAS)
         CALL SCABS
         LD (SCTARG),HL
-        LD HL,0100H+SRTSYMB
+        LD HL,0100H+DR_DIR
         CALL SCPROOTW
         RET C
         LD HL,(SCSYMEND)
         CALL SCABS
         LD (SCTARG),HL
-        LD HL,0100H+SRTSYME
+        LD HL,0100H+DR_DEND
         JP SCPROOTW
 
 ; Resolve every four-byte slot fixup recorded by the emitter.
