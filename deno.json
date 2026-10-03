@@ -25,6 +25,7 @@
     "test:cpm:large": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych tools/compiler-checks/scope-large-cpm-proof.mjs --count=6200",
     "test:cpm:full-image": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych tools/compiler-checks/scope-large-cpm-proof.mjs --fill-image=65280 --expect-image=65280 --expect-com=65280",
     "measure": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services tools/compiler-checks/scope-budget.ts",
+    "census:registers": "deno run --allow-read=. tools/compiler-checks/register-census.ts .",
     "census": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services tools/compiler-checks/module-census.ts",
     "fmt": "deno fmt",
     "lint": "deno lint",
