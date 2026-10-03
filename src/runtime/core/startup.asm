@@ -124,6 +124,15 @@ SRTCALL:
         CALL 0000H                ; The compiler patches the generated entry.
         JP SRTEXIT                ; Close open files, then warm-start CP/M.
 
+; Leave the program after flushing and closing any open output file, so text
+; written without close-port survives a normal exit.  Only the I/O module can
+; have opened one, and it is present whenever SRTFOACT is set.
+SRTEXIT:
+        LD A,(SRTFOACT)
+        OR A
+        CALL NZ,SRTFCLW            ; A close failure cannot be reported here.
+        JP 0                       ; Return to CP/M through the warm start.
+
 ; Refuse to run when CP/M's BDOS starts below SRTMTOP.  Nothing above the loaded image
 ; has been written yet, so CP/M can still print the message and warm start.
 SRTTPAL:

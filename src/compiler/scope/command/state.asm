@@ -68,6 +68,8 @@ SCOPID:     DW 0                   ; Operator identity for generic applications.
 SCPNADR:    DW 0                   ; Spelling address while classifying a primitive.
 SCPNLEN:    DB 0                   ; Spelling length used by SCPMATCH.
 SCPCOUNT:   DB 0                   ; Number of fixed procedure descriptors.
+SCRTLEN:    DW 0                   ; Runtime bytes loaded, chosen by SCSCAN.
+SCGRBASE:   DW 0                   ; Address of the global area after the runtime.
 SCPDEPTH:   DB 0                   ; Number of open procedure metadata records.
 SCCURPR:    DB 0FFH                ; Active procedure, or FFH at package level.
 SCTMPPR:    DB 0                   ; Descriptor being compiled.

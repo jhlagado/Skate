@@ -96,6 +96,27 @@ SRTPLOUT:
         POP HL                     ; Restore the remaining numeric value.
         RET                        ; Return for the next decimal place.
 
+; Clear active reader state before the common fatal runtime-error message.
+SRTDCLN:
+        LD A,(SRTDRACT)              ; Inactive runtime errors need no cleanup.
+        OR A
+        RET Z
+        XOR A                        ; Drop temporary roots and parser cursors.
+        LD (SRTDRACT),A
+        LD (SRTDRRC),A
+        LD (SRTDRFC),A
+        LD (SRTDRVC),A
+        LD (SRTDRACC),A
+        LD (SRTDRFP),A
+        LD (SRTDRFP+1),A
+        LD HL,SRTDRVB                ; Failed construction cannot retain stack roots.
+        LD (SRTDRVP),HL
+        LD (SRTDRLEN),A
+        LD (SRTDSLN),A
+        LD (SRTINST),A           ; A failed read cannot retain a stale byte.
+        LD (SRTINCR),A               ; Reset the physical line-ending state too.
+        RET
+
 SRTUNBD:
         LD DE,SRTUNBT        ; Explain the unbound reference.
         JP SRTOUT             ; Share the provider error-output path.
@@ -104,7 +125,9 @@ SRTERROR:
         LD DE,SRTERRTX          ; Explain an arithmetic or runtime failure.
 SRTOUT:
         PUSH DE                    ; Keep the message while files are closed.
-        CALL SRTFCLW               ; Flush and close an open output file; ignore status.
+        LD A,(SRTFOACT)            ; Only the I/O module can have opened a file.
+        OR A
+        CALL NZ,SRTFCLW            ; Flush and close it; ignore status.
         POP DE                     ; Recover the diagnostic message.
 SRTOUTL:
         LD A,(DE)                  ; Read the next diagnostic byte.

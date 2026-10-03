@@ -9,6 +9,7 @@
 %INCLUDE "numeric/state.asm"
 %INCLUDE "binary16/state.asm"
 %INCLUDE "storage/page/state.asm"
+%INCLUDE "io-state.asm"
 %INCLUDE "core.asm"
 %INCLUDE "storage/stack-slots.asm"
 %INCLUDE "storage/managed.asm"
@@ -16,13 +17,7 @@
 %INCLUDE "primitives.asm"
 %INCLUDE "ports.asm"
 %INCLUDE "cpm-ports.asm"
-%INCLUDE "../compiler/cpm-transport.asm"
-%INCLUDE "file-ports.asm"
-%INCLUDE "datum-reader.asm"
-%INCLUDE "datum-strings.asm"
 %INCLUDE "datum-symbols.asm"
-%INCLUDE "datum-lists.asm"
-%INCLUDE "datum-vectors.asm"
 %INCLUDE "storage/pair-management.asm"
 %INCLUDE "storage/pairs.asm"
 %INCLUDE "output.asm"
@@ -40,3 +35,16 @@
 %INCLUDE "apply.asm"
 %INCLUDE "escape.asm"
 %INCLUDE "quoted.asm"
+; Optional modules, in load order: a program loads the core alone, the core
+; and the standard procedures, or everything.  Nothing in the core may read
+; their state or reach their code except through a primitive the compiler's
+; pre-scan detects.
+%INCLUDE "primitives/standard.asm"
+%INCLUDE "io-start.asm"
+%INCLUDE "../compiler/cpm-transport.asm"
+%INCLUDE "file-ports.asm"
+%INCLUDE "datum-reader.asm"
+%INCLUDE "datum-strings.asm"
+%INCLUDE "datum-symbol-tokens.asm"
+%INCLUDE "datum-lists.asm"
+%INCLUDE "datum-vectors.asm"

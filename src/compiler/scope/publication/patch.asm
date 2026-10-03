@@ -2,7 +2,9 @@
 ; Entry points: SCPSLOTS, SCFLIT and SCFPATCH.
 ; Patch the runtime's CALL operand with the absolute generated-code address.
 SCPENTRY:
-        LD HL,SCCODE               ; Generated code starts after the runtime image.
+        LD HL,(SCGRBASE)           ; Generated code starts after the global area.
+        LD DE,SCGRSZ
+        ADD HL,DE
         CALL SCABS                 ; Convert its staged address to COM address space.
         LD (SCTARG),HL             ; Retain the absolute entry address.
         LD HL,0100H+SRTCLP         ; SRTCLP points at the runtime CALL operand.
@@ -32,14 +34,14 @@ SCPIMG:
 ; The first range is the used part of the fixed global area; the second runs
 ; from the static let slots after the code through the quoted-list caches.
 SCPROOTS:
-        LD HL,SCGREG
+        LD HL,(SCGRBASE)
         LD (SCTARG),HL
         LD HL,0100H+SRTGBASE
         CALL SCPROOTW
         LD HL,(SCGCOUNT)           ; Four bytes for each allocated global.
         ADD HL,HL
         ADD HL,HL
-        LD DE,SCGREG
+        LD DE,(SCGRBASE)
         ADD HL,DE
         LD (SCTARG),HL
         LD HL,0100H+SRTGEND

@@ -258,6 +258,22 @@ how those calls are encoded.
   address after the data and a compact encoding of the list, decoded into
   pairs on first use by `quoted.asm`. The encoding is described there.
 
+## Runtime variants
+
+The runtime image is ordered core first, then the standard-procedure module
+(`primitives/standard.asm`, from `STD_MOD`) and then the I/O module (the
+datum reader, file ports and CP/M transport, from `IO_START`). Before
+compiling, `SCSCAN` reads the whole source once. A standard procedure or
+`case` selects the core and standard module; `read` or a file opener selects
+the whole runtime; anything else loads the core alone. The compiler loads
+that prefix of `SKATE.RT` and places the global area and code straight after
+it, so a program pays only for the modules it can reach.
+
+The core must never read a module's state or run its code except through a
+primitive the scan detects. Variables the core shares with the I/O module
+live in `io-state.asm`; the exit and error paths close a file only when
+`SRTFOACT` says one is open.
+
 ## Following common features
 
 ### Arithmetic

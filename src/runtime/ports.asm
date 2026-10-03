@@ -209,10 +209,16 @@ SRTCLOSP:
         CP 0CH                     ; Standard ports cannot be closed.
         JP NZ,SRTERROR
 SRTCLWOU:
+        LD A,(SRTFOACT)            ; Closing a closed port does nothing, and
+        OR A                       ; only the I/O module opens files.
+        JP Z,SRTUNSP
         CALL SRTFCLW
         JP C,SRTERROR
         JP SRTUNSP
 SRTCLWIN:
+        LD A,(SRTFIACT)
+        OR A
+        JP Z,SRTUNSP
         CALL SRTFCLR
         JP C,SRTERROR
         JP SRTUNSP

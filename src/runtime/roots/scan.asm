@@ -92,6 +92,15 @@ SRTNPOP1:
         LD B,1
         JP SRTNPOPB
 
+; Mark the active reader value stack during a collection.
+SRTDRRT:
+        LD A,(SRTDRACT)             ; An inactive reader has no temporary roots.
+        OR A
+        RET Z
+        LD HL,SRTDRVB               ; Reader values occupy four-byte records.
+        LD DE,(SRTDRVP)             ; The live cursor bounds the root range.
+        JP SRTRAW
+
 ; Scan the active generated-operand records.
 SRTNRRT:
         LD A,(SRTNCT)

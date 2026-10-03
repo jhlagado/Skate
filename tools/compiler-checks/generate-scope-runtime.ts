@@ -37,6 +37,8 @@ function offset(name: string): number {
 const values = [
   "; Runtime addresses used by the scope-control compiler.",
   `SRTLEN EQU ${payload.length}`,
+  `SRTLCORE EQU ${offset("STD_MOD")}`,
+  `SRTLSTD EQU ${offset("IO_START")}`,
   `SRTCLP EQU ${offset("SRTCALL") + 1}`,
   `SRTLDA EQU ${address("SRTLOAD")}`,
   `SRTQGET EQU ${address("SRTQGET")}`,

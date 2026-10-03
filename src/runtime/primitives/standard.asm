@@ -14,6 +14,10 @@
 
 STD_BASE EQU 60                   ; First primitive kind handled here.
 
+; The first byte of the optional standard-procedure module.  The generator
+; records this address as the length of the core runtime.
+STD_MOD:
+
 ; Jump to the routine for primitive kind A (60 or above).
 STD_DISP:
         SUB STD_BASE

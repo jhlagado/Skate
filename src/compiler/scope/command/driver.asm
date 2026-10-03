@@ -18,9 +18,9 @@
 ; addresses are logical COM addresses and are streamed to the ASO stage.
 SCSTAGE EQU 05800H               ; Replay window leaves a full page after compiler code.
 SCIMG   EQU SCSTAGE              ; Window storage is reused by the materializer.
-SCGREG  EQU 0100H+SRTLEN         ; Global slots follow the runtime image.
 SCGRSZ  EQU 1024                 ; Four bytes for each of the 256 global slots.
-SCCODE  EQU SCGREG+SCGRSZ        ; Generated program follows the global area.
+; The global area follows the loaded runtime, whose length SCSCAN selects, so
+; its base is SCGRBASE rather than a constant; generated code follows it.
 SCEND   EQU 09980H               ; Replay window ends before compiler tables.
 SCRECFR  EQU 0CE00H               ; Nested binding-list replay frames.
 SCRECFSZ EQU 16                   ; One saved replay scope record.
@@ -187,8 +187,19 @@ SCSETPR:
         LD (SCPCET),A             ; The cursor begins below the 17-bit endpoint.
         CALL SINKOPEN              ; Open SPL before the runtime and source streams.
         RET C                      ; A failed spool setup is a setup failure.
+        LD IX,SCNCTX              ; Select the symbol interner context.
+        CALL IINIT                ; Validate and clear its descriptor counters.
+        RET C                     ; A bad high-memory table is a setup failure.
+        LD IX,SCSCTX              ; Select the string context required by RINIT.
+        CALL IINIT                ; The current language rejects string events.
+        RET C                     ; Preserve the reader's ordinary setup diagnostic.
+        CALL SCSCAN                ; Choose how much of the runtime to load.
         CALL SCLOADRT              ; Stream the provider into the ASO image records.
         RET C                      ; A short, missing or unreadable provider is fatal.
+        LD HL,(SCRTLEN)            ; The global area follows the loaded runtime.
+        LD DE,0100H
+        ADD HL,DE
+        LD (SCGRBASE),HL
         LD BC,SCGRSZ               ; Reserve the global area before any code, so
 SCGRZERO:                          ; every global address is a constant.
         XOR A                      ; Unused and ordinary slots stay unbound.
@@ -198,13 +209,58 @@ SCGRZERO:                          ; every global address is a constant.
         LD A,B
         OR C
         JR NZ,SCGRZERO
-        LD IX,SCNCTX              ; Select the symbol interner context.
-        CALL IINIT                ; Validate and clear its descriptor counters.
-        RET C                     ; A bad high-memory table is a setup failure.
-        LD IX,SCSCTX              ; Select the string context required by RINIT.
-        CALL IINIT                ; The current language rejects string events.
-        RET C                     ; Preserve the reader's ordinary setup diagnostic.
         RET                       ; Return with all compiler state initialised.
+
+; Read the whole source once before compiling it and choose the runtime prefix
+; to load: the core alone, the core and the standard-procedure module, or the
+; whole runtime with the I/O module.  A standard procedure or case needs the
+; standard module; read or a file opener needs the I/O module, which follows
+; it.  A source or syntax error selects the whole runtime; the compiling pass
+; reports the error.  Symbols interned here are found again by that pass.
+SCSCAN:
+        LD HL,SRTLCORE
+        LD (SCRTLEN),HL
+        LD HL,005CH                ; The same source the compiling pass opens.
+        CALL CSOPEN
+        JR C,.FULL
+        LD HL,CSBYTE
+        LD DE,SCNCTX
+        LD BC,SCSCTX
+        CALL RINIT
+        JR C,.FULL
+.NEXT:
+        CALL RNEXT
+        JR C,.FULL
+        OR A
+        JR Z,.DONE                 ; The end of the source.
+        CP 5
+        JR NZ,.NEXT                ; Only symbols name procedures.
+        LD (SCID),HL
+        LD DE,SCCASE               ; case compares with CASE_EQ.
+        CALL SCMATCH
+        JR Z,.STD
+        CALL SCPLOOK               ; A is the primitive kind, or zero.
+        CP 61
+        JR NC,.STD                 ; Kinds 61 and up are standard procedures.
+        CP 54
+        JR Z,.FULL                 ; read.
+        CP 56
+        JR C,.NEXT
+        CP 60
+        JR NC,.NEXT
+.FULL:
+        LD HL,SRTLEN               ; Kinds 56..59 open files.
+        LD (SCRTLEN),HL
+        JR .DONE
+.STD:
+        LD HL,SRTLSTD
+        LD (SCRTLEN),HL
+        JR .NEXT                   ; Keep looking for the I/O module.
+.DONE:
+        CALL CSCLOSE               ; The compiling pass opens the source again.
+        LD HL,SCERRTXT             ; A scan error must not select a diagnostic.
+        LD (SCERRPTR),HL
+        RET
 
 ; Open the source FCB, attach the production reader and consume top-level forms.
 SCPACK:

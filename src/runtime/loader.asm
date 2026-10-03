@@ -8,7 +8,7 @@ SCLOADRT:
         LD HL,SCRTFNM              ; Select the fixed provider file on the active drive.
         CALL CTOPENR               ; Open it through the binary transport adapter.
         JR C,SCRTFAIL              ; A missing or unreadable provider aborts setup.
-        LD BC,SRTLEN               ; Copy the exact ATOM image extent, excluding padding.
+        LD BC,(SCRTLEN)            ; Copy the selected prefix of the runtime image.
 SCRTREAD:
         LD A,B                     ; Test the high byte of the remaining count first.
         OR C                       ; Zero means every provider byte has been copied.

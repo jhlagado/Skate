@@ -5,15 +5,6 @@
 ; eight-byte frame: state, value count and the stack cursor at its opening.
 ; Completed lists are folded through the eight-byte pair allocator.
 
-; Mark the active reader value stack during a collection.
-SRTDRRT:
-        LD A,(SRTDRACT)             ; An inactive reader has no temporary roots.
-        OR A
-        RET Z
-        LD HL,SRTDRVB               ; Reader values occupy four-byte records.
-        LD DE,(SRTDRVP)             ; The live cursor bounds the root range.
-        JP SRTRAW
-
 ; Push a parsed value onto the reader's bounded construction stack.
 SRTDRPUT:
         LD (SRTDRTAG),A             ; Save the tag while checking the cursor.

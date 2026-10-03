@@ -46,7 +46,7 @@ SCFENDNC:
         OR L
         JP NZ,SCCAP                ; A nonempty extent follows the endpoint.
 SCFENDOK:
-        LD HL,SCGREG               ; Globals occupy the fixed area after the runtime.
+        LD HL,(SCGRBASE)           ; Globals occupy the area after the runtime.
         LD (SCGBASE),HL
         LD BC,(SCGCOUNT)          ; One four-byte record is reserved per global.
         XOR A                     ; Global slot zero is the first primitive mark.
@@ -75,7 +75,7 @@ SCGINIT:
         ADD HL,HL
         ADD HL,HL
         PUSH DE
-        LD DE,SCGREG
+        LD DE,(SCGRBASE)
         ADD HL,DE
         POP DE
         PUSH HL

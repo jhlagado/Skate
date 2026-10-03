@@ -121,6 +121,13 @@ bounds. Exceeding one stops compilation with `CAP` (a few report
 | Pending elements while building one quoted datum | 64 |
 | Distinct symbols | 320 |
 
+The runtime is loaded in one of three sizes: the core alone, the core and the
+standard procedures, or everything with the datum reader and file ports. The
+compiler reads the source once before compiling it and loads the smallest
+runtime that covers the procedures it names, so a program that uses neither
+`read` nor files is about 3.6 KB smaller and one that also uses no standard
+procedure or `case` about 5.4 KB smaller.
+
 Globals occupy a fixed 1 KB area straight after the runtime, so a reference
 to a global needs no fixup. Every symbol inside quoted data still takes one.
 The programs in `examples/workloads` are measured against these limits by

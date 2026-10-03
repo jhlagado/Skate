@@ -154,6 +154,4 @@ SRTDSRET:
         OR A                          ; Clear carry for the ordinary datum path.
         RET
 
-SRTDSLN: DB 0                        ; Decoded byte count, bounded at 255.
-SRTDSTMP: DB 0                       ; One-byte scratch for append and escapes.
 SRTDSB: DS 255                       ; Raw decoded bytes before managed allocation.
