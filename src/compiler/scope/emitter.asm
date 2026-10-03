@@ -297,7 +297,7 @@ SCFIX:
         LD DE,320                 ; Leave one guarded region before the tables.
         OR A                      ; Clear carry before the capacity comparison.
         SBC HL,DE                 ; A carry-free result means the table is full.
-        JP NC,SCFIXERR            ; Refuse a fixup that would overwrite the table.
+        JP NC,SCCAP               ; A full fixup table is a capacity error.
         LD HL,(SCFIXN)            ; Recover the record index after the comparison.
         LD DE,SCFIXTAB             ; Locate the next free fixup record.
         ADD HL,HL                 ; Multiply the record index by two.
@@ -320,7 +320,7 @@ SCFIX:
         RET                       ; Return to the code emitter.
 
 SCFIXERR:
-        SCF                       ; The parser reports a bounded fixup failure.
+        SCF                       ; Branch patch failures are terminal.
         RET                       ; No staged output is published on this path.
 
 ; Record the staged operand word of a tail-call wrapper for later rewriting.

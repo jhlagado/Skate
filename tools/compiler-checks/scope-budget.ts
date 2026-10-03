@@ -24,6 +24,8 @@ export interface ScopeControlBudget {
   readonly globalSlotCapacity: number;
   readonly localSlotCapacity: number;
   readonly fixupCapacity: number;
+  readonly procedureCapacity: number;
+  readonly procedureDepth: number;
   readonly symbolCapacity: number;
 }
 
@@ -84,6 +86,8 @@ export function measureScopeControlBudget(
     globalSlotCapacity: 256,
     localSlotCapacity: 128,
     fixupCapacity: 320,
+    procedureCapacity: address("SCPMAXN"),
+    procedureDepth: address("SCPDMAX"),
     symbolCapacity: 320,
   };
 }
@@ -108,6 +112,7 @@ export function renderScopeControlBudget(
       hex(budget.stagedOutputGuard)
     }`,
     `Tables: ${budget.globalSlotCapacity} globals, ${budget.localSlotCapacity} simultaneous locals, ${budget.fixupCapacity} slot fixups, ${budget.symbolCapacity} symbol entries`,
+    `Procedures: ${budget.procedureCapacity} per program, ${budget.procedureDepth} open at once`,
     "",
   ].join("\n");
 }

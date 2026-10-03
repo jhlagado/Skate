@@ -1,5 +1,5 @@
 ; Scope publication fixups for globals, locals, literals and procedures.
-; Entry points: SCPSLOTS, SCFGLOB, SCFLIT, SCFPROC and SCFPATCH.
+; Entry points: SCPSLOTS, SCFGLOB, SCFLIT and SCFPATCH.
 ; Patch the runtime's CALL operand with the absolute generated-code address.
 SCPENTRY:
         LD HL,SCCODE               ; Generated code starts after the runtime image.
@@ -103,8 +103,6 @@ SCFIXLP:
         JP Z,SCFQCH                ; Cache targets use the dedicated cache base.
         CP 3                       ; Kind three names a copied literal record.
         JR Z,SCFLIT                ; Literal targets are staged after descriptors.
-        CP 2                       ; Kind two names the serialized procedure table.
-        JR Z,SCFPROC               ; Procedure fixups point at descriptor records.
         OR A                       ; Zero selects the global base.
         JR Z,SCFGLOB               ; A local fixup uses the local base instead.
         LD DE,(SCLBASE)            ; Select the local data region.
@@ -124,26 +122,6 @@ SCFLIT:
         EX DE,HL                   ; SCABS converts the staged header address.
         CALL SCABS
         JR SCFPATCH                ; Share the placeholder write with descriptors.
-SCFPROC:
-        LD A,(SCFSLOT)             ; The fixup stores a descriptor table index.
-        LD L,A                     ; Widen the index before multiplying by forty-four.
-        LD H,0
-        LD D,H                     ; Keep the original index for the final add.
-        LD E,L
-        ADD HL,HL                  ; Two bytes per descriptor index.
-        ADD HL,HL                  ; Four bytes per descriptor index.
-        PUSH HL                    ; Keep four bytes per descriptor index.
-        ADD HL,HL                  ; Eight bytes per descriptor index.
-        PUSH HL                    ; Keep eight bytes per descriptor index.
-        ADD HL,HL                  ; Sixteen bytes per descriptor index.
-        ADD HL,HL                  ; Thirty-two bytes per descriptor index.
-        POP DE                     ; Recover eight bytes per descriptor index.
-        ADD HL,DE                  ; Forty bytes per descriptor index.
-        POP DE                     ; Recover four bytes per descriptor index.
-        ADD HL,DE                  ; Complete the forty-four-byte offset.
-        LD DE,(SCPBASE)            ; Add the staged descriptor table base.
-        ADD HL,DE                  ; Locate the descriptor's staged record.
-        CALL SCABS                 ; Convert its staged address to COM space.
 SCFPATCH:
         LD (SCTARG),HL             ; Retain the absolute target for the write.
         LD HL,(SCFPTR)             ; Recover the staged placeholder address.

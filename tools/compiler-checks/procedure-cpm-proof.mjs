@@ -631,6 +631,19 @@ const regressionCases = [
     "(define (g) (let loop ((i 0)) (if (< i 3) (loop (+ i 1)) i)) 7) (g)",
     "7",
   ],
+  // Descriptors are emitted as procedures close, so a program is no longer
+  // limited to the 21 records the compiler once held until the end.
+  [
+    "PROCS40.SK8",
+    Array.from(
+      { length: 40 },
+      (_, index) =>
+        index === 0
+          ? "(define (p0) 0)"
+          : `(define (p${index}) (+ (p${index - 1}) 1))`,
+    ).join(" ") + " (p39)",
+    "39",
+  ],
   [
     "TAILLAM.SK8",
     "(define (k) 1) (define (f c) (if c (k) (lambda () (k))) 2) (f #t)",

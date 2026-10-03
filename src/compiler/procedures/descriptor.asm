@@ -15,13 +15,16 @@ SCMAKE:
         LD A,21H                   ; LD HL,nn loads the immutable descriptor address.
         CALL SINKBYTE                ; Append the load opcode.
         RET C                      ; Preserve staged-output exhaustion.
-        LD HL,(SCPC)               ; The following word is the descriptor fixup.
-        LD A,2                     ; Fixup kind two selects the procedure table.
-        LD (SCFKIND),A             ; Keep the kind with this patch record.
-        LD A,(SCTMPPR)             ; The slot byte carries the descriptor index.
-        LD (SCFSLOT),A             ; Publication resolves it after SCFIN.
-        CALL SCFIX                 ; Record the absolute descriptor patch site.
-        RET C                      ; Preserve a full fixup table.
+        LD A,(SCTMPPR)             ; SCPFIN patches this placeholder when the
+        LD L,A                     ; descriptor is emitted; until then the
+        LD H,0                     ; descriptor's address entry holds the site.
+        ADD HL,HL
+        LD DE,SCPADDR
+        ADD HL,DE
+        LD DE,(SCPC)               ; The following word is the descriptor pointer.
+        LD (HL),E
+        INC HL
+        LD (HL),D
         XOR A                      ; The descriptor address is unknown for now.
         CALL SINKBYTE                ; Append its low placeholder byte.
         RET C                      ; Preserve staged-output exhaustion.
@@ -33,13 +36,27 @@ SCMAKE:
         RET                        ; The generated value is in the runtime registers.
 
 ; Reserve and clear one procedure metadata record.
+; A record exists only while its procedure is open.  SCPFIN emits the
+; finished descriptor into the image and releases the record, so the count
+; of procedures is bounded by SCPMAXN and their nesting by SCPDMAX.
 SCPNEW:
-        LD A,(SCPCOUNT)            ; The metadata overlay has room for 21 records.
-        CP 21                      ; Keep the table below the reader string area.
+        LD A,(SCPDEPTH)            ; Open records form a stack by nesting depth.
+        CP SCPDMAX
+        JP NC,SCCAP                ; Reject nesting beyond the record stack.
+        LD A,(SCPCOUNT)            ; Indices name procedures in fixups.
+        CP SCPMAXN
         JP NC,SCCAP                ; Reject another procedure before writing memory.
         LD B,A                     ; Return the old count as the descriptor index.
         INC A                      ; Publish the additional descriptor.
         LD (SCPCOUNT),A            ; The index is stable for all later fixups.
+        LD A,(SCPDEPTH)            ; Push the index onto the open-record stack.
+        LD E,A
+        LD D,0
+        LD HL,SCPOPEN
+        ADD HL,DE
+        LD (HL),B
+        INC A
+        LD (SCPDEPTH),A
         LD A,B                     ; Keep the descriptor index for the caller.
         LD (SCTMPPR),A             ; SCPREC uses this state to find its record.
         CALL SCPREC                ; HL points at the twelve-byte metadata record.
@@ -56,10 +73,29 @@ SCPNEWLP:
         OR A                       ; Clear carry without changing the index byte.
         RET                        ; The caller opens the new local scope.
 
-; HL = metadata record for SCTMPPR.
+; HL = metadata record for SCTMPPR, which must be an open procedure.  BC is
+; preserved.  A closed index selects a scratch record so a stray lookup can
+; never write over an open procedure's metadata.
 SCPREC:
-        LD A,(SCTMPPR)             ; Widen the descriptor index to a word.
-        LD L,A                     ; The high byte is zero for the fixed table.
+        PUSH BC
+        LD A,(SCTMPPR)
+        LD C,A                     ; C is the index being searched for.
+        LD A,(SCPDEPTH)
+        LD B,A                     ; B counts the open records still to test.
+SCPRFIND:
+        LD A,B
+        OR A
+        JR Z,SCPRSCR               ; No open record carries this index.
+        DEC B                      ; Search from the innermost record outward.
+        LD L,B
+        LD H,0
+        LD DE,SCPOPEN
+        ADD HL,DE
+        LD A,(HL)
+        CP C
+        JR NZ,SCPRFIND
+        LD L,B                     ; B is the record's position in the stack.
+        POP BC
         LD H,0                     ; Each record carries two 128-bit masks.
         LD D,H                     ; Keep the original index for the final add.
         LD E,L
@@ -74,9 +110,15 @@ SCPREC:
         ADD HL,DE                  ; Forty times the index.
         POP DE                     ; Recover four times the index.
         ADD HL,DE                  ; Complete the forty-four-byte offset.
-        LD DE,SCPMETA              ; Add the metadata overlay base address.
+        LD DE,SCPRECS              ; Add the open-record base address.
         ADD HL,DE                  ; Return the record address in HL.
+        LD A,(SCTMPPR)             ; Callers may rely on A holding the index.
         RET                        ; The caller selects the field offset.
+SCPRSCR:
+        POP BC
+        LD HL,SCPSCR
+        LD A,(SCTMPPR)
+        RET
 
 ; Save the formal slot number in the current descriptor and advance its arity.
 SCPARAM:
@@ -114,7 +156,9 @@ SCPERR:
         SCF                        ; The procedure arity is a checked capacity.
         RET                        ; The lambda error path restores its scope.
 
-; Save the body address and patch the jump over the just-emitted procedure.
+; Save the body address, emit the finished descriptor after the body, release
+; its record and patch the jump over both.  Byte three, the shared slot
+; extent, is only known at the end of the program; SCPDESC patches it.
 SCPFIN:
         LD HL,(SCPBODY)            ; Recover the staged body start recorded above.
         CALL SCABS                 ; Convert the body pointer to a COM address.
@@ -124,7 +168,47 @@ SCPFIN:
         LD (HL),E                  ; Store the low body byte.
         INC HL                     ; Advance to the high body byte.
         LD (HL),D                  ; Complete the body address field.
-        LD HL,(SCPC)               ; The skip target follows the body return byte.
+        INC HL
+        LD C,(HL)                  ; C is the published arity byte.
+        INC HL
+        XOR A
+        LD (HL),A                  ; Byte three is patched once the extent is known.
+        LD A,(SCTMPPR)             ; Record where this descriptor is emitted.
+        LD L,A
+        LD H,0
+        LD DE,SCPARITY
+        ADD HL,DE
+        LD (HL),C                  ; The final patch rewrites arity with the extent.
+        LD L,A
+        LD H,0
+        ADD HL,HL
+        LD DE,SCPADDR
+        ADD HL,DE
+        LD E,(HL)                  ; DE is the closure-creation placeholder.
+        INC HL
+        LD D,(HL)
+        PUSH DE
+        LD DE,(SCPC)               ; The descriptor starts at the current cursor.
+        LD (HL),D                  ; Keep its address for the final extent patch.
+        DEC HL
+        LD (HL),E
+        POP HL
+        CALL SINKPTCH              ; Point the closure creation at the descriptor.
+        RET C
+        CALL SCPREC
+        LD B,SCPRSZ                ; Emit the record bytes as the descriptor.
+SCPFEMIT:
+        LD A,(HL)
+        PUSH HL
+        CALL SINKBYTE               ; SINKBYTE preserves BC.
+        POP HL
+        RET C                      ; Preserve staged-output exhaustion.
+        INC HL
+        DJNZ SCPFEMIT
+        LD A,(SCPDEPTH)            ; Release the innermost open record.
+        DEC A
+        LD (SCPDEPTH),A
+        LD HL,(SCPC)               ; The skip target follows the descriptor.
         CALL SCABS                 ; Convert the target to a COM address.
         EX DE,HL                   ; SCPATCH takes the patch address in HL.
         LD HL,(SCSKIP)             ; Recover the jump-over patch location.

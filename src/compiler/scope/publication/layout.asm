@@ -34,25 +34,6 @@ SCFIN:
         EX DE,HL                   ; DE now contains the cache-cell extent.
         POP HL                     ; Restore the global/local slot extent.
         ADD HL,DE
-        PUSH HL                    ; Keep the slot extent while sizing descriptors.
-        LD A,(SCPCOUNT)            ; Every procedure uses one fixed metadata record.
-        LD L,A                     ; Widen the descriptor count to a word.
-        LD H,0
-        LD D,H                     ; Keep the original count for the final add.
-        LD E,L
-        ADD HL,HL                  ; Two times the descriptor count.
-        ADD HL,HL                  ; Four times the descriptor count.
-        PUSH HL                    ; Keep four times the count.
-        ADD HL,HL                  ; Eight times the descriptor count.
-        PUSH HL                    ; Keep eight times the count.
-        ADD HL,HL                  ; Sixteen times the descriptor count.
-        ADD HL,HL                  ; Thirty-two times the descriptor count.
-        POP DE                     ; Recover eight times the count.
-        ADD HL,DE                  ; Forty times the descriptor count.
-        POP DE                     ; Recover four times the count.
-        ADD HL,DE                  ; Complete forty-four bytes per descriptor.
-        POP DE                     ; Recover the global and local slot extent.
-        ADD HL,DE                  ; Add descriptor records to the final image.
         POP DE                     ; DE is the generated-code end address.
         ADD HL,DE                  ; HL is the complete staged-image end estimate.
         JR NC,SCFENDNC             ; A nonwrapped endpoint is below $10000.
@@ -165,7 +146,7 @@ SCQCLOOP:
         JR SCQCLOOP
 SCQCDONE:
         LD HL,(SCPC)               ; The sink owns the logical output cursor.
-        CALL SCPDESC               ; Append absolute procedure descriptors.
+        CALL SCPDESC               ; Patch the slot extent into every descriptor.
         RET C                      ; Preserve the staged-image capacity guard.
         CALL SCLITDAT             ; Append copied symbol and string literals.
         RET C                      ; Preserve the staged-image capacity guard.

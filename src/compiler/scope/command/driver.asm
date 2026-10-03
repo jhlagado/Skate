@@ -34,7 +34,14 @@ SCNAMEDS EQU 0A480H              ; Symbol descriptor table for the reader.
 SCNAMEPL EQU 0A840H              ; 4,800-byte symbol spelling pool.
 SCSTRDS  EQU 0BB00H              ; String descriptor table required by RINIT.
 SCSTRPL  EQU 0BC00H              ; String pool leaves room below procedure tables.
-SCPMETA  EQU 0C000H              ; Procedure records stay outside reader tables.
+SCPMETA  EQU 0C000H              ; Procedure tables stay outside reader tables.
+SCPADDR  EQU 0C000H              ; Emitted descriptor address for each procedure.
+SCPARITY EQU 0C100H              ; Published arity byte for each procedure.
+SCPOPEN  EQU 0C180H              ; Procedure index of each open metadata record.
+SCPRECS  EQU 0C190H              ; Metadata records for the open procedures.
+SCPSCR   EQU 0C3CCH              ; Scratch record for a lookup of a closed index.
+SCPMAXN  EQU 128                 ; Procedures per program.
+SCPDMAX  EQU 13                  ; Procedures open at once (nesting depth).
 SCLOCOWN EQU 0C400H              ; Owner procedure for each reusable local slot.
 SCRECBND EQU 0C500H              ; Declaration flags for the active letrec range.
 SCPRSZ   EQU 44                  ; Body, arity, slots and two 128-bit masks.
@@ -115,6 +122,7 @@ SCSETUP:
         LD (SCIFTOP),A            ; No if form is being compiled.
         LD (SCBNDTOP),A          ; No pending let binding is retained.
         LD (SCPCOUNT),A           ; No procedure descriptor has been allocated.
+        LD (SCPDEPTH),A           ; No procedure metadata record is open.
         LD (SCTMPPR),A            ; No descriptor is awaiting its body address.
         LD (SCARGN),A             ; No generic application argument is pending.
         LD (SCAPMODE),A           ; No compact global-call marker is active.
