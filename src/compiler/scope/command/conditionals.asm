@@ -238,7 +238,7 @@ SCWHU:
 
 ; Compile (case key ((datum...) body...) ... (else body...)).  The key is
 ; evaluated once and held on the operator side stack; each datum is loaded and
-; compared by CASE_EQ, and every match in a clause branches to its body.  The
+; compared by STD_CASE, and every match in a clause branches to its body.  The
 ; key is popped before any body runs, so the stack is balanced for tail calls.
 SCCASEF:
         LD A,(SCTCTX)
@@ -249,7 +249,7 @@ SCCASEF:
         LD (SCTCTX),A
         CALL SCEXPR                ; The key.
         JP C,SCCNERR
-        LD HL,SRTOPUSH
+        LD HL,OPS_PUSH
         CALL SCCALL
         JP C,SCCNERR
 SCCSCLA:
@@ -268,7 +268,7 @@ SCCSCLA:
         LD DE,SCELSE
         CALL SCMATCH
         JP NZ,SCCNERR
-        LD HL,SRTOPPOP             ; Drop the key before the else body.
+        LD HL,OPS_POP              ; Drop the key before the else body.
         CALL SCCALL
         JP C,SCCNERR
         JP SCCNELSE
@@ -282,7 +282,7 @@ SCCSCLA:
         JR Z,.BODY
         CALL SCQDAT                ; Load the datum into A:HL.
         JP C,SCCNERR
-        LD HL,CASE_EQ
+        LD HL,STD_CASE
         CALL SCCALL
         JP C,SCCNERR
         CALL SCJZ                  ; A match enters this clause's body.
@@ -309,7 +309,7 @@ SCCSCLA:
         JP C,SCCNERR
         JR .MATCH
 .ENTER:
-        LD HL,SRTOPPOP             ; Drop the key before the body.
+        LD HL,OPS_POP              ; Drop the key before the body.
         CALL SCCALL
         JP C,SCCNERR
         CALL SCCNCTX
@@ -325,7 +325,7 @@ SCCSCLA:
         CALL SCIFPOP
         JP SCCSCLA
 SCCSEMP:
-        LD HL,SRTOPPOP             ; No clause matched and there is no else.
+        LD HL,OPS_POP              ; No clause matched and there is no else.
         CALL SCCALL
         JP C,SCCNERR
         JP SCCNEMP

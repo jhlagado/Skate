@@ -67,7 +67,7 @@ STR_COPY:
         CP 1
         JP NZ,SRTERROR
         LD HL,SRTARGPK
-        CALL SRTPVAL
+        CALL PKT_VAL
         CALL STR_ARG           ; Return the source pointer in HL.
         JP C,SRTERROR
         LD A,(HL)
@@ -93,14 +93,14 @@ STR_JOIN:
         CP 2
         JP NZ,SRTERROR
         LD HL,SRTARGPK
-        CALL SRTPVAL
+        CALL PKT_VAL
         CALL STR_ARG
         JP C,SRTERROR
         LD (STR_LHS),HL
         LD A,(HL)
         LD (STR_LLEN),A
         LD HL,SRTARGPK+4
-        CALL SRTPVAL
+        CALL PKT_VAL
         CALL STR_ARG
         JP C,SRTERROR
         LD (STR_RHS),HL

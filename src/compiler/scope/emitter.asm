@@ -96,7 +96,7 @@ SCPRIM:
 SCPRIMV:
         CALL SCPRIM                ; Leave the immediate value in A:HL.
         RET C
-        LD HL,SRTOPUSH             ; Preserve it while application arguments compile.
+        LD HL,OPS_PUSH             ; Preserve it while application arguments compile.
         JP SCCALL
 
 ; Emit #f or #t.  Booleans use the reserved FE00/FE01 scalar payloads so

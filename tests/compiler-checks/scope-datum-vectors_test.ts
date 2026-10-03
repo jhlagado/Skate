@@ -198,9 +198,9 @@ Deno.test("datum reader keeps vector elements live through a collection", async 
   // the same slab. Clearing that class's free-list head and making the page
   // allocator fail forces the final reader allocation through GC, where the
   // reader value stack must keep every pair child alive.
-  memory[assembled.address("SRTVREQ")] = 4;
-  const retained = call("SRTVACL");
-  const discarded = call("SRTVACL");
+  memory[assembled.address("VEC_REQ")] = 4;
+  const retained = call("VEC_NEW");
+  const discarded = call("VEC_NEW");
   assert.equal(retained.carry, 0);
   assert.equal(discarded.carry, 0);
   memory[retained.payload] = 0;
@@ -260,15 +260,15 @@ Deno.test("datum reader cleans up when vector allocation is exhausted", async ()
 
   // Select the twelve-byte class used by a two-element vector, then make both
   // page-allocation attempts fail. The reader must still leave no live frame,
-  // value-root or lookahead state when SRTVACL reports the capacity error.
-  memory[assembled.address("SRTVREQ")] = 2;
-  const size = assembled.address("SRTVSZ");
+  // value-root or lookahead state when VEC_NEW reports the capacity error.
+  memory[assembled.address("VEC_REQ")] = 2;
+  const size = assembled.address("VEC_SIZE");
   cpu.pc = size;
   cpu.sp = 0xdff0;
   writeWord(memory, cpu.sp, 0xef00);
   let sizeSteps = 0;
   while (cpu.pc !== 0xef00) {
-    assert.ok(++sizeSteps < 100_000, "SRTVSZ did not return");
+    assert.ok(++sizeSteps < 100_000, "VEC_SIZE did not return");
     assembled.runtime.step();
   }
   const classIndex = memory[assembled.address("SRTCLIDX")];

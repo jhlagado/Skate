@@ -11,8 +11,8 @@ Deno.test("vector overflow fallback preserves every rooted pair", async () => {
   const pairs: number[] = [];
 
   for (let index = 0; index < count; index++) {
-    memory[assembled.address("SRTVREQ")] = 1;
-    const vector = call("SRTVACL");
+    memory[assembled.address("VEC_REQ")] = 1;
+    const vector = call("VEC_NEW");
     assert.equal(vector.carry, 0);
     vectors.push(vector.payload);
 

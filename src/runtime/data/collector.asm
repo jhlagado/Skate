@@ -179,7 +179,7 @@ GC_DRAIN:
         POP HL
         JR Z,.PAIR
         XOR A
-        CALL SRTVHOOK
+        CALL VEC_HOOK
         JR GC_DRAIN
 .PAIR:
         LD A,1

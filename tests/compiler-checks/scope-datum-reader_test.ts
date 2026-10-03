@@ -61,13 +61,13 @@ function readChar(
   memory: Uint8Array,
   cpu: Awaited<ReturnType<typeof managedRuntime>>["cpu"],
 ) {
-  cpu.pc = assembled.address("SRTRDCH");
+  cpu.pc = assembled.address("PKT_GETC");
   cpu.sp = 0xdff2;
   cpu.ix = 0xef00;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
   while (cpu.pc !== 0xef00) {
-    assert.ok(++steps < 50_000_000, "SRTRDCH did not return");
+    assert.ok(++steps < 50_000_000, "PKT_GETC did not return");
     assembled.runtime.step();
   }
   assert.equal(cpu.sp, 0xdff2);

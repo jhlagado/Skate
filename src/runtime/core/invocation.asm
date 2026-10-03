@@ -64,7 +64,7 @@ PRIM_OP:
         LD L,E
         LD H,0FEH
         XOR A
-        CALL SRTOPUSH
+        CALL OPS_PUSH
         LD A,(PRIM_CNT)
         JP INV_OP
 
@@ -78,7 +78,7 @@ PRIM_TL:
         LD L,E
         LD H,0FEH
         XOR A
-        CALL SRTOPUSH
+        CALL OPS_PUSH
         LD A,(PRIM_CNT)
         JP INV_OPTL
 
@@ -111,7 +111,7 @@ G_OPSH:
         INC HL
         PUSH HL
         CALL G_FETCH
-        JP SRTOPUSH
+        JP OPS_PUSH
 
 ; Store A:HL in global SLOT, initializing it (G_STORE) or as a checked
 ; set! of a bound global (G_SET).  A:HL is returned unchanged by G_STORE.
@@ -180,7 +180,7 @@ INV_OP:
         LD (SRTCENVN),A
         LD A,B
         LD (SRTARGC),A            ; The count remains available to the packet pass.
-        CALL SRTPACKO             ; Pack arguments, then recover the saved value.
+        CALL PKT_PACK             ; Pack arguments, then recover the saved value.
         JP C,SRTERROR
         LD IX,(SRTRET)
         JR INV_GO                 ; Share primitive and closure dispatch.
@@ -278,7 +278,7 @@ INV_PRIM:
         LD (APPLY_IN),A
         LD IX,(SRTRET)             ; The inner primitive returns to the outer call.
 .DISPATCH:
-        JP SRTPRIM                 ; The generated continuation remains in IX.
+        JP PRIM_RUN                ; The generated continuation remains in IX.
 
 ; Validate a predefined primitive payload and retain its zero-based kind.
 INV_KIND:
@@ -319,7 +319,7 @@ INV_TLGO:
         LD A,(APPLY_TL)             ; Apply's primitive target keeps that frame intact.
         OR A
         JP NZ,.APPLY
-        JP SRTTPRIM                 ; Reuse the current epilogue after evaluation.
+        JP PRIM_TCO                 ; Reuse the current epilogue after evaluation.
 ; Apply's primitive tail path keeps the active frame on the native stack.
 .APPLY:
         CALL INV_KIND               ; Revalidate the primitive target.
@@ -327,7 +327,7 @@ INV_TLGO:
         CP 45                       ; A nested apply must keep spreading in tail mode.
         JR Z,.NESTED                ; Leave its frame epilogue for the next target.
         POP IX                      ; Remove the active frame epilogue before return.
-        JP SRTPRIM                  ; Evaluate the primitive through that epilogue.
+        JP PRIM_RUN                 ; Evaluate the primitive through that epilogue.
 .NESTED:
         JP APPLY                     ; Preserve tail mode while applying the next target.
 .CLOSURE:
@@ -408,7 +408,7 @@ INV_OPTL:
         LD (SRTCURS),A
         LD A,B
         LD (SRTARGC),A             ; The side-stack packet uses the generated count.
-        CALL SRTPACKO              ; Pack arguments, then recover the saved value.
+        CALL PKT_PACK              ; Pack arguments, then recover the saved value.
         JP C,SRTERROR
         JP INV_TLGO                ; Share closure and primitive tail handling.
 

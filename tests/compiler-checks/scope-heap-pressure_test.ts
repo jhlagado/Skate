@@ -155,7 +155,7 @@ Deno.test("packet cons preserves both scalar inputs through collection", async (
   const packet = assembled.address("SRTARGPK");
   const result = runEntry(
     assembled,
-    "SRTPCONS",
+    "PKT_CONS",
     memory,
     cpu,
     () => {

@@ -41,7 +41,7 @@ SRTFOPI:
         OR A
         JP NZ,SRTERROR
         LD HL,SRTARGPK
-        CALL SRTPVAL
+        CALL PKT_VAL
         CALL SRTFBLD
         JP C,SRTERROR
         LD HL,SRTFCBP
@@ -75,7 +75,7 @@ SRTFOWI:
         OR A
         JP NZ,SRTERROR
         LD HL,SRTARGPK
-        CALL SRTPVAL
+        CALL PKT_VAL
         CALL SRTFBLD
         JP C,SRTERROR
         LD A,(SRTFIACT)            ; Only an open input file can share the name.

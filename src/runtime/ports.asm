@@ -66,7 +66,7 @@ SRTINSET:
         CP 1                       ; One argument names a specific input port.
         JP NZ,SRTERROR
         LD HL,SRTARGPK
-        CALL SRTPVAL
+        CALL PKT_VAL
         CALL SRTVPORT
         JP C,SRTERROR
         XOR A                      ; Normalize the explicit form to no arguments.
@@ -148,7 +148,7 @@ SRTODEF:
 
 ; Select the output adapter for the port in the packet record at HL.
 SRTOSEL:
-        CALL SRTPVAL
+        CALL PKT_VAL
         CALL SRTVPORT
         JP C,SRTERROR
         LD A,L                     ; SRTVPORT left a token in F008H..F00CH.
@@ -169,30 +169,30 @@ SRTOSFIL:
 
 ; The three predicates validate without contacting CP/M.
 SRTPORTQ:
-        CALL SRTONE
+        CALL PKT_ONE
         CALL SRTVPORT
-        JP C,SRTBNO
-        JP SRTBYES
+        JP C,PKT_NO
+        JP PKT_YES
 SRTINPQ:
-        CALL SRTONE
+        CALL PKT_ONE
         CALL SRTVPORT
-        JP C,SRTBNO
+        JP C,PKT_NO
         LD A,L                     ; SRTVPORT left a token in F008H..F00CH.
         CP 8                       ; Standard input is an input port.
-        JP Z,SRTBYES
+        JP Z,PKT_YES
         CP 0BH                     ; So is the file input token.
-        JP Z,SRTBYES
-        JP SRTBNO
+        JP Z,PKT_YES
+        JP PKT_NO
 SRTOUTPQ:
-        CALL SRTONE
+        CALL PKT_ONE
         CALL SRTVPORT
-        JP C,SRTBNO
+        JP C,PKT_NO
         LD A,L                     ; SRTVPORT left a token in F008H..F00CH.
         CP 8                       ; Standard input is not an output port.
-        JP Z,SRTBNO
+        JP Z,PKT_NO
         CP 0BH                     ; Neither is the file input token.
-        JP Z,SRTBNO
-        JP SRTBYES                 ; Output, error and file output remain.
+        JP Z,PKT_NO
+        JP PKT_YES                 ; Output, error and file output remain.
 
 ; Standard records are owned by the runtime and cannot be closed. File records
 ; call the matching CP/M adapter and then become unavailable.
@@ -200,7 +200,7 @@ SRTCLOSP:
         LD A,(SRTARGC)
         CP 1
         JP NZ,SRTERROR
-        CALL SRTONE
+        CALL PKT_ONE
         CALL SRTVPORT
         JP C,SRTERROR
         LD A,L                     ; SRTVPORT left a token in F008H..F00CH.
@@ -211,17 +211,17 @@ SRTCLOSP:
 SRTCLWOU:
         LD A,(SRTFOACT)            ; Closing a closed port does nothing, and
         OR A                       ; only the I/O module opens files.
-        JP Z,SRTUNSP
+        JP Z,PKT_VOID
         CALL SRTFCLW
         JP C,SRTERROR
-        JP SRTUNSP
+        JP PKT_VOID
 SRTCLWIN:
         LD A,(SRTFIACT)
         OR A
-        JP Z,SRTUNSP
+        JP Z,PKT_VOID
         CALL SRTFCLR
         JP C,SRTERROR
-        JP SRTUNSP
+        JP PKT_VOID
 
 ; Dispatch the port primitive range.  Values 46 through 53 are the existing
 ; port kinds; file open kinds 55 through 58 are dispatched separately below.

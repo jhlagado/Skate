@@ -13,7 +13,7 @@ APPLY:
         CP 2
         JP C,SRTERROR              ; A missing list or procedure is malformed.
         LD HL,SRTARGPK             ; Record zero contains the target procedure.
-        CALL SRTPVAL
+        CALL PKT_VAL
         LD (APPLY_A),A             ; Keep its logical tag while the list is read.
         LD (APPLY_HL),HL          ; Keep its payload beside the tag.
         LD A,(SRTARGC)             ; The final packet record is the list argument.
@@ -24,7 +24,7 @@ APPLY:
         ADD HL,HL
         LD DE,SRTARGPK
         ADD HL,DE
-        CALL SRTPVAL               ; Recover the list tag and payload.
+        CALL PKT_VAL               ; Recover the list tag and payload.
         LD (SRTQATAG),A            ; The existing pair helpers use these fields.
         LD (SRTQAVAL),HL
         LD A,(SRTARGC)             ; Leading arguments exclude procedure and list.

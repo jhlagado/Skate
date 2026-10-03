@@ -236,7 +236,7 @@ SCSCAN:
         CP 5
         JR NZ,.NEXT                ; Only symbols name procedures.
         LD (SCID),HL
-        LD DE,SCCASE               ; case compares with CASE_EQ.
+        LD DE,SCCASE               ; case compares with STD_CASE.
         CALL SCMATCH
         JR Z,.STD
         CALL SCPLOOK               ; A is the primitive kind, or zero.

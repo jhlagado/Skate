@@ -27,7 +27,7 @@ STR_PRIM:
         CP 1
         JP NZ,SRTERROR             ; Reject missing and extra arguments.
         LD HL,SRTARGPK             ; Read the only packet record.
-        CALL SRTPVAL               ; Recover its payload and logical tag.
+        CALL PKT_VAL               ; Recover its payload and logical tag.
         CP 5
         JR Z,.LEN_READ             ; Literal strings need no managed validation.
         CP 6
@@ -48,7 +48,7 @@ STR_PRIM:
         CP 2
         JP NZ,SRTERROR             ; Reject every other arity.
         LD HL,SRTARGPK             ; Read the string argument first.
-        CALL SRTPVAL
+        CALL PKT_VAL
         CP 5
         JR Z,.REF_IDX              ; Literal strings use the image representation.
         CP 6
@@ -58,7 +58,7 @@ STR_PRIM:
 .REF_IDX:
         LD (SRTNVAL),HL            ; Preserve its address while reading index.
         LD HL,SRTARGPK+4           ; The second packet record is the index.
-        CALL SRTPVAL
+        CALL PKT_VAL
         CP 3
         JP NZ,SRTERROR             ; The index must be an exact integer.
         LD A,H                     ; Only the nonnegative byte range is addressable.
@@ -87,7 +87,7 @@ STR_PRIM:
         CP 1
         JP NZ,SRTERROR
         LD HL,SRTARGPK
-        CALL SRTPVAL
+        CALL PKT_VAL
         OR A
         JP NZ,SRTERROR              ; Characters share tag zero with other scalars.
         LD A,H
@@ -106,7 +106,7 @@ STR_PRIM:
         CP 1
         JP NZ,SRTERROR
         LD HL,SRTARGPK
-        CALL SRTPVAL
+        CALL PKT_VAL
         CP 3
         JP NZ,SRTERROR              ; Binary16 values are not exact characters.
         LD A,H

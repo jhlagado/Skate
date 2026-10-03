@@ -55,16 +55,16 @@ SRTDVCLS:
         INC HL
         INC HL
         LD A,(HL)
-        LD (SRTVREQ),A             ; The common allocator takes a byte count.
+        LD (VEC_REQ),A             ; The common allocator takes a byte count.
         LD HL,(SRTDRFP)            ; Save the value-stack base across allocation.
         LD E,(HL)
         INC HL
         LD D,(HL)
         LD (SRTDVBS),DE
-        CALL SRTVACL                ; Collection sees the reader stack as roots.
+        CALL VEC_NEW                ; Collection sees the reader stack as roots.
         JP C,SRTERROR              ; Preserve the checked managed-capacity error.
         CALL SRTDVPUT              ; Copy every tagged child without allocation.
-        LD A,(SRTVREQ)             ; Remove the child records from the reader stack.
+        LD A,(VEC_REQ)             ; Remove the child records from the reader stack.
         LD B,A
         LD HL,(SRTDRVP)
         LD E,A
@@ -81,26 +81,26 @@ SRTDVCLS:
         LD (SRTDRVC),A
         CALL SRTDFCLS              ; Return to the enclosing list/vector frame.
         LD A,7                     ; The completed object has the vector tag.
-        LD HL,(SRTVOBJ)            ; Return the managed vector block address.
+        LD HL,(VEC_OBJ)            ; Return the managed vector block address.
         OR A                       ; Clear carry after a complete vector.
         RET
 
 ; Copy reader-stack values into the allocated vector's four-byte elements.
 SRTDVPUT:
-        LD HL,(SRTVOBJ)            ; Publish the count before copying elements.
-        LD A,(SRTVREQ)
+        LD HL,(VEC_OBJ)            ; Publish the count before copying elements.
+        LD A,(VEC_REQ)
         LD (HL),A
         INC HL
-        LD (SRTVPTR),HL
+        LD (VEC_PTR),HL
         LD HL,(SRTDVBS)            ; Source begins at this frame's saved cursor.
-        LD (SRTVPKT),HL
-        LD A,(SRTVREQ)
-        LD (SRTVLEFT),A
+        LD (VEC_PKTP),HL
+        LD A,(VEC_REQ)
+        LD (VEC_LEFT),A
 SRTDVPLP:
-        LD A,(SRTVLEFT)             ; Stop after all children have been copied.
+        LD A,(VEC_LEFT)             ; Stop after all children have been copied.
         OR A
         RET Z
-        LD HL,(SRTVPKT)             ; Read one source payload, tag and flags.
+        LD HL,(VEC_PKTP)            ; Read one source payload, tag and flags.
         LD E,(HL)
         INC HL
         LD D,(HL)
@@ -108,10 +108,10 @@ SRTDVPLP:
         INC HL                      ; Skip the extension byte.
         LD A,(HL)
         AND 0FH
-        LD (SRTVFTAG),A
+        LD (VEC_TAG),A
         INC HL
-        LD (SRTVPKT),HL
-        LD HL,(SRTVPTR)             ; Write the corresponding vector element.
+        LD (VEC_PKTP),HL
+        LD HL,(VEC_PTR)             ; Write the corresponding vector element.
         LD (HL),E
         INC HL
         LD (HL),D
@@ -119,13 +119,13 @@ SRTDVPLP:
         XOR A
         LD (HL),A
         INC HL
-        LD A,(SRTVFTAG)
+        LD A,(VEC_TAG)
         LD (HL),A
         INC HL
-        LD (SRTVPTR),HL
-        LD A,(SRTVLEFT)
+        LD (VEC_PTR),HL
+        LD A,(VEC_LEFT)
         DEC A
-        LD (SRTVLEFT),A
+        LD (VEC_LEFT),A
         JP SRTDVPLP
 
 SRTDVBS:   DW 0                    ; Value-stack base saved for vector copying.

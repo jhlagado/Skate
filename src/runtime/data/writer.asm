@@ -176,7 +176,7 @@ SRTWSTK:
 ; SRTWRVAL; the cursor and remaining count are kept on the native stack.
 SRTWVEC:
         CALL SRTWSTK               ; Refuse nesting that would reach the guard band.
-        CALL SRTVLD                ; Validate the block and return its base in HL.
+        CALL VEC_CHK               ; Validate the block and return its base in HL.
         JP C,SRTERROR              ; A corrupt vector cannot be printed safely.
         LD A,35                    ; Open the vector with its reader prefix.
         CALL SRTCH                 ; SRTCH preserves the vector base in HL.

@@ -233,7 +233,7 @@ SRTCEESC:
 SRTCEHIT:
         LD A,(SRTCEIX)
         LD (SRTCEIDX),A            ; This index becomes the new dynamic depth.
-        CALL SRTONE                ; Read and retain the value supplied to the escape.
+        CALL PKT_ONE               ; Read and retain the value supplied to the escape.
         LD (SRTCEAT),A
         LD (SRTCEV),HL
         LD HL,(SRTCEPTR)

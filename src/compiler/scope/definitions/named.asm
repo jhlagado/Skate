@@ -135,7 +135,7 @@ SCNAMGO:
         LD A,1
         CALL SCLOAD                ; Load the closure as the compact call operator.
         JP C,SCNAMERR
-        LD HL,SRTOPUSH
+        LD HL,OPS_PUSH
         CALL SCCALL                ; Save it beside the staged argument packet.
         JP C,SCNAMERR
         LD A,(SCTCTX)

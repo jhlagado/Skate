@@ -1,10 +1,10 @@
 ; Vector reachability and allocation-kind markers.
-; SRTVMARK accepts HL as an object address; SRTMVEC traces its elements.
+; VEC_MARK accepts HL as an object address; VEC_SCAN traces its elements.
 
 ; Mark a vector allocation as a reachable queued leaf/container.
-SRTVMARK:
+VEC_MARK:
         LD (SRTCLOBJ),HL           ; Keep the object base for map operations.
-        CALL SRTVLD                ; Validate before setting any mark bit.
+        CALL VEC_CHK               ; Validate before setting any mark bit.
         RET C
         CALL GC_SEEN               ; A previously queued vector needs no duplicate.
         RET NZ
@@ -12,7 +12,7 @@ SRTVMARK:
         LD DE,(SRTMSTK)            ; Queue the object for element tracing.
         LD A,D
         CP 0D4H
-        JR NC,SRTVMFUL             ; Defer children when the bounded queue is full.
+        JR NC,.FULL                ; Defer children when the bounded queue is full.
         LD HL,(SRTCLOBJ)
         LD A,L
         LD (DE),A
@@ -22,25 +22,25 @@ SRTVMARK:
         INC DE
         LD (SRTMSTK),DE
         RET
-SRTVMFUL:
+.FULL:
         LD A,1
         LD (SRTMOVER),A            ; The fallback scan will revisit this vector.
         LD (SRTCLER),A             ; Retain the existing overflow diagnostic bit.
         RET
 ; Trace every tagged element of a queued vector.
-SRTMVEC:
-        CALL SRTVLD                ; Recover the validated object and its count.
+VEC_SCAN:
+        CALL VEC_CHK               ; Recover the validated object and its count.
         RET C
-        LD A,(SRTVLENB)
-        LD (SRTVLEFT),A            ; Keep the loop count outside the value ABI.
+        LD A,(VEC_LEN)
+        LD (VEC_LEFT),A            ; Keep the loop count outside the value ABI.
         LD HL,(SRTCLOBJ)
         INC HL                     ; Skip the vector length byte.
-        LD (SRTVPTR),HL            ; Keep the element cursor across each mark.
-SRTVMLP:
-        LD A,(SRTVLEFT)
+        LD (VEC_PTR),HL            ; Keep the element cursor across each mark.
+.LOOP:
+        LD A,(VEC_LEFT)
         OR A
         RET Z
-        LD HL,(SRTVPTR)            ; Recover the next four-byte element.
+        LD HL,(VEC_PTR)            ; Recover the next four-byte element.
         LD E,(HL)
         INC HL
         LD D,(HL)
@@ -48,16 +48,16 @@ SRTVMLP:
         INC HL
         LD A,(HL)
         INC HL                     ; Advance past the cell metadata byte.
-        LD (SRTVPTR),HL            ; Retain the cursor before tracing the value.
+        LD (VEC_PTR),HL            ; Retain the cursor before tracing the value.
         EX DE,HL                   ; Present the child in the runtime ABI.
         CALL GC_VALUE              ; Mark a pair, closure, string or vector child.
-        LD A,(SRTVLEFT)
+        LD A,(VEC_LEFT)
         DEC A
-        LD (SRTVLEFT),A
-        JR SRTVMLP
+        LD (VEC_LEFT),A
+        JR .LOOP
 
 ; Test the vector marker in the odd bit of the persistent mark map.
-SRTVSST:
+VEC_TEST:
         LD HL,(SRTCLOBJ)
         CALL GC_OBJAT
         LD C,A
@@ -71,8 +71,8 @@ SRTVSST:
         RET
 
 ; Set the vector marker in the odd bit of the persistent mark map.
-SRTVSMK:
-        LD HL,(SRTVOBJ)
+VEC_SETM:
+        LD HL,(VEC_OBJ)
         LD (SRTCLOBJ),HL
         CALL GC_OBJAT
         LD C,A

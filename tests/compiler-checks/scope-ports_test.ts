@@ -29,12 +29,12 @@ Deno.test("native text input folds repeated CR and split CR/LF", async () => {
   memory[assembled.address("SRTINCR")] = 0;
 
   function readChar() {
-    cpu.pc = assembled.address("SRTRDCH");
+    cpu.pc = assembled.address("PKT_GETC");
     cpu.sp = 0xdff2;
     cpu.ix = 0xef00;
     let steps = 0;
     while (cpu.pc !== 0xef00) {
-      assert.ok(++steps < 50_000_000, "SRTRDCH did not return");
+      assert.ok(++steps < 50_000_000, "PKT_GETC did not return");
       assembled.runtime.step();
     }
     assert.equal(cpu.sp, 0xdff2);

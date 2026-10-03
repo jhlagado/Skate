@@ -1,19 +1,19 @@
 ; Primitive character input and output adapters.
-; Entry points: SRTWCHR and SRTRDCH.
+; Entry points: .PUT_CHAR and PKT_GETC.
 ; Included in runtime order by ../primitives.asm.
 
 ; Character output and console input use the CP/M console byte interface.
-SRTIO:
+PRIM_IO:
         LD A,(SRTPID)
         CP 29
-        JP Z,SRTWCHR
-        JP SRTRDCH
+        JP Z,.PUT_CHAR
+        JP PKT_GETC
 
 ; write-char accepts one byte character and an optional output port, then
 ; returns UNSPECIFIED.  The one-argument form remains source-compatible.
-SRTWCHR:
+.PUT_CHAR:
         CALL SRTOUT1
-        CALL SRTONE
+        CALL PKT_ONE
         OR A
         JP NZ,SRTERROR              ; Only scalar character values are writable.
         LD A,H
@@ -21,11 +21,11 @@ SRTWCHR:
         JP NZ,SRTERROR              ; FFxx is the byte-character representation.
         LD A,L
         CALL SRTCH                   ; BDOS function two writes the selected byte.
-        JP SRTUNSP
+        JP PKT_VOID
 
 ; read-char accepts no arguments or an explicit current input port and maps
 ; CP/M Control-Z to the EOF singleton.
-SRTRDCH:
+PKT_GETC:
         CALL SRTINSET
         CALL SRTINNXT              ; Shared input consumes pending lookahead first.
         PUSH IX

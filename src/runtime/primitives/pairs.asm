@@ -1,26 +1,26 @@
 ; Primitive pair, list, equality and packet helpers.
-; Entry points: SRTPCONS, SRTPCAR, SRTPCDR, SRTLIST and SRTPEQ.
+; Entry points: PKT_CONS, PKT_CAR, PKT_CDR, PKT_LIST and PKT_EQ.
 ; Included in runtime order by ../primitives.asm.
 
 ; Read one packet argument and leave its value in A:HL.
-SRTONE:
+PKT_ONE:
         LD A,(SRTARGC)
         CP 1
         JP NZ,SRTERROR
         LD HL,SRTARGPK
-        JP SRTPVAL
+        JP PKT_VAL
 
 ; Build one pair from the two packet values.
-SRTPCONS:
+PKT_CONS:
         LD A,(SRTARGC)
         CP 2
         JP NZ,SRTERROR
         LD HL,SRTARGPK
-        CALL SRTPVAL
+        CALL PKT_VAL
         LD (SRTQCAR),HL
         LD (SRTQCTAG),A
         LD HL,SRTARGPK+4
-        CALL SRTPVAL
+        CALL PKT_VAL
         LD (SRTQCDR),HL
         LD (SRTQDTAG),A
         CALL PAIR_NEW
@@ -28,22 +28,22 @@ SRTPCONS:
         RET
 
 ; Apply a selector to the one packet argument.
-SRTPCAR:
-        CALL SRTONE
+PKT_CAR:
+        CALL PKT_ONE
         CALL PAIR_CAR
         JP C,SRTERROR
         PUSH IX
         RET
-SRTPCDR:
-        CALL SRTONE
+PKT_CDR:
+        CALL PKT_ONE
         CALL PAIR_CDR
         JP C,SRTERROR
         PUSH IX
         RET
 
 ; pair? returns false for every non-pair value.
-SRTPPAR:
-        CALL SRTONE
+PKT_PAIR:
+        CALL PKT_ONE
         CALL PAIR_CHK
         JP C,PAIR_NO
         XOR A
@@ -52,8 +52,8 @@ SRTPPAR:
         RET
 
 ; null? recognises the canonical empty-list value and nothing else.
-SRTNPRED:
-        CALL SRTONE
+PKT_NULL:
+        CALL PKT_ONE
         OR A
         JP NZ,PAIR_NO
         LD DE,0FE02H
@@ -66,19 +66,19 @@ SRTNPRED:
         RET
 
 ; list consumes the bounded packet in source order and folds it into pairs.
-SRTLIST:
+PKT_LIST:
         LD A,(SRTARGC)             ; The packet holds zero through eight values.
         CP 9                       ; Eight is the full packet, not an overflow.
         JP NC,SRTERROR             ; Reject only a count beyond the eight records.
         LD (SRTLCN),A
         LD HL,SRTARGPK
         LD (SRTLCP),HL
-SRTLLP:
+.LOOP:
         LD A,(SRTLCN)
         OR A
-        JR Z,SRTLDONE
+        JR Z,.DONE
         LD HL,(SRTLCP)
-        CALL SRTPVAL
+        CALL PKT_VAL
         CALL QT_PUSH
         LD HL,(SRTLCP)
         LD DE,4
@@ -87,8 +87,8 @@ SRTLLP:
         LD A,(SRTLCN)
         DEC A
         LD (SRTLCN),A
-        JR SRTLLP
-SRTLDONE:
+        JR .LOOP
+.DONE:
         LD A,(SRTARGC)
         LD B,0
         CALL QT_FOLD
@@ -96,16 +96,16 @@ SRTLDONE:
         RET
 
 ; eq? compares both logical tags and payloads.
-SRTPEQ:
+PKT_EQ:
         LD A,(SRTARGC)
         CP 2
         JP NZ,SRTERROR
         LD HL,SRTARGPK
-        CALL SRTPVAL
+        CALL PKT_VAL
         LD (SRTQCAR),HL
         LD (SRTQCTAG),A
         LD HL,SRTARGPK+4
-        CALL SRTPVAL
+        CALL PKT_VAL
         LD (SRTQCDR),HL
         LD (SRTQDTAG),A
         LD A,(SRTQCTAG)

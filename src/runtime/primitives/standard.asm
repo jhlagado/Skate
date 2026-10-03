@@ -2,7 +2,7 @@
 ; structural equality, character and string comparison, conversions, list
 ; operations and character classes.
 ;
-; Primitive kinds 60 and above arrive here from SRTPRIM through STD_DISP.
+; Primitive kinds 60 and above arrive here from PRIM_RUN through STD_DISP.
 ; Each routine reads the argument packet, returns its result in A:HL and
 ; leaves through IX like every other primitive.  Allocating routines keep
 ; their partial results reachable: inputs stay in the packet, constructor
@@ -24,7 +24,7 @@ STD_DISP:
         ADD A,A
         LD L,A
         LD H,0
-        LD DE,STD_TAB
+        LD DE,.TABLE
         ADD HL,DE
         LD E,(HL)
         INC HL
@@ -32,15 +32,15 @@ STD_DISP:
         EX DE,HL
         JP (HL)
 
-STD_TAB:
-        DW SET_CAR,SET_CDR,EQUAL                       ; 60..62
-        DW CHAR_REL,CHAR_REL,CHAR_REL,CHAR_REL,CHAR_REL ; 63..67 char=? < > <= >=
-        DW STR_REL,STR_REL,STR_REL,STR_REL,STR_REL      ; 68..72 string=? < > <= >=
-        DW SYM2STR,STR2SYM,NUM2STR,MODULO,ABS_VAL       ; 73..77
-        DW LENGTH,REVERSE,APPEND,LISTTAIL,LIST_REF      ; 78..82
-        DW MEMQ,ASSQ,MEMBER,ASSOC,LIST_P                ; 83..87
-        DW CHAR_UP,CHAR_DN,IS_ALPHA,IS_DIGIT,IS_SPACE   ; 88..92
-        DW SUBSTR                                       ; 93
+.TABLE:
+        DW STD_SCAR,STD_SCDR,STD_SAME                  ; 60..62
+        DW STD_CHR,STD_CHR,STD_CHR,STD_CHR,STD_CHR      ; 63..67 char=? < > <= >=
+        DW STD_STR,STD_STR,STD_STR,STD_STR,STD_STR      ; 68..72 string=? < > <= >=
+        DW STD_NAME,STD_SYM,STD_NUM,STD_FMOD,STD_ABS    ; 73..77
+        DW STD_LEN,STD_REV,STD_JOIN,STD_TAIL,STD_NTH    ; 78..82
+        DW STD_MEMQ,STD_ASSQ,STD_MEMB,STD_ASSO,STD_PROP ; 83..87
+        DW STD_UP,STD_DOWN,STD_ATOZ,STD_0TO9,STD_SPC    ; 88..92
+        DW STD_SUBS                                     ; 93
 
 ; ---- Packet and result helpers --------------------------------------------
 
@@ -55,29 +55,29 @@ PKT_NARG:
 ; Read the first or second packet value into A:HL.
 PKT_ARG0:
         LD HL,SRTARGPK
-        JP SRTPVAL
+        JP PKT_VAL
 PKT_ARG1:
         LD HL,SRTARGPK+4
-        JP SRTPVAL
+        JP PKT_VAL
 
-BOOL_T:
+STD_YES:
         LD HL,0FE01H               ; Canonical true.
         XOR A
         PUSH IX
         RET
-BOOL_F:
+STD_NO:
         LD HL,0FE00H               ; Canonical false.
         XOR A
         PUSH IX
         RET
-UNSPEC:
+STD_VOID:
         LD HL,0FE04H               ; The unspecified value.
         XOR A
         PUSH IX
         RET
 
 ; Z when A:HL is the empty list.  A and HL are kept; DE is used.
-IS_NULL:
+STD_NIL:
         OR A
         RET NZ
         PUSH HL
@@ -87,7 +87,7 @@ IS_NULL:
         RET
 
 ; Z when A:HL is a byte character.
-IS_CHAR:
+STD_BYTE:
         OR A
         RET NZ
         LD A,H
@@ -96,7 +96,7 @@ IS_CHAR:
         RET
 
 ; Z when tag A names a literal or managed string.  A is kept.
-IS_STR:
+STD_TEXT:
         CP 5
         RET Z
         CP 6
@@ -104,7 +104,7 @@ IS_STR:
 
 ; Read the four-byte cell at HL: A is its tag nibble, HL its payload.
 ; BC and DE are kept.
-CELL_GET:
+STD_GET:
         PUSH DE
         LD E,(HL)
         INC HL
@@ -121,12 +121,12 @@ CELL_GET:
 
 ; set-car! and set-cdr! write the value into the selected cell of a live pair,
 ; keeping the cell's allocation and mark bits.
-SET_CAR:
+STD_SCAR:
         LD C,0                     ; The CAR cell starts the pair record.
-        JR SET_CELL
-SET_CDR:
+        JR STD_SET
+STD_SCDR:
         LD C,4                     ; The CDR cell follows it.
-SET_CELL:
+STD_SET:
         PUSH BC
         LD A,2
         CALL PKT_NARG
@@ -140,14 +140,14 @@ SET_CELL:
         CALL PKT_ARG1              ; A:HL is the new value.
         EX DE,HL
         POP HL
-        CALL CDR_PUT               ; Keeps allocation and mark bits.
-        JP UNSPEC
+        CALL STD_PUT               ; Keeps allocation and mark bits.
+        JP STD_VOID
 
 ; ---- Structural equality --------------------------------------------------
 
 ; equal? compares pairs, strings and vectors by content and everything else
 ; as eqv? does.
-EQUAL:
+STD_SAME:
         LD A,2
         CALL PKT_NARG
         CALL PKT_ARG1
@@ -158,13 +158,13 @@ EQUAL:
         CALL PKT_ARG0
         POP DE
         POP BC
-        CALL EQ_DEEP
-        JP C,BOOL_F
-        JP BOOL_T
+        CALL STD_DEEP
+        JP C,STD_NO
+        JP STD_YES
 
 ; Compare A:HL with C:DE.  Carry is clear when they are equal.  The CAR and
 ; vector elements recurse on the native stack; CDRs iterate.
-EQ_DEEP:
+STD_DEEP:
         CP C
         JR NZ,.TAGS
         PUSH HL
@@ -177,11 +177,11 @@ EQ_DEEP:
         CP 7
         JR Z,.VECTOR
 .TAGS:
-        CALL IS_STR                ; Literal and managed strings compare by
+        CALL STD_TEXT              ; Literal and managed strings compare by
         JR NZ,.NO                  ; content even though their tags differ.
         LD B,A
         LD A,C
-        CALL IS_STR
+        CALL STD_TEXT
         LD A,B
         JR Z,.STRING
 .NO:
@@ -201,7 +201,7 @@ EQ_DEEP:
         POP DE
         JR C,.NO
         EX DE,HL
-        CALL STR_CMP
+        CALL STD_CMP
         CP 2
         JR NZ,.NO
         OR A
@@ -221,11 +221,11 @@ EQ_DEEP:
         PUSH HL                    ; Keep both pairs for their CDRs.
         PUSH DE
         EX DE,HL
-        CALL CELL_GET              ; A:HL is the right CAR.
+        CALL STD_GET               ; A:HL is the right CAR.
         LD C,A
         EX DE,HL                   ; C:DE is the right CAR, HL the left pair.
-        CALL CELL_GET              ; A:HL is the left CAR.
-        CALL EQ_DEEP
+        CALL STD_GET               ; A:HL is the left CAR.
+        CALL STD_DEEP
         POP DE
         POP HL
         RET C
@@ -233,22 +233,22 @@ EQ_DEEP:
         ADD HL,BC                  ; Left CDR cell.
         EX DE,HL
         ADD HL,BC                  ; Right CDR cell.
-        CALL CELL_GET
+        CALL STD_GET
         LD C,A
         EX DE,HL                   ; C:DE is the right CDR, HL the left cell.
-        CALL CELL_GET
-        JP EQ_DEEP
+        CALL STD_GET
+        JP STD_DEEP
 .VECTOR:
         PUSH HL
         PUSH DE
-        CALL SRTVLD                ; Validate the left vector.
+        CALL VEC_CHK               ; Validate the left vector.
         POP DE
         POP HL
         JR C,.NO
         PUSH HL
         PUSH DE
         EX DE,HL
-        CALL SRTVLD                ; Validate the right vector.
+        CALL VEC_CHK               ; Validate the right vector.
         POP DE
         POP HL
         JR C,.NO
@@ -266,11 +266,11 @@ EQ_DEEP:
         PUSH HL
         PUSH DE
         EX DE,HL
-        CALL CELL_GET
+        CALL STD_GET
         LD C,A
         EX DE,HL
-        CALL CELL_GET
-        CALL EQ_DEEP
+        CALL STD_GET
+        CALL STD_DEEP
         POP DE
         POP HL
         POP BC
@@ -287,7 +287,7 @@ EQ_DEEP:
 
 ; Compare the length-prefixed strings at HL and DE byte by byte.  A returns
 ; 1 when HL sorts first, 2 when they are equal and 4 when DE sorts first.
-STR_CMP:
+STD_CMP:
         LD B,(HL)
         LD A,(DE)
         LD C,A
@@ -323,23 +323,23 @@ STR_CMP:
 
 ; Codes 1, 2 and 4 mean less, equal and greater.  Each relation accepts the
 ; codes in its mask: = < > <= >= in kind order.
-REL_MASK:
+STD_MASK:
         DB 2,1,4,3,6
 
 ; NZ when code A satisfies the relation selected in STD_REL.
-REL_TEST:
+STD_TEST:
         PUSH AF
         LD A,(STD_REL)
         LD E,A
         LD D,0
-        LD HL,REL_MASK
+        LD HL,STD_MASK
         ADD HL,DE
         POP AF
         AND (HL)
         RET
 
 ; Turn the flags of CP (left minus right) into a comparison code.
-CODE_OF:
+STD_CODE:
         JR C,.LESS
         JR Z,.EQUAL
         LD A,4
@@ -352,7 +352,7 @@ CODE_OF:
         RET
 
 ; char=? char<? char>? char<=? char>=? over two or more characters.
-CHAR_REL:
+STD_CHR:
         LD A,(SRTPID)
         SUB 63
         LD (STD_REL),A
@@ -364,8 +364,8 @@ CHAR_REL:
 .CHECK:
         PUSH BC                    ; Validate every argument first.
         PUSH HL
-        CALL SRTPVAL
-        CALL IS_CHAR
+        CALL PKT_VAL
+        CALL STD_BYTE
         POP HL
         POP BC
         JP NZ,SRTERROR
@@ -382,18 +382,18 @@ CHAR_REL:
         ADD HL,DE
         LD C,(HL)                  ; Right character byte.
         CP C
-        CALL CODE_OF
+        CALL STD_CODE
         PUSH HL
         PUSH BC
-        CALL REL_TEST
+        CALL STD_TEST
         POP BC
         POP HL
-        JP Z,BOOL_F
+        JP Z,STD_NO
         DJNZ .PAIRS
-        JP BOOL_T
+        JP STD_YES
 
 ; string=? string<? string>? string<=? string>=? over two or more strings.
-STR_REL:
+STD_STR:
         LD A,(SRTPID)
         SUB 68
         LD (STD_REL),A
@@ -405,7 +405,7 @@ STR_REL:
 .CHECK:
         PUSH BC
         PUSH HL
-        CALL SRTPVAL
+        CALL PKT_VAL
         CALL STR_ARG
         POP HL
         POP BC
@@ -421,29 +421,29 @@ STR_REL:
 .PAIRS:
         PUSH BC
         LD HL,(STD_PTR)
-        CALL SRTPVAL
+        CALL PKT_VAL
         CALL STR_ARG
         PUSH HL                    ; Left string.
         LD HL,(STD_PTR)
         LD DE,4
         ADD HL,DE
         LD (STD_PTR),HL
-        CALL SRTPVAL
+        CALL PKT_VAL
         CALL STR_ARG
         EX DE,HL                   ; Right string.
         POP HL
-        CALL STR_CMP
-        CALL REL_TEST
+        CALL STD_CMP
+        CALL STD_TEST
         POP BC
-        JP Z,BOOL_F
+        JP Z,STD_NO
         DJNZ .PAIRS
-        JP BOOL_T
+        JP STD_YES
 
 ; ---- Conversions ----------------------------------------------------------
 
 ; A symbol's payload already addresses a length-prefixed spelling outside the
 ; heap, which is exactly the layout of a literal string.
-SYM2STR:
+STD_NAME:
         LD A,1
         CALL PKT_NARG
         CALL PKT_ARG0
@@ -454,7 +454,7 @@ SYM2STR:
         RET
 
 ; Intern the string's spelling with the datum reader's symbol table.
-STR2SYM:
+STD_SYM:
         LD A,1
         CALL PKT_NARG
         CALL PKT_ARG0
@@ -468,7 +468,7 @@ STR2SYM:
         RET
 
 ; number->string for exact integers: a managed string of decimal digits.
-NUM2STR:
+STD_NUM:
         LD A,1
         CALL PKT_NARG
         CALL PKT_ARG0
@@ -485,9 +485,9 @@ NUM2STR:
         SUB H
         LD H,A
 .DIGITS:
-        LD DE,STD_NBUF+7           ; Digits are written backwards.
+        LD DE,STD_BUF+7            ; Digits are written backwards.
 .NEXT:
-        CALL DIV10
+        CALL .DIV_TEN
         ADD A,'0'
         DEC DE
         LD (DE),A
@@ -501,7 +501,7 @@ NUM2STR:
         LD A,'-'
         LD (DE),A
 .SIZED:
-        LD HL,STD_NBUF+7
+        LD HL,STD_BUF+7
         OR A
         SBC HL,DE
         LD A,L
@@ -520,7 +520,7 @@ NUM2STR:
         JP STR_RET
 
 ; Divide HL by ten, unsigned: HL is the quotient and A the remainder.
-DIV10:
+.DIV_TEN:
         PUSH BC
         LD B,16
         XOR A
@@ -539,7 +539,7 @@ DIV10:
 ; ---- Arithmetic -----------------------------------------------------------
 
 ; modulo takes the sign of the divisor; remainder takes the dividend's.
-MODULO:
+STD_FMOD:
         LD A,2
         CALL PKT_NARG
         CALL PKT_ARG1
@@ -567,7 +567,7 @@ MODULO:
         RET
 
 ; abs for exact integers and binary16 numbers.
-ABS_VAL:
+STD_ABS:
         LD A,1
         CALL PKT_NARG
         CALL PKT_ARG0
@@ -593,7 +593,7 @@ ABS_VAL:
         PUSH IX
         RET
 .FLOAT:
-        CALL SRTNCHK               ; Reject the reserved immediates.
+        CALL PRIM_NUM              ; Reject the reserved immediates.
         JP C,SRTERROR
         CALL PKT_ARG0
         RES 7,H                    ; Clear the binary16 sign bit.
@@ -604,13 +604,13 @@ ABS_VAL:
 ; ---- Lists ----------------------------------------------------------------
 
 ; length of a proper list.
-LENGTH:
+STD_LEN:
         LD A,1
         CALL PKT_NARG
         CALL PKT_ARG0
         LD BC,0
 .LOOP:
-        CALL IS_NULL
+        CALL STD_NIL
         JR Z,.DONE
         PUSH BC
         CALL PAIR_CDR
@@ -626,31 +626,31 @@ LENGTH:
         RET
 
 ; list? is true for a proper list.
-LIST_P:
+STD_PROP:
         LD A,1
         CALL PKT_NARG
         CALL PKT_ARG0
 .LOOP:
-        CALL IS_NULL
-        JP Z,BOOL_T
+        CALL STD_NIL
+        JP Z,STD_YES
         CALL PAIR_CDR
-        JP C,BOOL_F
+        JP C,STD_NO
         JR .LOOP
 
 ; reverse returns a new list.
-REVERSE:
+STD_REV:
         LD A,1
         CALL PKT_NARG
         CALL PKT_ARG0
-        CALL REV_INIT
-        CALL REV_CORE
+        CALL .START
+        CALL .CONS_ALL
         LD HL,(STD_ACC)
         LD A,(STD_ATAG)
         PUSH IX
         RET
 
 ; Start a reversal of A:HL into an empty accumulator.
-REV_INIT:
+.START:
         LD (STD_LIST),HL
         LD (STD_LTAG),A
         LD HL,0FE02H
@@ -662,10 +662,10 @@ REV_INIT:
 ; Cons each element of STD_LIST onto STD_ACC.  The list being read must be
 ; reachable from a root; the accumulator is a constructor input whenever a
 ; collection can run.
-REV_CORE:
+.CONS_ALL:
         LD A,(STD_LTAG)
         LD HL,(STD_LIST)
-        CALL IS_NULL
+        CALL STD_NIL
         RET Z
         CALL PAIR_CAR
         JP C,SRTERROR              ; Only a proper list can be reversed.
@@ -683,14 +683,14 @@ REV_CORE:
         CALL PAIR_NEW
         LD (STD_ACC),HL
         LD (STD_ATAG),A
-        JR REV_CORE
+        JR .CONS_ALL
 
 ; append copies every list but the last, which becomes the shared tail.  Each
 ; list is copied front to back, linking every new cell to the one before, so
 ; no reversed temporary is needed.  The result so far and the head of the copy
 ; being built are held on the operator side stack so a collection cannot
 ; reclaim them; the cells after the head are reachable from it.
-APPEND:
+STD_JOIN:
         LD A,(SRTARGC)
         OR A
         JR NZ,.SOME
@@ -707,15 +707,15 @@ APPEND:
         LD DE,SRTARGPK
         ADD HL,DE
         LD (STD_PTR),HL            ; The last argument's packet record.
-        CALL SRTPVAL
-        CALL SRTOPUSH              ; Root the result.
+        CALL PKT_VAL
+        CALL OPS_PUSH              ; Root the result.
         CALL OPS_TOP
-        LD (STD_RADR),HL
+        LD (STD_RES),HL
         LD HL,0FE02H
         XOR A
-        CALL SRTOPUSH              ; Root the head of the copy.
+        CALL OPS_PUSH              ; Root the head of the copy.
         CALL OPS_TOP
-        LD (STD_VADR),HL
+        LD (STD_HEAD),HL
 .NEXT:
         LD A,(STD_CNT)
         OR A
@@ -726,7 +726,7 @@ APPEND:
         LD DE,-4
         ADD HL,DE
         LD (STD_PTR),HL
-        CALL SRTPVAL
+        CALL PKT_VAL
         LD (STD_LIST),HL
         LD (STD_LTAG),A
         LD HL,0
@@ -734,7 +734,7 @@ APPEND:
 .COPY:
         LD A,(STD_LTAG)
         LD HL,(STD_LIST)
-        CALL IS_NULL
+        CALL STD_NIL
         JP Z,.LINK
         CALL PAIR_CAR
         JP C,SRTERROR              ; Only proper lists can be copied.
@@ -755,7 +755,7 @@ APPEND:
         LD A,H
         OR L
         JR NZ,.CHAIN
-        LD HL,(STD_VADR)           ; The first cell is the rooted head.
+        LD HL,(STD_HEAD)           ; The first cell is the rooted head.
         LD A,1
         CALL OPS_PUT
         JR .LAST
@@ -763,7 +763,7 @@ APPEND:
         LD BC,CDR_LO               ; Point the previous cell's CDR here.
         ADD HL,BC
         LD A,1
-        CALL CDR_PUT
+        CALL STD_PUT
 .LAST:
         LD (STD_ACC),DE            ; This cell is now the last one.
         JR .COPY
@@ -775,26 +775,26 @@ APPEND:
         LD BC,CDR_LO
         ADD HL,BC
         PUSH HL
-        LD HL,(STD_RADR)
+        LD HL,(STD_RES)
         CALL OPS_GET               ; The copy ends in the result so far.
         EX DE,HL
         POP HL
-        CALL CDR_PUT
-        LD HL,(STD_VADR)
+        CALL STD_PUT
+        LD HL,(STD_HEAD)
         CALL OPS_GET               ; The copy's head is the new result.
         EX DE,HL
-        LD HL,(STD_RADR)
+        LD HL,(STD_RES)
         CALL OPS_PUT
         JP .NEXT
 .DONE:
-        CALL SRTOPPOP              ; Drop the head slot.
-        CALL SRTOPPOP              ; A:HL is the result.
+        CALL OPS_POP               ; Drop the head slot.
+        CALL OPS_POP               ; A:HL is the result.
         PUSH IX
         RET
 
 ; Store A:DE in the pair cell at HL, keeping its metadata flag bits.
 ; set-car! uses it for the CAR cell too.
-CDR_PUT:
+STD_PUT:
         LD (HL),E
         INC HL
         LD (HL),D
@@ -837,19 +837,19 @@ OPS_GET:
         RET
 
 ; list-tail and list-ref.
-LISTTAIL:
-        CALL TAIL_K
+STD_TAIL:
+        CALL STD_DROP
         PUSH IX
         RET
-LIST_REF:
-        CALL TAIL_K
+STD_NTH:
+        CALL STD_DROP
         CALL PAIR_CAR
         JP C,SRTERROR
         PUSH IX
         RET
 
 ; A:HL is the list after K CDRs, where K is the second argument.
-TAIL_K:
+STD_DROP:
         LD A,2
         CALL PKT_NARG
         CALL PKT_ARG1
@@ -879,12 +879,12 @@ TAIL_K:
         RET
 
 ; memq and member return the first tail whose CAR matches, or false.
-MEMQ:
+STD_MEMQ:
         XOR A
-        JR MEM_ANY
-MEMBER:
+        JR STD_FIND
+STD_MEMB:
         LD A,1
-MEM_ANY:
+STD_FIND:
         LD (STD_MODE),A
         LD A,2
         CALL PKT_NARG
@@ -895,11 +895,11 @@ MEM_ANY:
 .LOOP:
         LD (STD_LIST),HL
         LD (STD_LTAG),A
-        CALL IS_NULL
-        JP Z,BOOL_F
+        CALL STD_NIL
+        JP Z,STD_NO
         CALL PAIR_CAR
         JP C,SRTERROR
-        CALL MATCH
+        CALL STD_LIKE
         JR NC,.FOUND
         LD HL,(STD_LIST)
         LD A,(STD_LTAG)
@@ -913,12 +913,12 @@ MEM_ANY:
         RET
 
 ; assq and assoc return the first entry whose CAR matches, or false.
-ASSQ:
+STD_ASSQ:
         XOR A
-        JR ASS_ANY
-ASSOC:
+        JR STD_LOOK
+STD_ASSO:
         LD A,1
-ASS_ANY:
+STD_LOOK:
         LD (STD_MODE),A
         LD A,2
         CALL PKT_NARG
@@ -929,15 +929,15 @@ ASS_ANY:
 .LOOP:
         LD (STD_LIST),HL
         LD (STD_LTAG),A
-        CALL IS_NULL
-        JP Z,BOOL_F
+        CALL STD_NIL
+        JP Z,STD_NO
         CALL PAIR_CAR
         JP C,SRTERROR
         LD (STD_ENT),HL
         LD (STD_ETAG),A
         CALL PAIR_CAR              ; Every entry must be a pair.
         JP C,SRTERROR
-        CALL MATCH
+        CALL STD_LIKE
         JR NC,.FOUND
         LD HL,(STD_LIST)
         LD A,(STD_LTAG)
@@ -952,7 +952,7 @@ ASS_ANY:
 
 ; Compare A:HL with STD_KEY: identity when STD_MODE is zero, equal? otherwise.
 ; Carry is clear on a match.
-MATCH:
+STD_LIKE:
         PUSH AF
         LD A,(STD_KTAG)
         LD C,A
@@ -971,71 +971,71 @@ MATCH:
         RET
 .DEEP:
         POP AF
-        JP EQ_DEEP
+        JP STD_DEEP
 
 ; ---- Characters -----------------------------------------------------------
 
 ; Read the single character argument into A.
-CHAR_ARG:
+STD_CHAR:
         LD A,1
         CALL PKT_NARG
         CALL PKT_ARG0
-        CALL IS_CHAR
+        CALL STD_BYTE
         JP NZ,SRTERROR
         LD A,L
         RET
 
-CHAR_UP:
-        CALL CHAR_ARG
+STD_UP:
+        CALL STD_CHAR
         CP 'a'
-        JR C,CHAR_RET
+        JR C,STD_CVAL
         CP 'z'+1
-        JR NC,CHAR_RET
+        JR NC,STD_CVAL
         SUB 32
-        JR CHAR_RET
-CHAR_DN:
-        CALL CHAR_ARG
+        JR STD_CVAL
+STD_DOWN:
+        CALL STD_CHAR
         CP 'A'
-        JR C,CHAR_RET
+        JR C,STD_CVAL
         CP 'Z'+1
-        JR NC,CHAR_RET
+        JR NC,STD_CVAL
         ADD A,32
-CHAR_RET:
+STD_CVAL:
         LD L,A
         LD H,0FFH
         XOR A
         PUSH IX
         RET
 
-IS_ALPHA:
-        CALL CHAR_ARG
+STD_ATOZ:
+        CALL STD_CHAR
         OR 20H                     ; Fold upper case onto lower case.
         CP 'a'
-        JP C,BOOL_F
+        JP C,STD_NO
         CP 'z'+1
-        JP NC,BOOL_F
-        JP BOOL_T
-IS_DIGIT:
-        CALL CHAR_ARG
+        JP NC,STD_NO
+        JP STD_YES
+STD_0TO9:
+        CALL STD_CHAR
         CP '0'
-        JP C,BOOL_F
+        JP C,STD_NO
         CP '9'+1
-        JP NC,BOOL_F
-        JP BOOL_T
-IS_SPACE:
-        CALL CHAR_ARG
+        JP NC,STD_NO
+        JP STD_YES
+STD_SPC:
+        CALL STD_CHAR
         CP ' '
-        JP Z,BOOL_T
+        JP Z,STD_YES
         CP 9                       ; Tab, line feed, vertical tab, form feed
-        JP C,BOOL_F                ; and carriage return are white space.
+        JP C,STD_NO                ; and carriage return are white space.
         CP 14
-        JP C,BOOL_T
-        JP BOOL_F
+        JP C,STD_YES
+        JP STD_NO
 
 ; ---- Strings --------------------------------------------------------------
 
 ; (substring string start end) copies bytes start..end-1 into a new string.
-SUBSTR:
+STD_SUBS:
         LD A,3
         CALL PKT_NARG
         CALL PKT_ARG0
@@ -1043,7 +1043,7 @@ SUBSTR:
         JP C,SRTERROR
         LD (STD_PTR),HL
         LD HL,SRTARGPK+8
-        CALL SRTPVAL
+        CALL PKT_VAL
         CALL .INDEX
         LD (STD_END),A
         CALL PKT_ARG1
@@ -1092,7 +1092,7 @@ SUBSTR:
 
 ; Generated case code pushes the key on the operator side stack, then loads
 ; each datum into A:HL and calls here.  Z means the datum is eqv? to the key.
-CASE_EQ:
+STD_CASE:
         EX DE,HL                   ; DE is the datum payload.
         LD C,A
         LD HL,(SRTOPS)
@@ -1116,15 +1116,15 @@ CASE_EQ:
 STD_REL:  DB 0                     ; Relation index for an ordered comparison.
 STD_PTR:  DW 0                     ; Packet or string cursor.
 STD_SIGN: DB 0                     ; High byte of the number being converted.
-STD_NBUF: DS 7                     ; Digits of -32768 and shorter numbers.
+STD_BUF: DS 7                      ; Digits of -32768 and shorter numbers.
 STD_DIV:  DW 0                     ; Divisor for modulo.
 STD_LIST: DW 0                     ; List being walked.
 STD_LTAG: DB 0
 STD_ACC:  DW 0                     ; Reversal accumulator; append's last cell.
 STD_ATAG: DB 0
 STD_CNT:  DB 0                     ; Lists still to append.
-STD_RADR: DW 0                     ; Side-stack record holding append's result.
-STD_VADR: DW 0                     ; Side-stack record holding the copy's head.
+STD_RES: DW 0                      ; Side-stack record holding append's result.
+STD_HEAD: DW 0                     ; Side-stack record holding the copy's head.
 STD_MODE: DB 0                     ; Zero compares identity, one equal?.
 STD_KEY:  DW 0                     ; Key for memq, member, assq and assoc.
 STD_KTAG: DB 0

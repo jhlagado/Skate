@@ -72,7 +72,7 @@ GC_VALUE:
         CP RT_EPAGE
         JR NC,.LEAF
         LD A,1
-        JP SRTVHOOK
+        JP VEC_HOOK
 .LEAF:
         RET
 
@@ -384,7 +384,7 @@ GC_OBJS:
         JR NZ,.NEXT
         LD HL,(SRTCLOBJ)           ; Restore the scanned object after string classification.
         XOR A
-        CALL SRTVHOOK
+        CALL VEC_HOOK
 .NEXT:
         POP BC
         LD HL,(SRTCLSCN)
