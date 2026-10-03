@@ -45,13 +45,13 @@ SCOUT:
 SCOUTER:
         CALL CPM_ENDW              ; Close any open stage and flush no bad bytes.
         CALL SCPROLL               ; Remove partial stages and restore moved outputs.
-        LD HL,(SCERRPTR)           ; Materializer capacity is still a compiler bound.
-        LD DE,SCCAPTXT
+        LD HL,(ST_ERROR)           ; Materializer capacity is still a compiler bound.
+        LD DE,M_CAP
         OR A
         SBC HL,DE
         JR Z,SCOUTCAP               ; Keep CAP instead of relabelling it OUTPUT ERROR.
-        LD HL,SCOUTTXT             ; Distinguish a disk publication failure from source errors.
-        LD (SCERRPTR),HL           ; The command driver prints this diagnostic.
+        LD HL,M_OUTPUT             ; Distinguish a disk publication failure from source errors.
+        LD (ST_ERROR),HL           ; The command driver prints this diagnostic.
         SCF                       ; Carry reports the publication failure.
         RET                        ; Staged names remain available for inspection.
 SCOUTCAP:
@@ -59,8 +59,8 @@ SCOUTCAP:
         RET
 SCPRECER:
         CALL CPM_ENDR              ; Recovery did not open a new writable stage.
-        LD HL,SCOUTTXT             ; Preserve the output diagnostic for the caller.
-        LD (SCERRPTR),HL           ; The next command reports the unresolved recovery.
+        LD HL,M_OUTPUT             ; Preserve the output diagnostic for the caller.
+        LD (ST_ERROR),HL           ; The next command reports the unresolved recovery.
         SCF                       ; Carry prevents a second rollback with empty masks.
         RET                        ; Recovery files and stages remain for a later retry.
 ; Copy the command basename into SCFCB, retaining drive and eight name bytes.

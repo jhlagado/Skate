@@ -53,8 +53,8 @@ SCPUB:
 ; Remove newly installed files and restore every old file that was moved.
 SCPFAIL:
         CALL SCPROLL               ; Remove new files and restore the previous generation.
-        LD HL,SCOUTTXT             ; Publication failures use the output diagnostic.
-        LD (SCERRPTR),HL           ; Preserve that diagnostic for SCFAIL.
+        LD HL,M_OUTPUT             ; Publication failures use the output diagnostic.
+        LD (ST_ERROR),HL           ; Preserve that diagnostic for .FAIL.
         SCF                        ; Report the publication failure to SCOUT.
         RET                        ; The command prints its ordinary output diagnostic.
 

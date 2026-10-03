@@ -49,10 +49,10 @@ After reading a name, it reaches this sequence:
 ```asm
         CP 5
         JP NZ,SCLETERR
-        LD (SCID),HL
+        LD (ST_SYMID),HL
         CALL SCNSLOT
         JP C,SCLETERR
-        LD (SCSLOT),A
+        LD (ST_SLOT),A
         CALL SCPEND
         JP C,SCLETERR
 ```
@@ -60,8 +60,8 @@ After reading a name, it reaches this sequence:
 These instructions are copied from the routine with their inline comments
 omitted. Token kind five denotes a
 symbol. At that point `HL` contains the identity of `base`. The compiler saves
-it in `SCID`, then calls `SCNSLOT` to allocate a compiler slot number. On success
-the number is returned in `A` and saved in `SCSLOT`.
+it in `ST_SYMID`, then calls `SCNSLOT` to allocate a compiler slot number. On success
+the number is returned in `A` and saved in `ST_SLOT`.
 
 `SCPEND` records the association in the pending-binding tables. The distinction
 between pending and active bindings implements a Scheme rule: the initialisers
@@ -91,10 +91,10 @@ part of `SCLETB` connects that expression with its destination:
         JP C,SCLETERR
         CALL SCPREV
         JP C,SCLETERR
-        LD A,(SCSLOT)
+        LD A,(ST_SLOT)
         LD L,A
         LD A,1
-        CALL SCSTORE
+        CALL EM_STORE
         JP C,SCLETERR
 ```
 
@@ -103,21 +103,21 @@ bindings of its own, so the outer binding's slot cannot simply be assumed to
 remain in scratch storage. `SCPREV` recovers the pending binding before the
 store is emitted.
 
-At entry to `SCSTORE`, `L` contains the slot number and `A` contains one, the
+At entry to `EM_STORE`, `L` contains the slot number and `A` contains one, the
 compiler's selector for a local slot. Those registers describe the destination
 while the compiler is running. They do not contain the initialiser's Scheme
 value. The instructions already emitted for `40` will produce that value when
 the generated program runs.
 
-`SCSTORE` has two paths. A local belonging to a procedure uses the active
+`EM_STORE` has two paths. A local belonging to a procedure uses the active
 procedure environment. This `let` is outside a procedure and uses the static
 path at `SCSTFIX`. The beginning of that path is:
 
 ```asm
         LD A,11H
         CALL SINKBYTE
-        LD HL,(SCPC)
-        CALL SCFIX
+        LD HL,(ST_PC)
+        CALL EM_FIXUP
         RET C
         XOR A
         CALL SINKBYTE
@@ -129,7 +129,7 @@ path at `SCSTFIX`. The beginning of that path is:
 The byte `11H` is the Z80 opcode for `LD DE,nn`. `SINKBYTE` appends it to the
 output; `scope/output-sink.asm` also gives that routine the older label
 `SCBYTE`, which some comments still use. The next two bytes will hold the
-destination address, but the final slot address is not available yet. `SCFIX`
+destination address, but the final slot address is not available yet. `EM_FIXUP`
 records the location that needs patching and the emitter writes two zero
 placeholders. Later publication resolves that address. The rest of the store path emits a call to the runtime
 store service.
@@ -189,7 +189,7 @@ SCLETBD:
 
 `SCBIND` copies the pending names and slot numbers into the active local scope.
 `SCLEBODY` can then compile `(+ base delta)` with both names available. In the
-emitter, `SCLOAD` performs the corresponding selection between static slots and
+emitter, `EM_LOAD` performs the corresponding selection between static slots and
 procedure environments. For these static slots it emits an address load with a
 fixup, followed by a runtime load call. When those calls run, they retrieve the
 values stored by the initialisers.

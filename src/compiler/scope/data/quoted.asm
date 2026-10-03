@@ -21,7 +21,7 @@ SCQUOTEF:
         RET C                      ; Preserve a source failure.
         CALL SCQDAT                ; Compile it without resolving symbols.
         RET C                      ; Reject malformed quoted structure.
-        JP SCEXPECT                ; The quote form accepts exactly one datum.
+        JP CMD_END                 ; The quote form accepts exactly one datum.
 
 ; Compile the apostrophe shorthand.  A nested apostrophe is data and therefore
 ; becomes the ordinary two-element list (quote datum).
@@ -40,28 +40,28 @@ SCQSHRT:
 ; Open an encoding: CALL QT_BUILD, the cache word and the end placeholder.
 SCQHEAD:
         LD HL,QT_BUILD
-        CALL SCCALL
+        CALL EM_CALL
         RET C
         LD A,(SCQCNT)
         CP 255                     ; The byte-sized cache index must not wrap.
-        JP NC,SCCAP
+        JP NC,ERR_CAP
         LD (SCQFIX),A
         INC A
         LD (SCQCNT),A
-        LD HL,(SCPC)
+        LD HL,(ST_PC)
         LD A,4                     ; Fixup kind four selects quoted cache cells.
-        LD (SCFKIND),A
+        LD (ST_FKIND),A
         LD A,(SCQFIX)
-        LD (SCFSLOT),A
-        CALL SCFIX
+        LD (ST_FSLOT),A
+        CALL EM_FIXUP
         RET C
         XOR A
         CALL SINKBYTE
         RET C
         CALL SINKBYTE
         RET C
-        LD HL,(SCPC)               ; The end word is patched when the list closes.
-        CALL SCBRPUSH
+        LD HL,(ST_PC)              ; The end word is patched when the list closes.
+        CALL BR_PUSH
         RET C
         XOR A
         CALL SINKBYTE
@@ -76,9 +76,9 @@ SCQHEAD:
 SCQFOOT:
         XOR A
         LD (SCQENC),A
-        LD HL,(SCPC)
-        CALL SCABS
-        JP SCBRPAT
+        LD HL,(ST_PC)
+        CALL BR_ABS
+        JP BR_PATCH
 
 ; A nested apostrophe is the two-element list (quote datum).
 SCQNEST:
@@ -94,9 +94,9 @@ SCQNESTE:
         LD A,QT_LIST
         CALL SINKBYTE
         RET C
-        LD HL,SCQUOTE+1            ; Intern the reader's ordinary quote name.
+        LD HL,K_QUOTE+1            ; Intern the reader's ordinary quote name.
         LD BC,5
-        LD IX,SCNCTX
+        LD IX,ST_SYMS
         CALL SYM_ID
         RET C
         LD A,4                     ; The quote operator is a symbol literal.
@@ -123,24 +123,24 @@ SCQDAT:
         JP Z,SCQLIST
         CP 3                       ; Quoted shorthand inside data is a pair.
         JP Z,SCQNEST               ; Construct (quote datum) without collapsing it.
-        JP SCSYN                   ; Close, dot and EOF are invalid datum starts.
+        JP ERR_BAD                 ; Close, dot and EOF are invalid datum starts.
 SCQDNUM:
         LD A,(SCQENC)
         OR A
-        JP Z,SCNUM                 ; Outside a list, emit the value as code.
+        JP Z,CMD_NUM               ; Outside a list, emit the value as code.
         JR SCQENUM
 SCQDF16:
         LD A,(SCQENC)
         OR A
-        JP Z,FNUM
-        LD (SCVTMP),HL
+        JP Z,EM_FLOAT
+        LD (ST_IMMED),HL
         LD C,0                     ; Binary16 values use tag zero.
         JR SCQEWID
 
 ; Encode a reader scalar: code 5 for a byte-sized exact integer, otherwise
 ; code 4 with its payload and tag.
 SCQENUM:
-        LD (SCVTMP),HL
+        LD (ST_IMMED),HL
         LD A,(RD_TAG)
         LD C,A
         OR A
@@ -149,25 +149,25 @@ SCQENUM:
         CP 0FFH
         JR Z,SCQEWID               ; A character keeps its FFxx payload.
         LD A,0FEH                  ; A boolean becomes FE00H or FE01H.
-        LD (SCVTMP+1),A
+        LD (ST_IMMED+1),A
         JR SCQEWID
 SCQETAG:
         CP 3
-        JP NZ,SCUNSUP              ; Other scalar tags are not supported.
+        JP NZ,ERR_TODO             ; Other scalar tags are not supported.
         LD A,H
         OR A
         JR NZ,SCQEWID
         LD A,QT_BYTE
         CALL SINKBYTE
         RET C
-        LD A,(SCVTMP)
+        LD A,(ST_IMMED)
         JP SINKBYTE
 SCQEWID:
         LD A,QT_IMM
         CALL SINKBYTE              ; SINKBYTE keeps C, the tag.
         RET C
-        LD HL,(SCVTMP)
-        CALL SCWORD
+        LD HL,(ST_IMMED)
+        CALL EM_WORD
         RET C
         LD A,C
         JP SINKBYTE
@@ -193,7 +193,7 @@ SCQLIST:
         CP 2
         JR NZ,SCQLSOME
         LD HL,0FE02H               ; The empty list.
-        JP SCIMM
+        JP EM_IMM
 SCQLSOME:
         PUSH AF                    ; Keep the first event across the header.
         PUSH HL
@@ -302,7 +302,7 @@ SCQELEM:
         INC A
         LD (SCQCOUNT),A
         CP 64                      ; The decoder's stack is bounded too.
-        JP NC,SCCAP
+        JP NC,ERR_CAP
         OR A
         RET
 

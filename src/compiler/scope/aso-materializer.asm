@@ -27,7 +27,7 @@ SCAMWLP:
         JP C,SCAMBAD               ; A wrapped or reversed image is invalid.
 SCAMHAS:
         LD HL,(SCAWIN)
-        LD DE,SCEND-SCIMG          ; Keep one complete window in compiler memory.
+        LD DE,W_IMGEND-W_IMAGE     ; Keep one complete window in compiler memory.
         ADD HL,DE
         JR C,SCAMLAST               ; A final window may end at the address ceiling.
         LD A,(SCAETOP)
@@ -44,7 +44,7 @@ SCAMHAS:
         JR SCAMOPEN
 SCAMSETW:
         LD HL,(SCAWIN)
-        LD DE,SCEND-SCIMG
+        LD DE,W_IMGEND-W_IMAGE
         ADD HL,DE
         LD (SCAWEND),HL
         XOR A
@@ -64,7 +64,7 @@ SCAMOPEN:
         SBC HL,DE
         LD B,H
         LD C,L
-        LD HL,SCIMG
+        LD HL,W_IMAGE
         CALL SCSTREAM
         RET C
         LD HL,(SCAWEND)            ; The next pass starts at this exclusive end.
@@ -102,11 +102,11 @@ SCAMNEXT:
         JR Z,SCAMREC               ; IMAGE records may contain up to 128 bytes.
         CP 2                       ; Kind two denotes a PATCH record.
         JP NZ,SCAMBAD              ; No other kind is emitted by SCAWRITE.
-        LD (SCFKIND),A             ; Remember that this record is a PATCH.
+        LD (ST_FKIND),A            ; Remember that this record is a PATCH.
         JR SCAMHEAD                ; Share the address and length reader.
 SCAMREC:
         LD A,1                     ; Remember that this record is an IMAGE.
-        LD (SCFKIND),A
+        LD (ST_FKIND),A
 SCAMHEAD:
         CALL SCAMBYTE              ; Read the record address low byte.
         JP C,SCAMBAD
@@ -121,7 +121,7 @@ SCAMHEAD:
         JP Z,SCAMBAD
         XOR A
         LD (SCACHUNK+1),A
-        LD A,(SCFKIND)
+        LD A,(ST_FKIND)
         CP 1
         JR NZ,SCAMPTST             ; PATCH records are limited to two bytes.
         LD A,(SCACHUNK)
@@ -209,7 +209,7 @@ SCAMCOPY:
         JP Z,SCAMRECD
         CALL SCAMBYTE              ; Read the payload even when it is out of range.
         JP C,SCAMBAD
-        LD (SCBTMP),A              ; Keep the byte while comparing its address.
+        LD (ST_BYTE),A             ; Keep the byte while comparing its address.
         LD HL,(SCAADDR)
         LD DE,(SCAWIN)
         OR A
@@ -228,9 +228,9 @@ SCAMIN:
         LD DE,(SCAWIN)
         OR A
         SBC HL,DE                   ; Recompute the byte's offset when end wrapped.
-        LD DE,SCIMG
+        LD DE,W_IMAGE
         ADD HL,DE
-        LD A,(SCBTMP)
+        LD A,(ST_BYTE)
         LD (HL),A                   ; Apply IMAGE or PATCH data to the window.
 SCAMNBYT:
         LD HL,(SCAADDR)
@@ -240,7 +240,7 @@ SCAMNBYT:
         DEC (HL)
         JR SCAMCOPY
 SCAMRECD:
-        LD A,(SCFKIND)
+        LD A,(ST_FKIND)
         CP 1
         JP NZ,SCAMNEXT              ; PATCH records do not advance IMAGE coverage.
         LD HL,(SCAADDR)
@@ -319,11 +319,11 @@ SCAMHDR:
 
 ; Read one header byte and compare it with the expected value in A.
 SCAMCHK:
-        LD (SCBTMP),A              ; Keep the expected byte across CPM_READ.
+        LD (ST_BYTE),A             ; Keep the expected byte across CPM_READ.
         CALL SCAMBYTE
         RET C
         LD B,A
-        LD A,(SCBTMP)
+        LD A,(ST_BYTE)
         CP B
         RET
 
@@ -348,8 +348,8 @@ SCAMBYTE:
 ; Close a failed input and report a publication error to SCOUT.
 SCAMBAD:
         CALL CPM_ENDR              ; Preserve the transport's sticky error.
-        LD HL,SCOUTTXT             ; A malformed stage is an output failure.
-        LD (SCERRPTR),HL
+        LD HL,M_OUTPUT             ; A malformed stage is an output failure.
+        LD (ST_ERROR),HL
         SCF
         RET
 

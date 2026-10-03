@@ -14,7 +14,7 @@ Deno.test("scope compiler stays within the transient allocation budget", async (
   const assembled = await loadAssembly(
     "src/compiler/scope/compiler.asm",
   );
-  assert.equal(assembled.address("SCMAIN"), SCOPE_LOAD);
+  assert.equal(assembled.address("CMD_MAIN"), SCOPE_LOAD);
   const budget = measureScopeControlBudget(assembled.image, assembled.address);
   assert.equal(budget.imageEnd - SCOPE_LOAD, budget.imageBytes);
   assert.ok(budget.stageGap >= SCOPE_STAGE_GUARD);
@@ -38,7 +38,7 @@ Deno.test("scope compiler stays within the transient allocation budget", async (
 
 Deno.test("scope budget rejects an image that reaches the stage guard", () => {
   const address = (label: string) =>
-    label === "SCMAIN" ? SCOPE_LOAD : label === "SCSTAGE" ? 0x5800 : 0;
+    label === "CMD_MAIN" ? SCOPE_LOAD : label === "W_STAGE" ? 0x5800 : 0;
   assert.throws(
     () =>
       measureScopeControlBudget(

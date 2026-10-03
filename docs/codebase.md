@@ -238,7 +238,7 @@ Generated code is mostly calls into the runtime, so its size is dominated by
 how those calls are encoded.
 
 * **RST vectors.** Startup installs `JP` instructions at `RST 08H` to `30H`
-  (`RST_SET` in `core/invocation.asm`). The compiler's `SCCALL` emits a
+  (`RST_SET` in `core/invocation.asm`). The compiler's `EM_CALL` emits a
   one-byte `RST` instead of a three-byte `CALL` for the six helpers in its
   `SCRSTT` table: `ARG_PUSH`, `L_LOAD`, `PRIM_OP`, `QT_PUSH`, `G_OPSH` and
   `INV_OP`. The two tables must list the same helpers in the same order.

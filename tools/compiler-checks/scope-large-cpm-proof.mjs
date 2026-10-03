@@ -79,7 +79,7 @@ if (fillArgument !== undefined) {
     10,
   );
   const free = target - compiler.address("SRTLCORE") -
-    compiler.address("SCGRSZ") - FIXED_BYTES;
+    compiler.address("W_GLB_SZ") - FIXED_BYTES;
   count = Math.floor(free / FORM_BYTES);
   tailLength = free - count * FORM_BYTES;
 }

@@ -7,11 +7,11 @@ SCDEFUSE:
         CALL SCLOCF
         JP NC,SCRECDEC
         LD B,A
-        LD A,(SCRECST)
+        LD A,(ST_RBASE)
         CP B
         JR Z,SCDEFOK
         JP NC,SCRECDEC
-        LD A,(SCRECLIM)
+        LD A,(ST_RTOP)
         CP B
         JP C,SCRECDEC
         JP Z,SCRECDEC
@@ -22,54 +22,54 @@ SCDEFOK:
 
 SCIDEF:
         XOR A
-        LD (SCIDMODE),A            ; Internal definitions use local procedure cells.
-        LD A,(SCRECPHS)
+        LD (ST_INPKG),A            ; Internal definitions use local procedure cells.
+        LD A,(ST_RINIT)
         OR A
         JR NZ,SCIDREAD
-        LD A,(SCLNEXT)
-        LD (SCRECST),A
-        LD (SCRECLIM),A
-        LD A,(SCCURPR)
-        LD (SCRECPR),A
+        LD A,(ST_LNEXT)
+        LD (ST_RBASE),A
+        LD (ST_RTOP),A
+        LD A,(ST_PROC)
+        LD (ST_RPROC),A
         LD A,1
-        LD (SCRECMOD),A
-        LD (SCRECPHS),A
+        LD (ST_RMODE),A
+        LD (ST_RINIT),A
 SCIDREAD:
         CALL SCNEXT                ; A name is either a variable or a header list.
-        JP C,SCSYN
+        JP C,ERR_BAD
         CP 1
         JP Z,SCIDPROC              ; Procedure-definition shorthand.
         CP 5
-        JP NZ,SCDEFNSY
-        LD (SCID),HL
-        LD A,(SCBMODE)
+        JP NZ,ERR_NAME
+        LD (ST_SYMID),HL
+        LD A,(ST_BMODE)
         CP 1
         JR NZ,SCIDFOK              ; A let body may shadow an enclosing formal.
         CALL SCPFORM               ; A procedure body cannot redeclare a formal.
         JR NC,SCIDFOK
-        LD HL,SCDUPTXT
-        LD (SCERRPTR),HL
+        LD HL,M_DUP
+        LD (ST_ERROR),HL
         JP C,SCIDERR
 SCIDFOK:
         CALL SCDEFUSE
         RET C
-        LD (SCSLOT),A
-        LD A,(SCSLOT)
+        LD (ST_SLOT),A
+        LD A,(ST_SLOT)
         PUSH AF
         CALL SCINIT                ; Initializers run before the body expression.
         JP C,SCIDIERR
         POP AF
-        LD (SCSLOT),A
-        LD A,(SCSLOT)
+        LD (ST_SLOT),A
+        LD A,(ST_SLOT)
         LD L,A
         LD A,1
-        CALL SCSTORE
+        CALL EM_STORE
         RET C
-        CALL SCEXPECT
+        CALL CMD_END
         RET C
         LD A,1
-        LD (SCISDEF),A
-        LD (SCBDEFIN),A
+        LD (ST_ISDEF),A
+        LD (ST_BDEF),A
         XOR A
         RET
 SCIDIERR:
@@ -83,18 +83,18 @@ SCIDPROC:
         CALL SCNEXT                ; The header starts with the procedure name.
         JP C,SCIDERR
         CP 5
-        JP NZ,SCDEFNSY
-        LD (SCID),HL
-        LD A,(SCBMODE)
+        JP NZ,ERR_NAME
+        LD (ST_SYMID),HL
+        LD A,(ST_BMODE)
         CP 1
         JR NZ,SCIDPFOK             ; A let body may shadow an enclosing formal.
         CALL SCPFORM               ; A procedure body cannot reuse a formal.
         JR NC,SCIDPFOK
-        LD HL,SCDUPTXT
-        LD (SCERRPTR),HL
+        LD HL,M_DUP
+        LD (ST_ERROR),HL
         JP SCIDERR
 SCIDPFOK:
-        LD A,(SCIDMODE)
+        LD A,(ST_INPKG)
         OR A
         JR NZ,SCIDGLOB              ; Package shorthand uses a global procedure cell.
         CALL SCDEFUSE               ; The name is a recursive local definition.
@@ -104,12 +104,12 @@ SCIDGLOB:
         CALL SCGGET                 ; Allocate the package cell before its body.
         JP C,SCIDERR
 SCIDCELL:
-        LD (SCDEFSL),A              ; Preserve its slot while formals are parsed.
+        LD (ST_DSLOT),A             ; Preserve its slot while formals are parsed.
         CALL SCLOPEN                ; Enter the procedure's local activation scope.
         JP C,SCIDERR
         CALL SCPNEW                 ; Reserve its descriptor metadata record.
         JP C,SCIDUNW
-        LD (SCCURPR),A              ; Formal slots belong to this descriptor.
+        LD (ST_PROC),A              ; Formal slots belong to this descriptor.
 SCIDPAR:
         CALL SCNEXT                 ; Read a formal name or the list close.
         JP C,SCIDUNW
@@ -119,19 +119,19 @@ SCIDPAR:
         JR Z,SCIDPDOT               ; A dot introduces the single rest formal.
         CP 5
         JP NZ,SCIDUNW
-        LD (SCID),HL
+        LD (ST_SYMID),HL
         CALL SCPDUP                 ; Reject duplicate formals in this procedure.
         JR NC,SCIDPNEW
-        LD HL,SCDUPTXT
-        LD (SCERRPTR),HL
+        LD HL,M_DUP
+        LD (ST_ERROR),HL
         JP SCIDUNW
 SCIDPNEW:
         CALL SCNSLOT
         JP C,SCIDUNW
-        LD (SCSLOT),A
+        LD (ST_SLOT),A
         CALL SCADDLOC
         JP C,SCIDUNW
-        LD A,(SCSLOT)
+        LD A,(ST_SLOT)
         CALL SCPARAM
         JP C,SCIDUNW
         JR SCIDPAR
@@ -140,7 +140,7 @@ SCIDPDOT:
         JP C,SCIDUNW
         CP 5
         JP NZ,SCIDUNW
-        LD (SCID),HL
+        LD (ST_SYMID),HL
         CALL SCRADD                 ; Add the rest binding after fixed formals.
         JP C,SCIDUNW
         CALL SCNEXT                 ; The rest name must be followed by the close.
@@ -152,55 +152,55 @@ SCIDPEND:
         JP C,SCIDUNW
         CALL SCMAKE                 ; Build the closure without a body jump yet.
         JP C,SCIDUNW
-        LD A,(SCDEFSL)              ; Store the closure in the definition's cell.
+        LD A,(ST_DSLOT)             ; Store the closure in the definition's cell.
         LD L,A
-        LD A,(SCIDMODE)
+        LD A,(ST_INPKG)
         OR A
         JR Z,SCIDLOC
         XOR A                       ; Kind zero denotes a package-global cell.
-        CALL SCSTORE
+        CALL EM_STORE
         JP C,SCIDUNW
         JR SCIDSTOK
 SCIDLOC:
         LD A,1                      ; Kind one denotes an enclosing local cell.
-        CALL SCSTORE
+        CALL EM_STORE
         JP C,SCIDUNW
 SCIDSTOK:
-        CALL SCJP                   ; Skip the procedure body during definition.
+        CALL EM_JP                  ; Skip the procedure body during definition.
         JP C,SCIDUNW
-        LD (SCSKIP),HL
-        LD HL,(SCPC)
-        LD (SCPBODY),HL
+        LD (ST_SKIP),HL
+        LD HL,(ST_PC)
+        LD (ST_PBODY),HL
         LD A,1
-        LD (SCTCTX),A
-        LD A,(SCBISOL)
+        LD (ST_TAIL),A
+        LD A,(ST_ALONE)
         PUSH AF
         LD A,1
-        LD (SCBISOL),A
-        CALL SCBODY
+        LD (ST_ALONE),A
+        CALL CMD_BODY
         JP C,SCIDBERR
         POP AF
-        LD (SCBISOL),A
-        CALL SCRET
+        LD (ST_ALONE),A
+        CALL EM_RET
         JP C,SCIDUNW
         CALL SCPFIN
         JP C,SCIDUNW
         CALL SCUNWIND
         JP C,SCIDERR
         LD A,1
-        LD (SCISDEF),A
-        LD (SCBDEFIN),A
+        LD (ST_ISDEF),A
+        LD (ST_BDEF),A
         XOR A
-        LD (SCIDMODE),A
+        LD (ST_INPKG),A
         RET
 SCIDBERR:
         POP AF                     ; Restore the enclosing body isolation flag.
-        LD (SCBISOL),A
+        LD (ST_ALONE),A
 SCIDUNW:
         CALL SCUNWIND
 SCIDERR:
         XOR A
-        LD (SCIDMODE),A
+        LD (ST_INPKG),A
         SCF
         RET
 

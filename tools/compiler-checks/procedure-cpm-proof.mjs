@@ -28,8 +28,8 @@ const provider = await loadAssembly(
   "src/runtime/image.asm",
 );
 assert.equal(compiler.image.base, 0);
-assert.equal(compiler.address("SCMAIN"), 0x0100);
-assert.ok(compiler.address("SCEND") < 0x10000);
+assert.equal(compiler.address("CMD_MAIN"), 0x0100);
+assert.ok(compiler.address("W_IMGEND") < 0x10000);
 const runtimeLength = provider.image.bytes.length - 0x0100;
 assert.equal(runtimeLength, compiler.address("SRTLEN"));
 const heapPointerAddress = provider.address("HEAP_LIM");

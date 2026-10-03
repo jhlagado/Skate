@@ -20,7 +20,7 @@ SCLITADD:
         LD E,L
         ADD HL,HL
         ADD HL,HL
-        LD DE,SCSTRDS
+        LD DE,W_STRTAB
         ADD HL,DE
         LD E,(HL)
         INC HL
@@ -29,7 +29,7 @@ SCLITADD:
         INC HL
         LD A,(HL)
         LD (SCLITLEN),A
-        LD DE,SCSTRPL
+        LD DE,W_STRBUF
         LD (SCLITPB),DE
         JP SCLITSP
 
@@ -39,7 +39,7 @@ SCLITSYM:
         LD E,L
         ADD HL,HL
         ADD HL,DE
-        LD DE,SCNAMEDS
+        LD DE,W_SYMTAB
         ADD HL,DE
         LD E,(HL)
         INC HL
@@ -48,7 +48,7 @@ SCLITSYM:
         INC HL
         LD A,(HL)
         LD (SCLITLEN),A
-        LD DE,SCNAMEPL
+        LD DE,W_SYMBUF
         LD (SCLITPB),DE
 SCLITSP:
         LD A,(SCLITLEN)
@@ -61,20 +61,20 @@ SCLITSP:
         JP C,SCLITPTR             ; Existing symbols and strings keep identity.
         LD A,(SCLITN)
         CP 64
-        JP NC,SCCAP               ; Only a genuinely new literal needs a record.
+        JP NC,ERR_CAP             ; Only a genuinely new literal needs a record.
         LD HL,(SCLITUSE)
         LD (SCLITPOF),HL
         ADD HL,BC
-        LD DE,SCLITPSZ
+        LD DE,W_LITCAP
         OR A
         SBC HL,DE
-        JP NC,SCCAP
+        JP NC,ERR_CAP
         LD HL,(SCLITOFF)
         LD DE,(SCLITPB)
         ADD HL,DE
         LD (SCLITSRC),HL
         LD HL,(SCLITUSE)
-        LD DE,SCLITPL
+        LD DE,W_LITBUF
         ADD HL,DE
         LD (SCLITDST),HL
         LD BC,(SCLITREM)
@@ -144,7 +144,7 @@ SCLITFLP:
         ADD HL,DE
         LD (SCLTFSRC),HL
         LD HL,(SCLTFOFF)
-        LD DE,SCLITPL
+        LD DE,W_LITBUF
         ADD HL,DE
         LD (SCLTFDST),HL
         LD A,(SCLITLEN)
@@ -190,12 +190,12 @@ SCLITPTR:
 .OPCODE:
         CALL SINKBYTE
         RET C
-        LD HL,(SCPC)
-        LD A,3                     ; Fixup kind three selects SCLITOUT.
-        LD (SCFKIND),A
+        LD HL,(ST_PC)
+        LD A,3                     ; Fixup kind three selects W_LITOUT.
+        LD (ST_FKIND),A
         LD A,(SCLITIDX)
-        LD (SCFSLOT),A
-        CALL SCFIX
+        LD (ST_FSLOT),A
+        CALL EM_FIXUP
         RET C
         XOR A
         CALL SINKBYTE
@@ -230,13 +230,13 @@ SCLITDL:
         INC HL
         LD A,(HL)
         LD (SCLITLEN),A
-        LD HL,(SCPC)
+        LD HL,(ST_PC)
         LD (SCLITBAS),HL
         LD A,(SCLITLEN)
         CALL SINKBYTE
         RET C
         LD HL,(SCLITOFF)
-        LD DE,SCLITPL
+        LD DE,W_LITBUF
         ADD HL,DE
         LD (SCLITSRC),HL
         LD A,(SCLITLEN)
@@ -273,13 +273,13 @@ SCLITDN:
 SCLITDD:
         CALL SCSYMDAT              ; Publish a pointer directory for symbol literals.
         RET C
-        LD HL,(SCPC)
+        LD HL,(ST_PC)
         XOR A
         RET
 
 ; Append the count-and-pointer directory consumed by the runtime symbol reader.
 SCSYMDAT:
-        LD HL,(SCPC)
+        LD HL,(ST_PC)
         LD (SCSYMBAS),HL          ; The count byte is the directory start.
         CALL SCSYMCN               ; Count kind-four records before writing bytes.
         LD A,(SCSYMCT)
@@ -321,7 +321,7 @@ SCSYMNXT:
         LD (SCSYMIDX),A
         JR SCSYMLP
 SCSYMDON:
-        LD HL,(SCPC)
+        LD HL,(ST_PC)
         LD (SCSYMEND),HL
         XOR A
         RET
@@ -362,14 +362,14 @@ SCLITRCA:
         LD H,0
         ADD HL,HL
         ADD HL,HL
-        LD DE,SCLITREC
+        LD DE,W_LITREC
         ADD HL,DE
         RET
 SCLITOA:
         LD L,A
         LD H,0
         ADD HL,HL
-        LD DE,SCLITOUT
+        LD DE,W_LITOUT
         ADD HL,DE
         RET
 

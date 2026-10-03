@@ -9,7 +9,7 @@ SINKOPEN:
         XOR A
         LD (SCACTIV),A          ; No output owns the stage before CPM_MAKE.
         LD (SCARUNC),A            ; The pending IMAGE run starts empty.
-        LD (SCPCET),A             ; The output cursor begins below $10000.
+        LD (ST_PCHI),A            ; The output cursor begins below $10000.
         LD (SCAETOP),A            ; The ASO high-water endpoint begins at origin.
         LD HL,0100H
         LD (SCAREND),HL        ; The first IMAGE byte starts at the origin.
@@ -60,7 +60,7 @@ SCARUNFL:
         RET C
         LD A,(SCARUNC)
         LD (SCACHUNK),A
-        LD HL,SCIMG
+        LD HL,W_IMAGE
         LD (SCAWPTR),HL
 SCARLP:
         LD A,(SCACHUNK)
@@ -102,10 +102,10 @@ SINKEND:
         LD A,(SCAETOP)           ; Preserve an exact $10000 exclusive endpoint.
         CALL CPM_PUT
         RET C
-        LD HL,(SCPC)
+        LD HL,(ST_PC)
         CALL SCAWORD
         RET C
-        LD A,(SCPCET)
+        LD A,(ST_PCHI)
         CALL CPM_PUT
         RET C
         CALL CPM_ENDW
@@ -132,8 +132,8 @@ SINKABRT:
 
 ; Mark a transport failure as an output error for the command diagnostic.
 SCAERR:
-        LD HL,SCOUTTXT
-        LD (SCERRPTR),HL
+        LD HL,M_OUTPUT
+        LD (ST_ERROR),HL
         SCF
         RET
 

@@ -8,7 +8,7 @@ RT_COPY:
         LD HL,.NAME                ; Select the fixed provider file on the active drive.
         CALL CPM_OPEN              ; Open it through the binary transport adapter.
         JR C,.FAIL                 ; A missing or unreadable provider aborts setup.
-        LD BC,(SCRTLEN)            ; Copy the selected prefix of the runtime image.
+        LD BC,(ST_RTLEN)           ; Copy the selected prefix of the runtime image.
 .READ:
         LD A,B                     ; Test the high byte of the remaining count first.
         OR C                       ; Zero means every provider byte has been copied.
@@ -29,7 +29,7 @@ RT_COPY:
 .FAIL:
         CALL CPM_ENDR              ; Closing twice is harmless and preserves the first error.
         LD HL,.MSG                 ; Select the public provider diagnostic.
-        LD (SCERRPTR),HL           ; SCFAIL prints this message and publishes nothing.
+        LD (ST_ERROR),HL           ; .FAIL prints this message and publishes nothing.
         SCF                        ; Carry distinguishes provider failure from success.
         RET
 

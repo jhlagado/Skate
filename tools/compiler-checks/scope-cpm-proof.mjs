@@ -34,8 +34,8 @@ assert.ok(
   "managed ceiling must be a page-aligned AB00H..C000H value",
 );
 assert.equal(compiler.image.base, 0);
-assert.ok(compiler.address("SCMAIN") === 0x0100);
-assert.ok(compiler.address("SCEND") < 0x10000);
+assert.ok(compiler.address("CMD_MAIN") === 0x0100);
+assert.ok(compiler.address("W_IMGEND") < 0x10000);
 const runtimeLength = provider.image.bytes.length - 0x0100;
 assert.equal(runtimeLength, compiler.address("SRTLEN"));
 const runtimeImage = Uint8Array.from(provider.image.bytes);

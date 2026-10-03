@@ -4,7 +4,7 @@
 
 ; Generated code calls the six most frequent helpers with RST 08H..30H, one
 ; byte instead of three.  CP/M leaves these page-zero vectors to the program;
-; RST 38H stays free for a debugger.  The compiler's SCRSTT lists the same
+; RST 38H stays free for a debugger.  The compiler's .VECTORS lists the same
 ; helpers in the same order.
 RST_SET:
         LD HL,.TABLE
@@ -187,7 +187,7 @@ INV_OP:
 
 ; Call a fixed-arity procedure descriptor. A contains the argument count and
 ; the native stack contains callee, then arguments, in the order emitted by
-; SCPUSH. The descriptor records the body address and formal slot addresses.
+; EM_PUSH. The descriptor records the body address and formal slot addresses.
 INV_CALL:
         POP IX                    ; Save this helper's return address in IX.
         LD (FRM_SAVE),IX          ; FRM_PACK uses IX for its own helper return.

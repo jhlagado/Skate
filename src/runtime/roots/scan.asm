@@ -41,7 +41,7 @@ ROOT_ALL:
         JP GC_VALUE
 
 ; Record one generated operand in the exact shadow root stack.  A:HL is
-; returned unchanged so SCPUSH can continue with the native stack operation.
+; returned unchanged so EM_PUSH can continue with the native stack operation.
 ROOT_ADD:
         LD (ROOT_TAG),A
         LD (ROOT_VAL),HL

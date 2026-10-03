@@ -22,8 +22,8 @@ const provider = await loadAssembly(
   "src/runtime/image.asm",
 );
 assert.equal(compiler.image.base, 0);
-assert.ok(compiler.address("SCMAIN") === 0x0100);
-assert.ok(compiler.address("SCEND") < 0x10000);
+assert.ok(compiler.address("CMD_MAIN") === 0x0100);
+assert.ok(compiler.address("W_IMGEND") < 0x10000);
 const runtimeLength = provider.image.bytes.length - 0x0100;
 assert.equal(runtimeLength, compiler.address("SRTLEN"));
 let disk = installCpm22File(backing, {
