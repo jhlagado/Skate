@@ -9,7 +9,7 @@ CMD_FORM:
         LD (ST_ATTOP),A            ; Nested forms clear the permission below.
         XOR A                      ; No nested definition may be accepted.
         LD (ST_ALLOW),A            ; Only the package loop grants this permission.
-        CALL SCNEXT                ; Every supported form begins with a symbol.
+        CALL REC_NEXT              ; Every supported form begins with a symbol.
         RET C                      ; Propagate a reader source failure.
         CP 1                       ; A list operator is a computed procedure value.
         JP Z,.COMPUTED             ; Compile it before reading application arguments.
@@ -33,13 +33,13 @@ CMD_FORM:
         JP Z,CMD_SEQ               ; Emit the last value of the sequence.
         LD DE,K_LET                ; Compare with parallel local bindings.
         CALL CMD_SAME              ; The body gets a fresh lexical slot region.
-        JP Z,SCLETF                ; Compile the binding list and body.
+        JP Z,LET_FORM              ; Compile the binding list and body.
         LD DE,K_LETSEQ           ; Compare with sequential local bindings.
         CALL CMD_SAME              ; Each initializer sees the earlier bindings.
-        JP Z,SCLETSF               ; Compile let* with the same slot discipline.
+        JP Z,LET_STAR              ; Compile let* with the same slot discipline.
         LD DE,K_LETREC             ; Compare with mutually recursive bindings.
         CALL CMD_SAME              ; All letrec names share one initialized scope.
-        JP Z,SCLETRF               ; Compile letrec with forward local slots.
+        JP Z,LET_REC               ; Compile letrec with forward local slots.
         LD DE,K_COND               ; Compare with the multi-clause conditional form.
         CALL CMD_SAME              ; cond clauses are tested from left to right.
         JP Z,IF_COND               ; Compile each clause and its fall-through.
@@ -60,16 +60,16 @@ CMD_FORM:
         JP Z,IF_OR                 ; Preserve the first true value.
         LD DE,K_LAMBDA             ; Compare with lambda.
         CALL CMD_SAME              ; Lambda creates a fixed procedure descriptor.
-        JP Z,SCLAMBF               ; Compile its formal list and body.
+        JP Z,LAM_FORM              ; Compile its formal list and body.
         LD DE,K_SET                ; Compare with set!.
         CALL CMD_SAME              ; Mutation updates an existing slot.
-        JP Z,SCSETF                ; Compile the target and new value.
+        JP Z,BIND_SET              ; Compile the target and new value.
         LD DE,K_QUOTE              ; Compare with the explicit quote form.
         CALL CMD_SAME              ; Quote consumes one datum without evaluation.
-        JP Z,SCQUOTEF
+        JP Z,QUO_FORM
         LD DE,K_CALLEC             ; Compare with the bounded escape form.
         CALL CMD_SAME              ; call/ec receives one procedure expression.
-        JP Z,SCCALEF
+        JP Z,CALL_EC
         JP .NAMED                  ; Other names are ordinary procedure values.
 
 ; Compile a computed operator list and continue with its argument sequence.
@@ -87,7 +87,7 @@ CMD_FORM:
         RET C
         XOR A                      ; A computed operator uses the ordinary call path.
         LD (ST_ROUTE),A            ; Do not inherit a surrounding primitive marker.
-        JP SCAPARGS               ; The outer form supplies the arguments.
+        JP CALL_ARG               ; The outer form supplies the arguments.
 .OP_FAIL:
         POP AF                     ; Remove the saved context before reporting failure.
         LD (ST_TAIL),A
@@ -98,24 +98,24 @@ CMD_FORM:
 .NAMED:
         LD HL,(ST_OPID)            ; Restore the operator's interned identity.
         LD (ST_SYMID),HL           ; The primitive check uses the common identity word.
-        CALL SCLOCF                ; A local name must retain the ordinary path.
+        CALL BIND_HAS              ; A local name must retain the ordinary path.
         JR C,.GENERAL              ; Local bindings shadow predefined procedures.
-        CALL SCGHAS                ; An explicit global binding must remain dynamic.
+        CALL GLB_HAS               ; An explicit global binding must remain dynamic.
         JR C,.BOUND                ; Existing globals use the normal marker path.
-        CALL SCPLOOK               ; Unbound primitives use a reserved immediate.
+        CALL GLB_PRIM              ; Unbound primitives use a reserved immediate.
         OR A
         JR Z,.GENERAL              ; Ordinary names still use a full value record.
         LD (ST_GCALL),A            ; Mode three keeps the kind in the slot byte.
         LD A,3
         LD (ST_ROUTE),A            ; The call names the primitive directly.
-        JP SCAPARGS
+        JP CALL_ARG
 .BOUND:
         LD (ST_GCALL),A            ; Preserve the existing global slot for EM_HOLD.
         CALL EM_HOLD               ; Read the bound value before evaluating arguments.
         RET C
         LD A,1
-        LD (ST_ROUTE),A            ; SCAPARGS now emits the compact call entry.
-        JP SCAPARGS
+        LD (ST_ROUTE),A            ; CALL_ARG now emits the compact call entry.
+        JP CALL_ARG
 .GENERAL:
         XOR A
         LD (ST_ROUTE),A            ; The general path carries a complete callee value.
@@ -124,14 +124,14 @@ CMD_FORM:
         RET C
         CALL EM_PUSH               ; Keep the named callee below its arguments.
         RET C
-        JP SCAPARGS                ; CMD_REF leaves the generated value in A:HL.
+        JP CALL_ARG                ; CMD_REF leaves the generated value in A:HL.
 
 ; Select a package definition or a leading definition inside a procedure body.
 .DEFINE:
         LD A,(ST_ATTOP)            ; Package-level permission is saved per form.
         OR A
-        JP NZ,SCDEFINE             ; Top-level definitions retain global storage.
+        JP NZ,DEF_TOP              ; Top-level definitions retain global storage.
         LD A,(ST_BDSAV)            ; A body may accept definitions only at its head.
         OR A
-        JP NZ,SCIDEF               ; Internal definitions use recursive local slots.
+        JP NZ,DEF_BODY             ; Internal definitions use recursive local slots.
         JP ERR_DEF                 ; Definitions in an expression are malformed.

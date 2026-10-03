@@ -1,24 +1,24 @@
 ; Compiler formal, rest-binding and capture-mask management.
-; Entry points: SCPDUP, SCRADD, SCRMETA, SCRETAIN and SCCAPSET.
+; Entry points: CAP_DUP, CAP_REST, CAP_META, CAP_KEEP and CAP_SET.
 ; Return carry when the current procedure already has a formal with ST_SYMID.
-SCPDUP:
+CAP_DUP:
         LD A,(ST_LTOP)             ; No active records means no duplicate exists.
         OR A
         RET Z
         LD B,A                     ; B counts the active local records.
         LD HL,W_LKEYS              ; HL scans the two-byte binding identities.
         LD DE,W_LSLOTS             ; DE scans their one-byte slot numbers.
-SCPDUPLP:
+.LOOP:
         LD A,(HL)                  ; Compare the stored identity low byte.
         LD C,A
         LD A,(ST_SYMID)
         CP C
-        JR NZ,SCPDUPLO             ; A low-byte mismatch skips to the next record.
+        JR NZ,.LO_MISS             ; A low-byte mismatch skips to the next record.
         INC HL                     ; Compare the stored identity high byte.
         LD C,(HL)
         LD A,(ST_SYMID+1)
         CP C
-        JR NZ,SCPDUPHI            ; A high-byte mismatch leaves this record.
+        JR NZ,.NEXT               ; A high-byte mismatch leaves this record.
         LD A,(DE)                  ; Matching names must belong to this procedure.
         LD C,A
         PUSH HL                    ; Preserve the identity cursor during owner lookup.
@@ -33,35 +33,35 @@ SCPDUPLP:
         CP C
         POP DE                     ; Restore the active binding cursors.
         POP HL
-        JR Z,SCPDUPOK             ; A same-procedure name is a duplicate.
-SCPDUPHI:
+        JR Z,.FOUND               ; A same-procedure name is a duplicate.
+.NEXT:
         INC HL                     ; Advance from the high identity byte.
         INC DE                     ; Advance to the next slot number.
-        DJNZ SCPDUPLP              ; Inspect every active binding.
+        DJNZ .LOOP                 ; Inspect every active binding.
         XOR A                      ; Carry clear means no duplicate was found.
         RET
-SCPDUPLO:
+.LO_MISS:
         INC HL                     ; Skip the unmatched low identity byte.
-        JR SCPDUPHI              ; Complete the common record advance.
-SCPDUPOK:
+        JR .NEXT                 ; Complete the common record advance.
+.FOUND:
         SCF                        ; The caller rejects the parameter list.
         RET
 
 ; Add the current ST_SYMID as the procedure's one rest binding.  The binding is
 ; an ordinary local slot, but it remains outside the fixed-formal descriptor
 ; count so the runtime can build a list from surplus arguments.
-SCRADD:
-        CALL SCPDUP                ; A rest name cannot duplicate a fixed name.
-        JR NC,SCRNEW            ; An outer binding may still be shadowed.
+CAP_REST:
+        CALL CAP_DUP               ; A rest name cannot duplicate a fixed name.
+        JR NC,.NEW              ; An outer binding may still be shadowed.
         LD HL,M_DUP                ; Reuse the ordinary duplicate-formal diagnostic.
         LD (ST_ERROR),HL
         SCF                        ; Report the duplicate without changing ST_SYMID.
         RET
-SCRNEW:
-        CALL SCNSLOT               ; Allocate a normal lexical slot for the list.
+.NEW:
+        CALL BIND_NEW              ; Allocate a normal lexical slot for the list.
         RET C                      ; The local-slot bound remains the compiler gate.
-        LD (ST_SLOT),A             ; SCADDLOC reads the selected slot from state.
-        CALL SCADDLOC              ; Make the rest name visible in the body.
+        LD (ST_SLOT),A             ; BIND_ADD reads the selected slot from state.
+        CALL BIND_ADD              ; Make the rest name visible in the body.
         RET C                      ; A full active directory is a compile error.
         LD A,(ST_SLOT)             ; Keep the slot for descriptor publication.
         LD (ST_RLIST),A
@@ -72,11 +72,11 @@ SCRNEW:
 
 ; Mark a rest descriptor and store its local slot in a reserved high byte.
 ; Fixed descriptors keep the old all-zero high bytes and remain byte-stable.
-SCRMETA:
+CAP_META:
         LD A,(ST_REST)
         OR A
         RET Z                       ; A fixed procedure needs no metadata change.
-        CALL SCPREC                 ; Locate the current forty-four-byte record.
+        CALL PROC_REC               ; Locate the current forty-four-byte record.
         INC HL                      ; Skip the body address low byte.
         INC HL                      ; Skip the body address high byte.
         LD A,(HL)                   ; The low seven bits retain the fixed arity.
@@ -86,28 +86,28 @@ SCRMETA:
         INC HL                      ; Skip the arity byte to the first formal low byte.
         INC HL
         CP 4                         ; Four fixed formals use field three's high byte.
-        JR Z,SCRLAST
+        JR Z,.LAST
         ADD A,A                      ; Each earlier formal occupies two bytes.
         LD E,A
         LD D,0
         ADD HL,DE
         INC HL                      ; Select the reserved high byte.
-        JR SCRPUT
-SCRLAST:
+        JR .STORE
+.LAST:
         LD DE,7                      ; Field three's high byte is seven bytes ahead.
         ADD HL,DE
-SCRPUT:
+.STORE:
         LD A,(ST_RLIST)              ; The runtime reads this as the rest local slot.
         LD (HL),A
         XOR A                        ; Carry clear reports valid descriptor metadata.
         RET
 
 ; Return carry when ST_SYMID names one of the current procedure's formal slots.
-SCPFORM:
+CAP_FORM:
         LD A,(ST_PROC)             ; Package-level definitions have no formals.
         CP 0FFH
         RET Z
-        CALL SCPREC                ; Locate the active descriptor metadata.
+        CALL PROC_REC              ; Locate the active descriptor metadata.
         INC HL                     ; Skip the body address low byte.
         INC HL                     ; Skip the body address high byte.
         LD A,(HL)                  ; The high bit marks a procedure with a rest formal.
@@ -118,31 +118,31 @@ SCPFORM:
         INC HL                     ; Skip the capture-mask byte.
         LD A,B
         OR A                       ; Preserve a clear result for a nullary procedure.
-        JR Z,SCFNOFIX              ; An all-rest procedure has no fixed fields.
-SCFLOOP:
+        JR Z,.NO_FIXED             ; An all-rest procedure has no fixed fields.
+.LOOP:
         LD C,(HL)                  ; Read one formal's local slot number.
         INC HL
         INC HL                     ; Skip the reserved high slot byte.
-        CALL SCFHAS                ; Is ST_SYMID bound to that slot in an active record?
+        CALL .HAS                  ; Is ST_SYMID bound to that slot in an active record?
         RET C                      ; Carry: ST_SYMID names this formal.
-        DJNZ SCFLOOP
+        DJNZ .LOOP
         LD A,(ST_ARITY)            ; Fixed names were absent; inspect the rest slot.
         AND 80H
         RET Z                      ; A fixed procedure has no further formal name.
         LD A,(ST_ARITY)
         AND 7FH
         CP 4
-        JR Z,SCFREST4              ; Four fixed names leave field three's high byte.
+        JR Z,.REST_4TH             ; Four fixed names leave field three's high byte.
         INC HL                     ; Earlier arities leave the next field's high byte.
-        JR SCFREST
-SCFREST4:
+        JR .REST
+.REST_4TH:
         DEC HL                     ; The fourth fixed field is the reserved rest slot.
-SCFREST:
+.REST:
         XOR A                      ; Clear the marker so one rest scan terminates.
         LD (ST_ARITY),A
         LD B,1                      ; Reuse the ordinary slot comparison once.
-        JR SCFLOOP
-SCFNOFIX:
+        JR .LOOP
+.NO_FIXED:
         LD A,(ST_ARITY)
         AND 80H
         RET Z                      ; A nullary fixed procedure has no formal names.
@@ -150,45 +150,45 @@ SCFNOFIX:
         XOR A                      ; Clear the marker so one rest scan terminates.
         LD (ST_ARITY),A
         LD B,1
-        JR SCFLOOP
+        JR .LOOP
 
 ; Return carry when an active binding record for local slot C holds ST_SYMID.
 ; W_LKEYS and W_LSLOTS are parallel by active-record position, not by slot.
 ; BC and HL are preserved; A, DE and flags are clobbered.
-SCFHAS:
+.HAS:
         PUSH HL
         PUSH BC
         LD A,(ST_LTOP)             ; No active records means no match.
         OR A
-        JR Z,SCFHNO
+        JR Z,.HAS_NO
         LD B,A                     ; B counts the active records.
         LD HL,W_LKEYS              ; HL scans the two-byte identities.
         LD DE,W_LSLOTS             ; DE scans the matching slot numbers.
-SCFHLP:
+.HAS_LOOP:
         LD A,(DE)                  ; Only records for the formal's slot qualify.
         CP C
-        JR NZ,SCFHNX
+        JR NZ,.HAS_NEXT
         PUSH HL                    ; Keep the record cursor across the compare.
         LD A,(ST_SYMID)            ; Compare the identity low byte.
         CP (HL)
-        JR NZ,SCFHNE
+        JR NZ,.HAS_CMP
         INC HL
         LD A,(ST_SYMID+1)          ; Compare the identity high byte.
         CP (HL)
-SCFHNE:
+.HAS_CMP:
         POP HL
-        JR Z,SCFHYES               ; Both bytes matched.
-SCFHNX:
+        JR Z,.HAS_YES              ; Both bytes matched.
+.HAS_NEXT:
         INC HL                     ; Advance to the next two-byte identity.
         INC HL
         INC DE                     ; Advance to the next slot number.
-        DJNZ SCFHLP
-SCFHNO:
+        DJNZ .HAS_LOOP
+.HAS_NO:
         POP BC
         POP HL
         OR A                       ; Carry clear: no active record matched.
         RET
-SCFHYES:
+.HAS_YES:
         POP BC
         POP HL
         SCF                        ; Carry: ST_SYMID is bound to slot C.
@@ -198,27 +198,27 @@ SCFHYES:
 ; A forward name may have been discovered after the lambda's formals, so its
 ; active-directory entry must survive the frame restore for a later declaration
 ; to claim the same slot.
-SCRETAIN:
+CAP_KEEP:
         LD A,(ST_LTOP)
         LD A,(ST_OTOP)
         LD A,(ST_RMODE)
         OR A
-        JR NZ,SCRTSCAN
+        JR NZ,.SCAN
         LD A,(ST_OTOP)
         LD (ST_LTOP),A
         LD A,(ST_ONEXT)
         LD (ST_LNEXT),A
         RET
-SCRTSCAN:
+.SCAN:
         LD A,(ST_LTOP)
         LD (ST_KTOP),A
         LD A,(ST_OTOP)
         LD B,A
         LD C,A
-SCRTLOOP:
+.LOOP:
         LD A,(ST_KTOP)
         CP B
-        JR Z,SCRTDONE
+        JR Z,.DONE
         LD A,B
         LD (ST_KSRC),A
         LD L,A
@@ -235,7 +235,7 @@ SCRTLOOP:
         LD E,A
         LD A,(ST_RPROC)
         CP E
-        JR NZ,SCRTNEXT
+        JR NZ,.NEXT
         LD A,(ST_KSRC)
         LD L,A
         LD H,0
@@ -265,12 +265,12 @@ SCRTLOOP:
         LD A,(ST_KSLOT)
         LD (HL),A
         INC C
-SCRTNEXT:
+.NEXT:
         LD A,(ST_KSRC)
         INC A
         LD B,A
-        JR SCRTLOOP
-SCRTDONE:
+        JR .LOOP
+.DONE:
         LD A,C
         LD (ST_LTOP),A
         LD E,A
@@ -282,7 +282,7 @@ SCRTDONE:
         RET
 
 ; Restore one enclosing lambda frame from the compiler-side frame table.
-SCUNWIND:
+CAP_POP:
         LD A,(ST_BNEST)            ; A zero depth means no frame can be restored.
         OR A
         SCF
@@ -307,7 +307,7 @@ SCUNWIND:
         LD (ST_ONEXT),A
         INC HL
         LD (ST_FRAME),HL           ; Recursive retention uses this frame cursor.
-        CALL SCRETAIN               ; Keep forward cells before restoring the frame.
+        CALL CAP_KEEP               ; Keep forward cells before restoring the frame.
         LD HL,(ST_FRAME)
         LD A,(HL)                  ; Restore the enclosing procedure owner.
         LD (ST_PROC),A
@@ -331,7 +331,7 @@ SCUNWIND:
         RET
 
 ; Record the procedure that owns one reusable compiler slot.
-SCOWNSET:
+CAP_OWN:
         LD (ST_MSLOT),A            ; Preserve the slot while addressing the map.
         LD B,A                     ; Keep it while selecting the current owner.
         LD L,A                     ; Widen the slot index to a word.
@@ -343,8 +343,8 @@ SCOWNSET:
         CP 0FFH
         RET Z                       ; Package locals remain in static storage.
         LD A,(ST_PROC)             ; The procedure owns the new slot.
-        LD (ST_DESC),A             ; SCPREC uses the selected descriptor index.
-        CALL SCPREC
+        LD (ST_DESC),A             ; PROC_REC uses the selected descriptor index.
+        CALL PROC_REC
         LD DE,W_OWNOFF             ; The owned mask follows the formal fields.
         ADD HL,DE
         LD (ST_MASKP),HL           ; Keep the mask base while selecting its byte.
@@ -357,11 +357,11 @@ SCOWNSET:
         LD H,0
         LD DE,(ST_MASKP)
         ADD HL,DE                  ; Address the mask byte for this slot.
-        LD A,C                     ; SCBITSET consumes the original slot index.
-        JP SCBITSET                ; Set its bit in the descriptor mask.
+        LD A,C                     ; CAP_BIT consumes the original slot index.
+        JP CAP_BIT                 ; Set its bit in the descriptor mask.
 
 ; Mark a slot captured by the current procedure when its owner is outer.
-SCCAPSET:
+CAP_SET:
         LD (ST_MSLOT),A            ; Keep the matching slot across owner lookup.
         LD L,A                     ; Locate the owner byte for this slot.
         LD H,0
@@ -374,7 +374,7 @@ SCCAPSET:
         CP B                       ; A slot owned by this procedure is local.
         RET Z
         LD A,(ST_MSLOT)            ; An outer reference keeps its storage live.
-        CALL SCEVSET
+        CALL .ESCAPE
         LD A,B                     ; Remember the procedure that owns the cell.
         LD (ST_OWNER),A
         LD A,(ST_PROC)             ; Preserve the active procedure across mask writes.
@@ -382,13 +382,13 @@ SCCAPSET:
         LD A,(ST_DESC)             ; Preserve the descriptor currently being finished.
         LD (ST_CDESC),A
         LD A,(ST_MSLOT)             ; Pass the captured slot to the mask writer.
-        CALL SCMSKSET               ; The current procedure needs the capture bit.
+        CALL .MASK                  ; The current procedure needs the capture bit.
         LD A,(ST_BNEST)            ; Walk through every intermediate procedure.
         LD (ST_CHAIN),A
-SCCAPCHN:
+.CHAIN:
         LD A,(ST_CHAIN)            ; The frame index is one below the current depth.
         OR A
-        JR Z,SCCAPRST             ; A malformed chain still restores compiler state.
+        JR Z,.RESTORE             ; A malformed chain still restores compiler state.
         DEC A
         LD (ST_CHAIN),A
         LD L,A                     ; Widen the frame index before multiplying by nine.
@@ -407,13 +407,13 @@ SCCAPCHN:
         LD B,A                     ; Compare the parent with the cell owner.
         LD A,(ST_OWNER)
         CP B
-        JR Z,SCCAPRST             ; The owner already owns the shared cell.
+        JR Z,.RESTORE             ; The owner already owns the shared cell.
         LD A,B
         LD (ST_PROC),A             ; Select this intermediate descriptor.
         LD A,(ST_MSLOT)            ; Every enclosing mask names the same cell slot.
-        CALL SCMSKSET              ; Preserve the cell through this procedure too.
-        JR SCCAPCHN              ; Continue toward the procedure that owns it.
-SCCAPRST:
+        CALL .MASK                 ; Preserve the cell through this procedure too.
+        JR .CHAIN                ; Continue toward the procedure that owns it.
+.RESTORE:
         LD A,(ST_CPROC)            ; Restore the active compiler procedure.
         LD (ST_PROC),A
         LD A,(ST_CDESC)            ; Restore the descriptor being finalized.
@@ -421,7 +421,7 @@ SCCAPRST:
         RET
 
 ; Mark one compiler slot as captured so a later sibling cannot reuse its cell.
-SCEVSET:
+.ESCAPE:
         LD L,A                     ; Widen the zero-based slot index.
         LD H,0
         LD DE,W_ESCAPE             ; One byte records the lifetime of each slot.
@@ -431,12 +431,12 @@ SCEVSET:
         RET
 
 ; Set one bit in the current procedure's 128-slot capture mask.
-SCMSKSET:
+.MASK:
         LD (ST_MSLOT),A            ; Preserve the slot through record arithmetic.
-        LD A,(ST_PROC)             ; SCPREC addresses the current descriptor record.
+        LD A,(ST_PROC)             ; PROC_REC addresses the current descriptor record.
         LD (ST_MPROC),A
         LD (ST_DESC),A             ; The record helper uses the same descriptor index.
-        CALL SCPREC
+        CALL PROC_REC
         LD DE,W_CAPOFF             ; Skip the body, arity, formals and owner mask.
         ADD HL,DE
         LD (ST_MASKP),HL           ; Save the start of the capture mask.
@@ -453,18 +453,18 @@ SCMSKSET:
         LD A,C                     ; The low three bits select a bit in that byte.
 
 ; Set one bit in the mask whose base address is in HL.
-SCBITSET:
+CAP_BIT:
         LD (ST_MSLOT),A            ; Preserve the slot through mask arithmetic.
         LD (ST_MASKP),HL           ; Save the selected mask's first byte.
         LD A,(ST_MSLOT)            ; The low three bits select a bit in that byte.
         AND 7
         LD B,A                     ; B shifts the bit; Z means bit zero.
         LD A,1
-        JR Z,SCMSKBIT
-SCMSKSH:
+        JR Z,.APPLY
+.SHIFT:
         ADD A,A
-        DJNZ SCMSKSH
-SCMSKBIT:
+        DJNZ .SHIFT
+.APPLY:
         LD C,A                     ; Preserve the one-bit mask across the read.
         LD HL,(ST_MASKP)
         LD A,(HL)

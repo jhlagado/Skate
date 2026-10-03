@@ -41,29 +41,29 @@ The relevant files are [bindings/forms.asm](../../src/compiler/scope/bindings/fo
 
 ## Reserving a place for `base`
 
-In `bindings/forms.asm`, `SCLETF` begins compilation of an ordinary `let`. It calls
-`SCLETSET` to save the enclosing scope state and open the binding list. The
+In `bindings/forms.asm`, `LET_FORM` begins compilation of an ordinary `let`. It calls
+`LET_OPEN` to save the enclosing scope state and open the binding list. The
 loop at `SCLETB` checks that each binding has the required list structure.
 After reading a name, it reaches this sequence:
 
 ```asm
         CP 5
-        JP NZ,SCLETERR
+        JP NZ,LET_FAIL
         LD (ST_SYMID),HL
-        CALL SCNSLOT
-        JP C,SCLETERR
+        CALL BIND_NEW
+        JP C,LET_FAIL
         LD (ST_SLOT),A
-        CALL SCPEND
-        JP C,SCLETERR
+        CALL LET_PUSH
+        JP C,LET_FAIL
 ```
 
 These instructions are copied from the routine with their inline comments
 omitted. Token kind five denotes a
 symbol. At that point `HL` contains the identity of `base`. The compiler saves
-it in `ST_SYMID`, then calls `SCNSLOT` to allocate a compiler slot number. On success
+it in `ST_SYMID`, then calls `BIND_NEW` to allocate a compiler slot number. On success
 the number is returned in `A` and saved in `ST_SLOT`.
 
-`SCPEND` records the association in the pending-binding tables. The distinction
+`LET_PUSH` records the association in the pending-binding tables. The distinction
 between pending and active bindings implements a Scheme rule: the initialisers
 of an ordinary `let` are evaluated in the enclosing scope. The new bindings
 become visible together in the body.
@@ -87,20 +87,20 @@ After reserving `base`, the compiler processes its initialiser, `40`. The next
 part of `SCLETB` connects that expression with its destination:
 
 ```asm
-        CALL SCINIT
-        JP C,SCLETERR
-        CALL SCPREV
-        JP C,SCLETERR
+        CALL LET_INIT
+        JP C,LET_FAIL
+        CALL LET_PEEK
+        JP C,LET_FAIL
         LD A,(ST_SLOT)
         LD L,A
         LD A,1
         CALL EM_STORE
-        JP C,SCLETERR
+        JP C,LET_FAIL
 ```
 
-`SCINIT` compiles the initialiser. It may process a nested expression with
+`LET_INIT` compiles the initialiser. It may process a nested expression with
 bindings of its own, so the outer binding's slot cannot simply be assumed to
-remain in scratch storage. `SCPREV` recovers the pending binding before the
+remain in scratch storage. `LET_PEEK` recovers the pending binding before the
 store is emitted.
 
 At entry to `EM_STORE`, `L` contains the slot number and `A` contains one, the
@@ -115,18 +115,18 @@ path at `SCSTFIX`. The beginning of that path is:
 
 ```asm
         LD A,11H
-        CALL SINKBYTE
+        CALL SINK_PUT
         LD HL,(ST_PC)
         CALL EM_FIXUP
         RET C
         XOR A
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
 ```
 
-The byte `11H` is the Z80 opcode for `LD DE,nn`. `SINKBYTE` appends it to the
+The byte `11H` is the Z80 opcode for `LD DE,nn`. `SINK_PUT` appends it to the
 output; `scope/output-sink.asm` also gives that routine the older label
 `SCBYTE`, which some comments still use. The next two bytes will hold the
 destination address, but the final slot address is not available yet. `EM_FIXUP`
@@ -180,22 +180,22 @@ parenthesis of the binding list, it enters `SCLETBD`:
 
 ```asm
 SCLETBD:
-        CALL SCBIND
-        JP C,SCLETERR
-        CALL SCLEBODY
-        JP C,SCLETERR
-        JP SCLETEND
+        CALL BIND_ALL
+        JP C,LET_FAIL
+        CALL LET_BODY
+        JP C,LET_FAIL
+        JP LET_DONE
 ```
 
-`SCBIND` copies the pending names and slot numbers into the active local scope.
-`SCLEBODY` can then compile `(+ base delta)` with both names available. In the
+`BIND_ALL` copies the pending names and slot numbers into the active local scope.
+`LET_BODY` can then compile `(+ base delta)` with both names available. In the
 emitter, `EM_LOAD` performs the corresponding selection between static slots and
 procedure environments. For these static slots it emits an address load with a
 fixup, followed by a runtime load call. When those calls run, they retrieve the
 values stored by the initialisers.
 
 The addition and printing use their own runtime services. The binding
-mechanism supplies the two values they need. `SCLETEND`
+mechanism supplies the two values they need. `LET_DONE`
 restores the compiler's enclosing scope cursors after the body has been
 compiled. That restoration changes subsequent name lookup during compilation.
 It is not a runtime instruction that clears the two Scheme values.
@@ -214,9 +214,9 @@ The same proof contains `LETSTAR.SK8`:
 ```
 
 This also prints `42`, but the second initialiser now uses the first binding.
-In `SCLETSB`, the compiler calls `SCADDLOC` after completing each individual
+In `SCLETSB`, the compiler calls `BIND_ADD` after completing each individual
 binding. The next initialiser can therefore resolve that name. Ordinary `let`
-waits until `SCBIND` at the end of the list. The source-level difference between
+waits until `BIND_ALL` at the end of the list. The source-level difference between
 `let` and `let*` is visible in the placement of that table update.
 
 Both paths use the store emitter. Their different visibility rules follow
@@ -235,5 +235,5 @@ It runs a corpus, including these two cases and nested-binding examples. The
 proof compiles the programs under CP/M and checks their execution results.
 The adjacent `SHADOW.SK8` case covers nested scopes: an inner `value` binding
 produces `2` while the outer binding remains a distinct slot. Restoring the
-active scope at `SCLETEND` makes the outer binding available again after the
+active scope at `LET_DONE` makes the outer binding available again after the
 inner body has been compiled.

@@ -11,7 +11,7 @@ ST_FKIND:    DB 0                  ; Pending slot kind for EM_FIXUP.
 ST_FSLOT:    DB 0                  ; Pending slot number for EM_FIXUP.
 ST_SYMID:       DW 0               ; Current full interner symbol identity.
 ST_SLOT:     DB 0                  ; Current local or global slot number.
-ST_GSLOT:    DB 0                  ; Global slot returned by SCGGET.
+ST_GSLOT:    DB 0                  ; Global slot returned by GLB_GET.
 ST_GIDX:     DB 0                  ; Candidate global slot during a key scan.
 ST_PRIM:    DB 0                   ; Predefined primitive kind for the current name.
 ST_DSLOT:  DB 0                  ; Definition initializer's global slot.
@@ -31,7 +31,7 @@ ST_KTOP:   DB 0                    ; Active-binding count before recursive reten
 ST_KSRC:   DB 0                    ; Source index while retaining a forward binding.
 ST_KDST:   DB 0                    ; Destination index while compacting retained names.
 ST_RPEND:   DB 0                   ; Pending-record marker for the current letrec.
-ST_PLAY:      DB 0                 ; Nonzero while SCNEXT replays a binding list.
+ST_PLAY:      DB 0                 ; Nonzero while REC_NEXT replays a binding list.
 ST_PLAYN:    DB 0                  ; Nested replay-frame depth.
 ST_EVLO:   DW 0                    ; First event in the active replay frame.
 ST_BACK:   DB 0                    ; Nonzero replay returns to its saved stream.
@@ -55,7 +55,7 @@ ST_LNEXT:    DB 0                  ; Next reusable local slot number.
 ST_LMAX:   DB 0                    ; Maximum simultaneous local slot count.
 ST_BINDS:  DB 0                   ; Pending binding-record stack top.
 ST_LSAVE:   DB 0                   ; Saved let cursor while recursive state restores.
-ST_BINDP:     DB 0                 ; Pending-record cursor during SCBIND.
+ST_BINDP:     DB 0                 ; Pending-record cursor during BIND_ALL.
 ST_BMAX:     DB 0                  ; Pending-record limit for the current let.
 ST_FIXES:     DW 0                 ; Number of recorded slot-address fixups.
 ST_BRTOP:    DB 0                  ; Generic branch patch stack top.

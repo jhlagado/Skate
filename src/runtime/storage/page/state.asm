@@ -1,6 +1,6 @@
 ; Runtime page-domain state and bitmap masks.
 ; Shared data labels for the page modules.
-PAGE_IMG: DW 0                     ; Exact final loaded image end supplied by SCFIN.
+PAGE_IMG: DW 0                     ; Exact final loaded image end supplied by PUB_END.
 PAGE_ORG: DW 0                     ; First aligned page in the low managed extent.
 PAGE_LO: DW 0                      ; Number of pages before the high extent.
 PAGE_HI: DW 0                      ; Number of pages in the selected high extent.

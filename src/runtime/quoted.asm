@@ -19,11 +19,11 @@
 ;     06 lo hi           a symbol literal
 ;     07 lo hi           a string literal
 
-QT_LIST  EQU 1
-QT_END   EQU 2
-QT_DOT   EQU 3
-QT_IMM   EQU 4
-QT_BYTE  EQU 5
+QUO_LIST  EQU 1
+QUO_END   EQU 2
+QUO_DOT   EQU 3
+QUO_IMM   EQU 4
+QUO_BYTE  EQU 5
 
 QT_BUILD:
         POP HL                     ; The cache word follows the CALL.
@@ -53,11 +53,11 @@ QT_BUILD:
         LD A,(HL)
         INC HL
         LD (.PTR),HL
-        CP QT_LIST
+        CP QUO_LIST
         JR Z,.LIST
-        CP QT_BYTE
+        CP QUO_BYTE
         JR Z,.BYTE
-        CP QT_IMM
+        CP QUO_IMM
         JR Z,.IMM
         SUB 2                      ; Codes 6 and 7 are tags 4 and 5.
         LD E,(HL)
@@ -90,9 +90,9 @@ QT_BUILD:
 .ELEMENT:
         LD HL,(.PTR)
         LD A,(HL)
-        CP QT_END
+        CP QUO_END
         JR Z,.CLOSE
-        CP QT_DOT
+        CP QUO_DOT
         JR Z,.CLOSE
         PUSH BC
         CALL .VALUE
@@ -103,7 +103,7 @@ QT_BUILD:
 .CLOSE:
         INC HL
         LD (.PTR),HL
-        SUB QT_END                 ; Zero for a proper list, one for dotted.
+        SUB QUO_END                ; Zero for a proper list, one for dotted.
         LD C,A
         LD A,B
         LD B,C

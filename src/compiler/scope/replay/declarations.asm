@@ -1,68 +1,68 @@
 ; Scope replay declaration installation and deferred stores.
-; Entry points: SCRECPRE, SCRECUSE, SCRECPEN and SCRECSTO.
+; Entry points: REC_DECL, REC_SLOT, REC_PUSH and REC_FILL.
 ; Included in compiler order by ../replay.asm.
 
 ; Install every declaration before replaying any initializer.
-SCRECPRE:
+REC_DECL:
         LD HL,(ST_EVLO)            ; Scan the retained range without consuming source.
         LD (ST_GETP),HL
         XOR A
         LD (ST_NEST),A             ; No binding pair is open yet.
         LD (ST_HEAD),A             ; No binding name is pending.
         LD (ST_RCNT),A
-SCRECPRL:
-        CALL SCNEXT                 ; Read the next retained structural event.
+.LOOP:
+        CALL REC_NEXT               ; Read the next retained structural event.
         RET C
         LD (ST_EVENT),A
         LD (ST_EVVAL),HL
         CP 1
-        JR Z,SCRECPRO
+        JR Z,.OPEN
         CP 2
-        JR Z,SCRECCPR
+        JR Z,.CLOSE
         CP 5
-        JR NZ,SCRECPRL
+        JR NZ,.LOOP
         LD A,(ST_HEAD)
         OR A
-        JR Z,SCRECPRL
+        JR Z,.LOOP
         LD HL,(ST_EVVAL)
         LD (ST_SYMID),HL
         LD A,(ST_RCNT)
         CP 128
         JP NC,ERR_CAP
-        CALL SCRECDEC              ; Duplicate names are rejected here.
+        CALL LET_DECL              ; Duplicate names are rejected here.
         RET C
         LD (ST_SLOT),A
         CALL EM_CLEAR              ; Every recursive cell starts unbound.
         RET C
-        CALL SCRECPEN              ; Installation order drives reverse stores.
+        CALL REC_PUSH              ; Installation order drives reverse stores.
         RET C
         LD A,(ST_RCNT)
         INC A
         LD (ST_RCNT),A
         XOR A
         LD (ST_HEAD),A
-        JR SCRECPRL
-SCRECPRO:
+        JR .LOOP
+.OPEN:
         LD A,(ST_NEST)
         OR A
-        JR NZ,SCRECINC
+        JR NZ,.NEST
         LD A,1
         LD (ST_NEST),A
         LD A,1
         LD (ST_HEAD),A
-        JR SCRECPRL
-SCRECINC:
+        JR .LOOP
+.NEST:
         INC A
         LD (ST_NEST),A
-        JR SCRECPRL
-SCRECCPR:
+        JR .LOOP
+.CLOSE:
         LD A,(ST_NEST)
         OR A
-        JR Z,SCRECPRD
+        JR Z,.DONE
         DEC A
         LD (ST_NEST),A
-        JR SCRECPRL
-SCRECPRD:
+        JR .LOOP
+.DONE:
         LD HL,(ST_EVLO)
         LD (ST_GETP),HL
         LD A,1
@@ -71,15 +71,15 @@ SCRECPRD:
         RET
 
 ; The replay declaration already has a cell; return its active slot.
-SCRECUSE:
-        CALL SCLOCF
+REC_SLOT:
+        CALL BIND_HAS
         SCF
         RET NC
         OR A
         RET
 
 ; Append the selected declaration slot to the deferred initializer list.
-SCRECPEN:
+REC_PUSH:
         LD A,(ST_BINDS)
         CP 128
         JP NC,ERR_CAP
@@ -96,17 +96,17 @@ SCRECPEN:
         RET
 
 ; Pop deferred values in reverse declaration order and initialize their cells.
-SCRECSTO:
+REC_FILL:
         LD A,(ST_BINDS)
         LD (ST_RIDX),A
         LD A,(ST_RPEND)
         LD (ST_RMARK),A
-SCRECSTL:
+.LOOP:
         LD A,(ST_RIDX)
         LD C,A
         LD A,(ST_RMARK)
         CP C
-        JR Z,SCRECSTD
+        JR Z,.DONE
         LD A,C
         DEC A
         LD (ST_RIDX),A
@@ -123,8 +123,8 @@ SCRECSTL:
         LD A,1
         CALL EM_STORE
         RET C
-        JR SCRECSTL
-SCRECSTD:
+        JR .LOOP
+.DONE:
         LD A,(ST_RMARK)
         LD (ST_BINDS),A
         XOR A

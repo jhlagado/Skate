@@ -4,34 +4,34 @@
 ; ownership and the replay state used by letrec.
 
 ; Return NZ when an escape flag is set between C and the current slot cursor.
-SCESCAN:
-        PUSH BC                    ; Preserve the old scope cursors for SCLETEND.
+BIND_ESC:
+        PUSH BC                    ; Preserve the old scope cursors for LET_DONE.
         LD A,(ST_LNEXT)            ; The current cursor bounds the newly allocated range.
         SUB C                      ; A is the number of slots in this let.
-        JR Z,SCESNONE              ; No new slots means no captured storage.
+        JR Z,.NONE                 ; No new slots means no captured storage.
         LD B,A                     ; B counts the escape flags to inspect.
         LD L,C                     ; Start at the old cursor value.
         LD H,0
         LD DE,W_ESCAPE             ; One flag byte belongs to each compiler slot.
         ADD HL,DE
-SCESLOOP:
+.LOOP:
         LD A,(HL)                  ; A nonzero flag keeps this slot live.
         OR A
-        JR NZ,SCESCYES
+        JR NZ,.FOUND
         INC HL
-        DJNZ SCESLOOP
-SCESNONE:
+        DJNZ .LOOP
+.NONE:
         POP BC
         XOR A                      ; No captured slot was found.
         RET
-SCESCYES:
+.FOUND:
         POP BC
         LD A,1                     ; Return NZ while preserving the old cursors.
         OR A
         RET
 
 ; Allocate a new local slot and track the maximum data extent observed.
-SCNSLOT:
+BIND_NEW:
         LD A,(ST_LNEXT)            ; Slot numbers are one byte and stop at 127.
         CP 128                     ; Keep the local area bounded for the runtime.
         JP NC,ERR_CAP              ; A 129th simultaneous local is rejected.
@@ -48,29 +48,29 @@ SCNSLOT:
         LD C,A                     ; C is the new simultaneous slot count.
         LD A,(ST_LMAX)             ; Track the high-water slot count separately.
         CP C                       ; Existing maximum already covers this count?
-        JR NC,SCNSDONE             ; No update is needed when the maximum is higher.
+        JR NC,.OWNER               ; No update is needed when the maximum is higher.
         LD A,C                     ; Publish the new high-water count.
         LD (ST_LMAX),A             ; Finalisation sizes the local data area from it.
-SCNSDONE:
+.OWNER:
         LD A,B                     ; Record the owner before returning the slot.
-        CALL SCOWNSET               ; Procedure bodies receive cell-backed slots.
+        CALL CAP_OWN                ; Procedure bodies receive cell-backed slots.
         LD A,(ST_RMODE)             ; Recursive checking ignores ordinary lambda locals.
         OR A
-        JR Z,SCRNOFL
-        LD A,(ST_MSLOT)             ; SCBITSET consumed B; SCOWNSET kept the slot here.
+        JR Z,.DONE
+        LD A,(ST_MSLOT)             ; CAP_BIT consumed B; CAP_OWN kept the slot here.
         LD L,A
         LD H,0
         LD DE,W_DECLS
         ADD HL,DE
         LD A,1
         LD (HL),A
-SCRNOFL:
+.DONE:
         XOR A                      ; Clear carry after the capacity comparisons.
-        LD A,(ST_MSLOT)             ; SCBITSET uses B for its shift count.
+        LD A,(ST_MSLOT)             ; CAP_BIT uses B for its shift count.
         RET                        ; Carry remains clear on a successful allocation.
 
 ; Append the current ST_SYMID/ST_SLOT pair to the pending binding stack.
-SCPEND:
+LET_PUSH:
         LD A,(ST_BINDS)           ; The pending stack uses one byte of index.
         CP 128                     ; Keep nested binding records below the guard.
         JP NC,ERR_CAP              ; A malformed source cannot overwrite the table.
@@ -97,17 +97,17 @@ SCPEND:
         RET                        ; Return to the binding-list parser.
 
 ; Recover the most recent pending name and slot without changing an expression value.
-SCPREV:
+LET_PEEK:
         PUSH AF                    ; Preserve the initializer's value tag and flags.
         PUSH HL                    ; Preserve the initializer's payload.
         LD A,(ST_BINDS)            ; At least the current binding must be pending.
         OR A                       ; A zero top would indicate corrupted scope state.
-        JR NZ,SCPREVGO             ; Read the last pending record when present.
+        JR NZ,.READ                ; Read the last pending record when present.
         POP HL                     ; Restore the expression payload before failing.
         POP AF                     ; Restore the expression tag before failing.
         SCF                       ; Report the missing pending record.
         RET
-SCPREVGO:
+.READ:
         DEC A                      ; The current record is at top minus one.
         LD C,A                     ; Keep the record index for both table lookups.
         LD B,0                     ; Widen the bounded byte index to a word.
@@ -125,14 +125,14 @@ SCPREVGO:
         LD DE,W_BSLOTS
         ADD HL,DE
         LD A,(HL)                  ; Recover the slot selected before the initializer.
-        LD (ST_SLOT),A             ; Restore it for EM_STORE or SCADDLOC.
+        LD (ST_SLOT),A             ; Restore it for EM_STORE or BIND_ADD.
         POP HL                     ; Restore the initializer's payload.
         POP AF                     ; Restore the initializer's value tag.
         OR A                       ; Clear carry without changing the value registers.
         RET
 
 ; Add one completed let* binding directly to the active local directory.
-SCADDLOC:
+BIND_ADD:
         LD HL,(ST_SYMID)           ; The pending record retains the complete identity.
         LD A,(ST_LTOP)             ; The active directory has one byte per record.
         CP 128                     ; Refuse a scope that would overwrite its table.
@@ -154,7 +154,7 @@ SCADDLOC:
         LD A,(ST_SLOT)             ; The allocator selected this local slot.
         LD (HL),A                  ; Publish the active slot mapping.
         LD A,(ST_SLOT)             ; Keep the owner alongside the active binding.
-        CALL SCOWNSET               ; Captured references compare this owner.
+        CALL CAP_OWN                ; Captured references compare this owner.
         LD A,(ST_LTOP)             ; Advance the active local count.
         INC A                      ; The new binding is visible to later forms.
         LD (ST_LTOP),A             ; Publish the updated directory extent.
@@ -163,44 +163,44 @@ SCADDLOC:
 
 ; Claim a letrec name.  An earlier unresolved reference leaves a zero flag in
 ; W_DECLS; a real declaration changes it to one instead of allocating twice.
-SCRECDEC:
-        CALL SCLOCF                ; An outer binding may legally be shadowed.
-        JR NC,SCRECNEW             ; No active name means a fresh recursive slot.
+LET_DECL:
+        CALL BIND_HAS              ; An outer binding may legally be shadowed.
+        JR NC,.FRESH               ; No active name means a fresh recursive slot.
         LD B,A                     ; Preserve the matching active slot number.
         LD A,(ST_RBASE)
         SUB B                       ; A negative result means B is inside the range.
-        JR Z,SCRECIN                ; The first slot belongs to this scope.
-        JR NC,SCRECNEW              ; A slot below the range is an outer binding.
+        JR Z,.CLAIM                 ; The first slot belongs to this scope.
+        JR NC,.FRESH                ; A slot below the range is an outer binding.
         LD A,(ST_RTOP)              ; Only this range may claim its placeholders.
         CP B
-        JR C,SCRECNEW
-        JR Z,SCRECNEW
-SCRECIN:
+        JR C,.FRESH
+        JR Z,.FRESH
+.CLAIM:
         LD L,B                     ; Address this slot's declaration flag.
         LD H,0
         LD DE,W_DECLS
         ADD HL,DE
         LD A,(HL)
         OR A
-        JR NZ,SCRECDUP             ; Two declarations in one letrec are invalid.
+        JR NZ,.DUP                 ; Two declarations in one letrec are invalid.
         LD A,1                     ; Convert a forward placeholder to a declaration.
         LD (HL),A
         LD A,B                     ; Return the claimed slot to the caller.
         OR A
         RET
-SCRECNEW:
-        CALL SCNSLOT               ; Allocate a new cell in the current procedure.
+.FRESH:
+        CALL BIND_NEW              ; Allocate a new cell in the current procedure.
         RET C
         LD (ST_SLOT),A
         INC A
         LD B,A
         LD A,(ST_RTOP)
         CP B
-        JR NC,SCRCNOUP
+        JR NC,.VISIBLE
         LD A,B
         LD (ST_RTOP),A
-SCRCNOUP:
-        CALL SCADDLOC              ; Make the name visible to later initializers.
+.VISIBLE:
+        CALL BIND_ADD              ; Make the name visible to later initializers.
         RET C
         LD A,(ST_SLOT)
         LD L,A
@@ -212,28 +212,28 @@ SCRCNOUP:
         LD A,(ST_SLOT)
         OR A
         RET
-SCRECDUP:
+.DUP:
         LD HL,M_DUP
         LD (ST_ERROR),HL
         SCF
         RET
 
 ; Reserve a local cell for a forward reference during a letrec initializer.
-SCRECREF:
-        CALL SCNSLOT
+BIND_FWD:
+        CALL BIND_NEW
         RET C
         LD (ST_SLOT),A
         INC A
         LD B,A
         LD A,(ST_RTOP)
         CP B
-        JR NC,SCRCFOUP
+        JR NC,.VISIBLE
         LD A,B
         LD (ST_RTOP),A
-SCRCFOUP:
-        CALL SCADDLOC
+.VISIBLE:
+        CALL BIND_ADD
         RET C
-        CALL SCRECOWN               ; Move the cell back to the recursive owner.
+        CALL .OWNER                 ; Move the cell back to the recursive owner.
         LD A,(ST_SLOT)
         LD L,A
         LD H,0
@@ -247,7 +247,7 @@ SCRCFOUP:
 
 ; Give a forward cell the owner of the surrounding recursive binding scope and
 ; mark it captured by the procedure currently being compiled when necessary.
-SCRECOWN:
+.OWNER:
         LD A,(ST_PROC)
         PUSH AF
         LD A,(ST_DESC)
@@ -255,23 +255,23 @@ SCRECOWN:
         LD A,(ST_RPROC)
         LD (ST_PROC),A
         LD A,(ST_SLOT)
-        CALL SCOWNSET               ; First give the cell its enclosing owner.
+        CALL CAP_OWN                ; First give the cell its enclosing owner.
         POP AF
         LD (ST_DESC),A             ; Restore the procedure being compiled.
         POP AF
         LD (ST_PROC),A             ; Capture it from the original nested procedure.
         LD A,(ST_SLOT)
-        CALL SCCAPSET               ; Mark the current closure and its parents.
+        CALL CAP_SET                ; Mark the current closure and its parents.
         RET
 
 ; Check every slot introduced by this letrec or body-definition range.
-SCRECCHK:
+BIND_CHK:
         LD A,(ST_RBASE)
         LD B,A
-SCRECCLP:
+.LOOP:
         LD A,(ST_RTOP)
         CP B
-        JR Z,SCRECCOK
+        JR Z,.DONE
         LD A,B
         LD L,A
         LD H,0
@@ -281,7 +281,7 @@ SCRECCLP:
         LD E,A
         LD A,(ST_RPROC)
         CP E
-        JR NZ,SCRECNXT
+        JR NZ,.NEXT
         LD A,B
         LD L,A
         LD H,0
@@ -289,23 +289,23 @@ SCRECCLP:
         ADD HL,DE
         LD A,(HL)
         OR A
-        JR Z,SCRECERR
-SCRECNXT:
+        JR Z,.UNBOUND
+.NEXT:
         INC B
-        JR SCRECCLP
-SCRECCOK:
+        JR .LOOP
+.DONE:
         XOR A
         RET
-SCRECERR:
+.UNBOUND:
         LD HL,M_LETREC
         LD (ST_ERROR),HL
         SCF
         RET
 
 ; Move all pending records since the current marker into the active local scope.
-SCBIND:
-        POP DE                     ; Preserve SCBIND's return address.
-        POP BC                     ; Peek at the marker saved by SCLETSET.
+BIND_ALL:
+        POP DE                     ; Preserve BIND_ALL's return address.
+        POP BC                     ; Peek at the marker saved by LET_OPEN.
         PUSH BC                    ; Leave the marker below the caller frame.
         PUSH DE                    ; Restore the return address above the marker.
         LD A,C                     ; Keep the marker while records are copied.
@@ -313,13 +313,13 @@ SCBIND:
         LD A,(ST_BINDS)            ; Save the pending-record limit for this scope.
         LD (ST_BMAX),A             ; The marker remains below the active call stack.
         CP C                       ; Equal is the valid empty binding group.
-        JR Z,SCBINDOK              ; The body simply uses the enclosing scope.
-SCBINDLP:
+        JR Z,.DONE                 ; The body simply uses the enclosing scope.
+.LOOP:
         LD A,(ST_BINDP)            ; Current pending record index.
         LD C,A                     ; C retains the source index while addressing.
         LD A,(ST_BMAX)             ; Check for the end before reading a record.
         CP C                       ; All pending records have been copied.
-        JR Z,SCBINDOK              ; Keep the marker word for SCLETEND.
+        JR Z,.DONE                 ; Keep the marker word for LET_DONE.
         LD A,(ST_LTOP)             ; The active array receives the next binding.
         CP 128                     ; Check before writing either active byte.
         JP NC,ERR_CAP              ; Preserve the original source position.
@@ -359,8 +359,8 @@ SCBINDLP:
         LD A,(ST_SLOT)             ; Restore the pending slot number.
         LD (HL),A                  ; Publish the active local record.
         LD A,(ST_SLOT)             ; Keep the owner alongside the active binding.
-        PUSH BC                     ; SCOWNSET uses B/C while setting the mask bit.
-        CALL SCOWNSET               ; Captured references compare this owner.
+        PUSH BC                     ; CAP_OWN uses B/C while setting the mask bit.
+        CALL CAP_OWN                ; Captured references compare this owner.
         POP BC                      ; Resume the pending and active cursors.
         LD A,B                     ; Advance the active local count.
         INC A                      ; One pending binding is now visible.
@@ -368,59 +368,59 @@ SCBINDLP:
         LD A,C                     ; Advance the pending source index.
         INC A                      ; Move to the following pending record.
         LD (ST_BINDP),A            ; Publish the copied-record cursor.
-        JR SCBINDLP                ; Copy another record while one remains.
-SCBINDOK:
+        JR .LOOP                   ; Copy another record while one remains.
+.DONE:
         LD A,(ST_BINDP)            ; The marker is the released pending top.
         LD (ST_BINDS),A            ; Nested lets reuse the pending table space.
         XOR A                      ; Carry clear reports a complete binding scope.
         RET                        ; The caller now compiles the body.
 ; Search active locals.  The last matching record wins, so inner names shadow.
-SCLOCF:
+BIND_HAS:
         LD A,(ST_LTOP)             ; Zero active locals needs no address arithmetic.
         OR A                       ; Test the active count.
-        JR Z,SCLOCFNO              ; No local binding can match.
+        JR Z,.NONE                 ; No local binding can match.
         LD B,A                     ; B counts the active records to inspect.
         LD HL,W_LKEYS              ; HL scans two-byte IDs from outer to inner.
         LD DE,W_LSLOTS             ; DE scans matching slot bytes in parallel.
         XOR A                      ; A=0 denotes no match yet.
         LD (ST_FOUND),A            ; Clear the candidate slot value.
         LD (ST_HIT),A              ; Clear the match flag for this lookup.
-SCLOCLP:
+.LOOP:
         LD A,(HL)                  ; Read the active identity low byte.
         LD C,A                     ; Keep it while loading the query low byte.
         LD A,(ST_SYMID)            ; Recover the requested low byte.
         CP C                       ; Compare the low bytes first.
-        JR NZ,SCLOCNX              ; A mismatch leaves the previous candidate.
+        JR NZ,.LO_MISS             ; A mismatch leaves the previous candidate.
         INC HL                     ; Read the active identity high byte.
         LD A,(HL)                  ; Load its high byte.
         LD C,A                     ; Keep it while loading the query high byte.
         LD A,(ST_SYMID+1)          ; Recover the requested high byte.
         CP C                       ; Both bytes must match the active record.
-        JR NZ,SCLOCHI               ; A mismatch leaves the previous candidate.
+        JR NZ,.NEXT                 ; A mismatch leaves the previous candidate.
         LD A,(DE)                  ; A match replaces the previous outer slot.
         LD (ST_FOUND),A            ; The final match is the innermost binding.
         PUSH BC                    ; The lookup loop owns all three cursors.
         PUSH HL
         PUSH DE
-        CALL SCCAPSET               ; Mark a captured slot in the active procedure.
+        CALL CAP_SET                ; Mark a captured slot in the active procedure.
         POP DE
         POP HL
         POP BC
         LD A,1                     ; Record that at least one match exists.
         LD (ST_HIT),A              ; The value survives the remaining scan.
-        JR SCLOCHI                 ; Advance from this record's high byte.
-SCLOCNX:
+        JR .NEXT                   ; Advance from this record's high byte.
+.LO_MISS:
         INC HL                     ; The low-byte mismatch has not reached high yet.
-SCLOCHI:
+.NEXT:
         INC HL                     ; Advance from the high byte to the next record.
         INC DE                     ; Advance to the next active slot.
-        DJNZ SCLOCLP            ; Inspect all active locals without wrapping.
+        DJNZ .LOOP              ; Inspect all active locals without wrapping.
         LD A,(ST_HIT)              ; Check whether a match was recorded.
         OR A                       ; Z means the name is global or unbound.
-        JR Z,SCLOCFNO              ; Return carry clear for global resolution.
+        JR Z,.NONE                 ; Return carry clear for global resolution.
         LD A,(ST_FOUND)            ; Return the innermost local slot number.
         SCF                       ; Carry distinguishes a local from a global.
         RET                        ; The caller emits the local load.
-SCLOCFNO:
+.NONE:
         XOR A                      ; Return carry clear when no local matched.
         RET                        ; The caller resolves or allocates a global.

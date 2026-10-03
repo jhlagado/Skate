@@ -1,5 +1,5 @@
 ; Scope compiler leading-definition capture and predeclaration.
-; Entry points: SCDEFINE, SCDEFCAP, SCDEFPRE and SCDEFDUP.
+; Entry points: DEF_TOP, DEF_LEAD, .DECLARE and .DUP_CHK.
 ; Leading internal-definition support.
 ;
 ; A procedure body is retained only through its leading definition region and
@@ -8,24 +8,24 @@
 
 ; Compile a package-level definition.  The initializer is compiled before the
 ; global cell is published, while the selected slot survives nested scopes.
-SCDEFINE:
+DEF_TOP:
         LD A,(ST_ATTOP)            ; Nested define is outside this increment.
         OR A                       ; Nonzero is the package-level permission.
         JP Z,ERR_DEF               ; Reject definitions inside an expression body.
-        CALL SCNEXT                ; Read the new global's symbol name.
+        CALL REC_NEXT              ; Read the new global's symbol name.
         RET C                      ; Propagate source failure before allocation.
         CP 1                       ; An opening list selects procedure shorthand.
-        JP Z,SCDEFPR               ; The header list supplies the procedure name.
+        JP Z,.PROC                 ; The header list supplies the procedure name.
         CP 5                       ; Definitions require one identifier.
         JP NZ,ERR_NAME             ; A list or literal is not a binding name.
         LD (ST_SYMID),HL           ; Preserve the full identity across the initializer.
-        CALL SCGGET                ; Forward references use this same slot.
+        CALL GLB_GET               ; Forward references use this same slot.
         RET C                      ; Reject the 257th distinct package name.
         LD (ST_DSLOT),A            ; The store below targets this global slot.
         LD A,(ST_DSLOT)            ; Nested local definitions reuse this scratch byte.
         PUSH AF                    ; Keep the package slot across the initializer.
         CALL CMD_NEXT              ; Compile the initializer before publishing it.
-        JR C,SCDFERR               ; Restore the package slot before reporting failure.
+        JR C,.FAIL                 ; Restore the package slot before reporting failure.
         POP AF                     ; Recover the package slot after recursive compilation.
         LD (ST_DSLOT),A            ; The store below must target the package binding.
         LD A,(ST_DSLOT)            ; Recover the selected global slot.
@@ -35,30 +35,30 @@ SCDEFINE:
         RET C                      ; A fixup-capacity error is terminal.
         CALL CMD_END               ; Require the definition's closing parenthesis.
         RET                        ; The stored value remains the form result.
-SCDFERR:
+.FAIL:
         POP AF                     ; Discard the saved package slot on failure.
         LD (ST_DSLOT),A            ; Restore it before the caller unwinds.
         SCF                        ; Preserve the initializer diagnostic.
         RET
 
 ; Compile a package-level fixed-parameter procedure definition.  The opening
-; list has already been consumed; SCIDPROC reads its name and formal names.
-SCDEFPR:
+; list has already been consumed; DEF_PROC reads its name and formal names.
+.PROC:
         LD A,1
-        LD (ST_INPKG),A            ; SCIDPROC stores the closure in a global cell.
-        JP SCIDPROC
+        LD (ST_INPKG),A            ; DEF_PROC stores the closure in a global cell.
+        JP DEF_PROC
 
 ; Copy the current reader event into the bounded replay stream.
-SCDEFPUT:
+DEF_PUT:
         LD (ST_EVENT),A
         LD (ST_EVVAL),HL
         LD A,(RD_TAG)
         LD (ST_EVTAG),A
-        JP SCRECPUT
+        JP REC_PUT
 
 ; Capture leading definitions and the first ordinary body form.
-SCDEFCAP:
-        CALL SCRECOPN              ; Save the source or enclosing replay cursor.
+DEF_LEAD:
+        CALL REC_OPEN              ; Save the source or enclosing replay cursor.
         RET C                      ; The nested body bound is explicit.
         LD HL,(ST_PUTP)
         LD (ST_EVLO),HL            ; This body owns the appended event range.
@@ -69,14 +69,14 @@ SCDEFCAP:
         LD (ST_RTOP),A
         LD A,(ST_BMODE)
         CP 2
-        JP NZ,SCDFSEL
+        JP NZ,.FORMALS
         LD A,(ST_LETLO)
         LD (ST_DEFLO),A            ; Let bindings and definitions share one scope.
-        JR SCDFOK
-SCDFSEL:
+        JR .STATE
+.FORMALS:
         LD A,(ST_LTOP)
         LD (ST_DEFLO),A            ; Procedure formals are checked separately.
-SCDFOK:
+.STATE:
         LD A,(ST_PROC)
         LD (ST_RPROC),A
         LD A,(ST_BINDS)
@@ -84,129 +84,129 @@ SCDFOK:
         LD A,1
         LD (ST_RMODE),A
         LD (ST_RINIT),A
-SCDEFFRM:
-        CALL SCNEXT                ; Read the next body form, marking binary16 literals.
-        JP C,SCDEFFAL
-        CALL SCDEFPUT
-        JP C,SCDEFFAL
+.FORM:
+        CALL REC_NEXT              ; Read the next body form, marking binary16 literals.
+        JP C,.FAIL
+        CALL DEF_PUT
+        JP C,.FAIL
         LD A,(ST_EVENT)
         CP 2                       ; A close is an empty or definition-only body.
-        JP Z,SCDEFDON
+        JP Z,.CAPTURED
         CP 1                       ; Every body form starts with an opening list.
-        JP NZ,SCDEFDON             ; A scalar body form needs only one replay event.
+        JP NZ,.CAPTURED            ; A scalar body form needs only one replay event.
         LD A,1
         LD (ST_NEST),A
-        CALL SCNEXT                ; The operator identifies a definition form.
-        JP C,SCDEFFAL
-        CALL SCDEFPUT
-        JP C,SCDEFFAL
+        CALL REC_NEXT              ; The operator identifies a definition form.
+        JP C,.FAIL
+        CALL DEF_PUT
+        JP C,.FAIL
         LD A,(ST_EVENT)
         CP 5
-        JP NZ,SCDEFDON             ; Computed operators are ordinary body forms.
+        JP NZ,.CAPTURED            ; Computed operators are ordinary body forms.
         LD DE,K_DEFINE
         CALL CMD_SAME
-        JR Z,SCDEFYES
+        JR Z,.DEFINE
         XOR A
         LD (ST_LEAD),A
-        JP SCDEFDON                ; Let the normal body parser read the rest.
-SCDEFYES:
+        JP .CAPTURED               ; Let the normal body parser read the rest.
+.DEFINE:
         LD A,1
         LD (ST_LEAD),A
-SCDEFSKP:
-        CALL SCNEXT                ; Source or enclosing replay, as SCNEXT selects.
-        JP C,SCDEFFAL
-        CALL SCDEFPUT
-        JP C,SCDEFFAL
+.SKIP:
+        CALL REC_NEXT              ; Source or enclosing replay, as REC_NEXT selects.
+        JP C,.FAIL
+        CALL DEF_PUT
+        JP C,.FAIL
         LD A,(ST_EVENT)
         CP 1
-        JR Z,SCDEFINC
+        JR Z,.SKIP_IN
         CP 2
-        JR Z,SCDEFDEC
-        JR SCDEFSKP
-SCDEFINC:
+        JR Z,.SKIP_OUT
+        JR .SKIP
+.SKIP_IN:
         LD A,(ST_NEST)
         INC A
         LD (ST_NEST),A
-        JR SCDEFSKP
-SCDEFDEC:
+        JR .SKIP
+.SKIP_OUT:
         LD A,(ST_NEST)
         DEC A
         LD (ST_NEST),A
-        JR NZ,SCDEFSKP
+        JR NZ,.SKIP
         LD A,(ST_LEAD)
         OR A
-        JP NZ,SCDEFFRM            ; Keep buffering another leading definition.
-SCDEFDON:
+        JP NZ,.FORM               ; Keep buffering another leading definition.
+.CAPTURED:
         LD A,(ST_PLAY)
         OR A
-        JR Z,SCDEFSET
-        CALL SCRECSAV              ; Preserve the enclosing replay cursor.
-SCDEFSET:
+        JR Z,.REPLAY
+        CALL REC_SAVE              ; Preserve the enclosing replay cursor.
+.REPLAY:
         LD HL,(ST_EVLO)
         LD (ST_GETP),HL
         LD HL,(ST_PUTP)
         LD (ST_EVEND),HL
         LD A,1
-        LD (ST_BACK),A             ; SCNEXT will restore the source after replay.
+        LD (ST_BACK),A             ; REC_NEXT will restore the source after replay.
         LD (ST_PLAY),A
-        CALL SCDEFPRE              ; Install every definition before replay.
+        CALL .DECLARE              ; Install every definition before replay.
         RET C
         LD A,(ST_LEADS)
         OR A
         RET NZ                     ; Keep recursive state for the definition body.
-        CALL SCRECRST              ; A non-definition body keeps outer scope rules.
+        CALL .RESTORE              ; A non-definition body keeps outer scope rules.
         XOR A
         RET
 
 ; Predeclare each leading definition in the retained range.
-SCDEFPRE:
+.DECLARE:
         LD HL,(ST_EVLO)
         LD (ST_GETP),HL
         XOR A
         LD (ST_LEADS),A
-SCDEPLP:
-        CALL SCNEXT
+.NEXT_DEF:
+        CALL REC_NEXT
         RET C
         CP 2
-        JP Z,SCDEPPD
+        JP Z,.DECLARED
         CP 1
-        JP NZ,SCDEPPD
-        CALL SCNEXT                ; Read and verify the define operator.
+        JP NZ,.DECLARED
+        CALL REC_NEXT              ; Read and verify the define operator.
         RET C
         CP 5
-        JP NZ,SCDEPPD
+        JP NZ,.DECLARED
         LD DE,K_DEFINE
         CALL CMD_SAME
-        JP NZ,SCDEPPD
-        CALL SCNEXT                ; A variable name or shorthand header follows.
+        JP NZ,.DECLARED
+        CALL REC_NEXT              ; A variable name or shorthand header follows.
         RET C
         CP 1
-        JR Z,SCDEPHDR
+        JR Z,.HEADER
         CP 5
-        JP NZ,SCDEFFAL
-        JR SCDEPNAM
-SCDEPHDR:
-        CALL SCNEXT
+        JP NZ,.FAIL
+        JR .NAME
+.HEADER:
+        CALL REC_NEXT
         RET C
         CP 5
-        JP NZ,SCDEFFAL
+        JP NZ,.FAIL
         LD A,2                    ; The header opening is already part of the form.
         LD (ST_NEST),A            ; Include it while skipping the definition body.
-SCDEPNAM:
+.NAME:
         LD (ST_SYMID),HL
-        CALL SCDEFDUP              ; Reject a name already in this lexical scope.
-        JR NC,SCDEPNOK
+        CALL .DUP_CHK              ; Reject a name already in this lexical scope.
+        JR NC,.UNIQUE
         LD HL,M_DUP
         LD (ST_ERROR),HL
-        JP SCDEFFAL
-SCDEPNOK:
+        JP .FAIL
+.UNIQUE:
         LD A,(ST_NEST)
         OR A
-        JR NZ,SCDEPSK
+        JR NZ,.INSTALL
         LD A,1                    ; A variable definition has one open list.
         LD (ST_NEST),A
-SCDEPSK:
-        CALL SCRECDEC              ; The active directory now contains the name.
+.INSTALL:
+        CALL LET_DECL              ; The active directory now contains the name.
         RET C
         LD (ST_SLOT),A
         CALL EM_CLEAR              ; A reused static cell begins unbound.
@@ -214,12 +214,12 @@ SCDEPSK:
         LD A,(ST_LEADS)
         INC A
         LD (ST_LEADS),A
-        CALL SCDEFSKR               ; Skip the rest of this definition form.
+        CALL .DEF_SKIP              ; Skip the rest of this definition form.
         RET C
-        JP SCDEPLP
+        JP .NEXT_DEF
 
 ; Return carry when ST_SYMID is already active in the current definition scope.
-SCDEFDUP:
+.DUP_CHK:
         LD A,(ST_DEFLO)
         LD B,A
         LD A,(ST_LTOP)
@@ -231,30 +231,30 @@ SCDEFDUP:
         ADD HL,HL
         LD DE,W_LKEYS
         ADD HL,DE
-SCDEFDLP:
+.DUP_LOOP:
         LD A,(ST_SYMID)
         CP (HL)
-        JR NZ,SCDEFDNX
+        JR NZ,.DUP_NEXT
         INC HL
         LD A,(ST_SYMID+1)
         CP (HL)
-        JP Z,SCDFDUP
+        JP Z,.DUP_YES
         DEC HL
-SCDEFDNX:
+.DUP_NEXT:
         INC HL
         INC HL
         INC B
         LD A,B
         CP C
-        JR NZ,SCDEFDLP
+        JR NZ,.DUP_LOOP
         XOR A
         RET
-SCDFDUP:
+.DUP_YES:
         SCF
         RET
 
 ; Finish the declaration scan and replay the retained body from its start.
-SCDEPPD:
+.DECLARED:
         LD HL,(ST_EVLO)
         LD (ST_GETP),HL
         LD A,1
@@ -263,29 +263,29 @@ SCDEPPD:
         RET
 
 ; Skip one retained top-level form after its definition name.
-SCDEFSKR:
-SCDEFSKL:
-        CALL SCNEXT
+.DEF_SKIP:
+.DEF_NEXT:
+        CALL REC_NEXT
         RET C
         CP 1
-        JR Z,SCDEFSKI
+        JR Z,.DEF_IN
         CP 2
-        JR NZ,SCDEFSKL
+        JR NZ,.DEF_NEXT
         LD A,(ST_NEST)
         DEC A
         LD (ST_NEST),A
-        JR NZ,SCDEFSKL
+        JR NZ,.DEF_NEXT
         XOR A
         RET
-SCDEFSKI:
+.DEF_IN:
         LD A,(ST_NEST)
         INC A
         LD (ST_NEST),A
-        JR SCDEFSKL
+        JR .DEF_NEXT
 
 ; Restore recursive fields from the enclosing replay frame without ending it.
-SCRECRST:
-        CALL SCRECADR
+.RESTORE:
+        CALL REC_ADDR
         INC HL
         LD A,(HL)
         LD (ST_RINIT),A
@@ -306,8 +306,8 @@ SCRECRST:
         LD (ST_RPEND),A
         RET
 
-SCDEFFAL:
-        CALL SCRECPOP
+.FAIL:
+        CALL REC_POP
         SCF
         RET
 

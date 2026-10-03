@@ -80,7 +80,7 @@ CMD_MAIN:
         SBC HL,DE                 ; Check the qualified TPA has the required guard.
         JP C,.MEMORY              ; Refuse an installation with too little memory.
         LD SP,0E020H              ; Parser and emitter calls share this stack.
-        CALL SCPRECOV              ; Recover stale stages before opening the spool.
+        CALL PUB_TIDY              ; Recover stale stages before opening the spool.
         JR C,.RECOVERY             ; A recovery failure has no source location.
         CALL CMD_INIT             ; Clear tables and load the checked runtime provider.
         JP C,.FAIL                ; Refuse to parse when the provider was not loaded.
@@ -88,16 +88,16 @@ CMD_MAIN:
         JP C,.FAIL                ; No output is opened until parsing succeeds.
         LD A,1                    ; Subsequent failures are finalisation/publication.
         LD (ST_PHASE),A           ; Do not mislabel generated-image errors as source.
-        CALL SCFIN                ; Resolve slots and append the complete image.
+        CALL PUB_END              ; Resolve slots and append the complete image.
         JP C,.FAIL                ; Reject an image that crosses a measured bound.
-        CALL SCOUT                ; Publish checked COM and ASO files.
+        CALL PUB_MAIN             ; Publish checked COM and ASO files.
         JP C,.FAIL                ; Report a transport or publication failure.
         LD DE,M_OK                ; Successful compilation message.
         JP CMD_QUIT               ; Print it and return to CP/M.
 .RECOVERY:
         LD A,1                     ; Recovery failure has no source location.
         LD (ST_PHASE),A            ; Force the plain output diagnostic path.
-        CALL SCPRECER               ; Select OUTPUT ERROR and close any stream.
+        CALL PUB_SNAG               ; Select OUTPUT ERROR and close any stream.
 .FAIL:
         JP DIAG_OUT                ; Close input and print the selected diagnostic.
 .MEMORY:
@@ -128,17 +128,17 @@ CMD_INIT:
         LD (ST_DESC),A            ; No descriptor is awaiting its body address.
         LD (ST_ARGS),A            ; No generic application argument is pending.
         LD (ST_ROUTE),A           ; No compact global-call marker is active.
-        LD (SCROLLF),A            ; No publication rollback is active at setup.
+        LD (PUB_ROLL),A           ; No publication rollback is active at setup.
         LD (ST_TAIL),A            ; Top-level expressions are not tail calls.
         LD (ST_CHECK),A       ; Stores initialize bindings until set! selects checks.
         LD (ST_TAILS),A           ; No pending tail-call target words exist.
-        LD (SCLITN),A             ; No copied symbol or string literals exist yet.
-        LD (SCLITUSE),A           ; The literal byte pool starts empty.
-        LD (SCLITUSE+1),A
-        LD (SCQCNT),A             ; No quoted-list cache cells are reserved yet.
-        LD (SCQCOUNT),A            ; No quoted-list elements are pending.
-        LD (SCQENC),A              ; No quoted list is being encoded.
-        LD (SCQDOT),A              ; No dotted-list marker is active.
+        LD (LIT_CNT),A            ; No copied symbol or string literals exist yet.
+        LD (LIT_USED),A           ; The literal byte pool starts empty.
+        LD (LIT_USED+1),A
+        LD (QUO_CNT),A            ; No quoted-list cache cells are reserved yet.
+        LD (QUO_LEN),A             ; No quoted-list elements are pending.
+        LD (QUO_ENC),A             ; No quoted list is being encoded.
+        LD (QUO_TAIL),A            ; No dotted-list marker is active.
         LD (ST_BNEST),A           ; No compiler lambda frame is active.
         LD (ST_BMODE),A           ; No body is isolating its tail candidates.
         LD (ST_ALONE),A           ; Nested body forms propagate candidates by default.
@@ -185,7 +185,7 @@ CMD_INIT:
         LD (ST_PC),HL             ; The cursor is a logical output address.
         XOR A
         LD (ST_PCHI),A            ; The cursor begins below the 17-bit endpoint.
-        CALL SINKOPEN              ; Open SPL before the runtime and source streams.
+        CALL ASO_OPEN              ; Open SPL before the runtime and source streams.
         RET C                      ; A failed spool setup is a setup failure.
         LD IX,ST_SYMS             ; Select the symbol interner context.
         CALL SYM_INIT             ; Validate and clear its descriptor counters.
@@ -203,7 +203,7 @@ CMD_INIT:
         LD BC,W_GLB_SZ             ; Reserve the global area before any code, so
 .GLOBALS:                          ; every global address is a constant.
         XOR A                      ; Unused and ordinary slots stay unbound.
-        CALL SINKBYTE              ; SINKBYTE preserves BC.
+        CALL SINK_PUT              ; SINK_PUT preserves BC.
         RET C
         DEC BC
         LD A,B
@@ -239,7 +239,7 @@ CMD_INIT:
         LD DE,K_CASE               ; case compares with STD_CASE.
         CALL CMD_SAME
         JR Z,.STD
-        CALL SCPLOOK               ; A is the primitive kind, or zero.
+        CALL GLB_PRIM              ; A is the primitive kind, or zero.
         CP 61
         JR NC,.STD                 ; Kinds 61 and up are standard procedures.
         CP 54
@@ -276,7 +276,7 @@ CMD_PASS:
         CALL RD_INIT               ; Reset lexer and structural reader state.
         RET C                      ; Treat a reader setup fault as a parse failure.
 .LOOP:
-        CALL SCNEXT                ; Read the next complete top-level event.
+        CALL REC_NEXT              ; Read the next complete top-level event.
         RET C                      ; The reader latches its source diagnostic.
         OR A                       ; Event zero is the only valid package terminator.
         JR Z,.FINISH               ; The caller closes the source before output.
@@ -314,14 +314,14 @@ CMD_EXPR:
         CP 8                       ; String events become copied immutable literals.
         JP Z,CMD_STR
         CP 3                       ; Quote prefixes introduce literal data.
-        JP Z,SCQSHRT              ; Read and emit the following quoted datum.
+        JP Z,QUO_TICK             ; Read and emit the following quoted datum.
         CP 1                       ; An open parenthesis introduces a form.
         JP Z,CMD_FORM              ; Read the form's operator symbol and operands.
         JP ERR_BAD                 ; Strings, quote prefixes and bare punctuation fail.
 
 ; Read one fresh expression event from the reader.
 CMD_NEXT:
-        CALL SCNEXT                ; The caller has not consumed this expression.
+        CALL REC_NEXT              ; The caller has not consumed this expression.
         RET C                      ; Preserve the reader's latched error code.
         JP CMD_EXPR                ; Dispatch the returned event.
 
@@ -339,7 +339,7 @@ CMD_NUM:
         JP EM_INT                  ; Emit the integer payload and its tag.
 CMD_STR:
         LD A,5                     ; Runtime tag five identifies string literals.
-        JP SCLITADD
+        JP LIT_ADD
 CMD_BOOL:
         LD A,L                     ; Reader booleans arrive as zero or one.
         JP EM_BOOL                 ; Emit the checked boolean representation.
@@ -347,11 +347,11 @@ CMD_BOOL:
 ; Resolve a symbol reference, preferring the innermost active local binding.
 CMD_REF:
         LD (ST_SYMID),HL           ; Save the full interner ID across table searches.
-        CALL SCLOCF                ; Search active locals before global classification.
+        CALL BIND_HAS              ; Search active locals before global classification.
         JR C,.LOCAL                ; A local slot shadows every global or primitive.
-        CALL SCGHAS                 ; An explicit global binding takes precedence.
+        CALL GLB_HAS                ; An explicit global binding takes precedence.
         JR C,.GLOBAL                ; Existing globals use the ordinary slot path.
-        CALL SCPLOOK                ; Unbound primitive names can stay immediate.
+        CALL GLB_PRIM               ; Unbound primitive names can stay immediate.
         OR A
         JP NZ,EM_PRIM               ; Emit the predefined value without a slot.
         LD A,(ST_RMODE)             ; Only a recursive initializer may reserve a cell.
@@ -363,22 +363,22 @@ CMD_REF:
         LD A,(ST_PROC)              ; Inside a procedure body the name cannot be a
         INC A                       ; later binding of this scope: every recursive
         JR NZ,.UNBOUND              ; name is predeclared, so it is a global.
-        CALL SCRECREF                ; Reserve a bounded forward local cell.
+        CALL BIND_FWD                ; Reserve a bounded forward local cell.
         RET C
         LD L,A
         LD A,1
         JP EM_LOAD                   ; Read the cell through the local path.
 .UNBOUND:
-        CALL SCGGET                ; Allocate a global slot on the first reference.
+        CALL GLB_GET               ; Allocate a global slot on the first reference.
         RET C                      ; The 256-slot capacity is a compile diagnostic.
         LD L,A                     ; The emitter takes the slot number in L.
         XOR A                      ; Kind zero denotes a package-global slot.
         JP EM_LOAD                 ; Emit the checked runtime load and its fixup.
 .GLOBAL:
-        LD L,A                     ; SCGHAS returns the existing global slot in A.
+        LD L,A                     ; GLB_HAS returns the existing global slot in A.
         XOR A                      ; Kind zero denotes a package-global slot.
         JP EM_LOAD                 ; Emit the checked runtime load and its fixup.
 .LOCAL:
-        LD L,A                     ; SCLOCF returns the matching local slot number.
+        LD L,A                     ; BIND_HAS returns the matching local slot number.
         LD A,1                     ; Kind one denotes a local slot.
         JP EM_LOAD                 ; Emit the checked runtime load and its fixup.

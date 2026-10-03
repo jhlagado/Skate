@@ -31,7 +31,7 @@ IF_FORM:
         CALL BR_ELSE               ; Patch the false branch before reading the arm.
         JR C,.FAIL
         CALL IF_TAIL               ; The alternative inherits the enclosing position.
-        CALL SCNEXT                ; A close means the optional alternative is absent.
+        CALL REC_NEXT              ; A close means the optional alternative is absent.
         JR C,.FAIL                ; Preserve a reader error after the consequent.
         CP 2                       ; Closing now selects the unspecified value.
         JR Z,.NO_ELSE              ; Emit it and finish the branch skeleton.
@@ -81,7 +81,7 @@ IF_LOGIC:
         PUSH AF                    ; The enclosing tail context.
         LD A,(ST_BRTOP)
         PUSH AF                    ; Branches above this mark belong to this form.
-        CALL SCNEXT                ; The first operand, or the close.
+        CALL REC_NEXT              ; The first operand, or the close.
         JP C,.FAIL
         CP 2
         JP Z,.EMPTY
@@ -98,7 +98,7 @@ IF_LOGIC:
         POP AF
         CALL CMD_EXPR              ; Compile the operand.
         JP C,.FAIL
-        CALL SCNEXT                ; A close makes it the final operand.
+        CALL REC_NEXT              ; A close makes it the final operand.
         JP C,.FAIL
         CP 2
         JP Z,.DONE
@@ -253,13 +253,13 @@ IF_CASE:
         CALL EM_CALL
         JP C,IF_FAIL
 .CLAUSE:
-        CALL SCNEXT                ; A clause or the form's close.
+        CALL REC_NEXT              ; A clause or the form's close.
         JP C,IF_FAIL
         CP 2
         JP Z,.NO_MATCH
         CP 1
         JP NZ,IF_FAIL
-        CALL SCNEXT                ; A datum list or else.
+        CALL REC_NEXT              ; A datum list or else.
         JP C,IF_FAIL
         CP 1
         JR Z,.DATA
@@ -276,11 +276,11 @@ IF_CASE:
         LD A,(ST_BRTOP)            ; Datum branches above this mark belong to
         LD (.MARK),A               ; this clause; no form nests among datums.
 .DATUM:
-        CALL SCNEXT
+        CALL REC_NEXT
         JP C,IF_FAIL
         CP 2
         JR Z,.BODY
-        CALL SCQDAT                ; Load the datum into A:HL.
+        CALL QUO_DATA              ; Load the datum into A:HL.
         JP C,IF_FAIL
         LD HL,STD_CASE
         CALL EM_CALL
@@ -340,13 +340,13 @@ IF_COND:
         CALL IF_OPEN               ; Give this cond a private patch-table frame.
         JP C,IF_ABORT               ; Reject a nesting depth beyond the patch bound.
 .CLAUSE:
-        CALL SCNEXT                ; Read a clause or the outer closing parenthesis.
+        CALL REC_NEXT              ; Read a clause or the outer closing parenthesis.
         JP C,IF_FAIL
         CP 2
         JP Z,IF_NONE               ; No matching clause yields unspecified.
         CP 1
         JP NZ,IF_FAIL              ; Every clause is a parenthesised list.
-        CALL SCNEXT                ; The first item is either a test or else.
+        CALL REC_NEXT              ; The first item is either a test or else.
         JP C,IF_FAIL
         LD (ST_EVENT),A            ; Save the event while checking the else spelling.
         LD (ST_EVVAL),HL
@@ -393,7 +393,7 @@ IF_ELSE:
         CALL IF_TAIL               ; Else result expressions inherit tail state.
         CALL CMD_BODY
         JP C,IF_FAIL
-        CALL SCNEXT
+        CALL REC_NEXT
         JP C,IF_FAIL
         CP 2
         JP NZ,IF_FAIL              ; Else must be the final clause.
@@ -521,7 +521,7 @@ IF_PATCH:
         LD D,(HL)
         EX DE,HL
         LD DE,(ST_DEST)
-        CALL SINKPTCH
+        CALL SINK_FIX
         JP .LOOP
 .DONE:
         CALL IF_POP                ; Release this cond's patch frame.

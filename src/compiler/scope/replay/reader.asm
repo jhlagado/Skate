@@ -1,54 +1,54 @@
 ; Scope replay reader and nested frame state.
-; Entry points: SCNEXT, SCRECOPN, SCRECPOP and SCRECSTR.
+; Entry points: REC_NEXT, REC_OPEN, REC_POP and REC_EXIT.
 ; Included in compiler order by ../replay.asm.
 
 ; A binding list is retained as compact reader events while all of its names
 ; are installed.  The frame stack lets a nested letrec append a temporary
 ; range, then resume the enclosing replay at the event after its list.
 
-SCREBUF  EQU 0D740H              ; Four bytes per retained reader event.
+REC_BUF  EQU 0D740H              ; Four bytes per retained reader event.
 
 ; Dispatch compiler reads either to the source reader or to the retained list.
-SCNEXT:
+REC_NEXT:
         LD A,(ST_PLAY)            ; Zero selects the ordinary source stream.
         OR A
-        JP NZ,SCREPRD              ; Retained events already carry their numeric kind.
+        JP NZ,.REPLAY              ; Retained events already carry their numeric kind.
         CALL RD_NEXT               ; Read one event from the source reader.
         RET C                      ; Preserve the reader's latched error code.
         CP 7                       ; Scalar events may be exact or binary16 numerics.
-        JR NZ,SCNOK                ; Other event kinds need no reader-tag adjustment.
+        JR NZ,.SOURCE              ; Other event kinds need no reader-tag adjustment.
         LD A,(RD_FLOAT)            ; Check whether this scalar came from decimal text.
         OR A
-        JR Z,SCNEX                 ; Exact integers retain the ordinary kind seven.
+        JR Z,.EXACT                ; Exact integers retain the ordinary kind seven.
         XOR A
         LD (RD_FLOAT),A            ; Consume the marker once it has become an event kind.
         LD A,87H                   ; High bit seven marks a binary16 source literal.
         RET                        ; RD_TAG:HL still contains the converted payload.
-SCNEX:
+.EXACT:
         LD A,7                     ; Restore the event kind after reading the marker byte.
         OR A                       ; Exact numeric events return with carry clear.
         RET                        ; RD_TAG:HL still contains the exact payload.
-SCNOK:
+.SOURCE:
         OR A                       ; Source events return with carry clear.
         RET                        ; Preserve the reader contract for the caller.
-SCREPRD:
+.REPLAY:
         LD HL,(ST_GETP)           ; Read the next retained event.
         LD DE,(ST_EVEND)          ; Stop at the retained stream's actual end.
         OR A                      ; Clear carry before comparing the cursors.
         SBC HL,DE
-        JR C,SCREPGET             ; A cursor below the end has one event left.
+        JR C,.GET                 ; A cursor below the end has one event left.
         LD A,(ST_BACK)             ; Definition replay returns to its source stream.
         OR A
-        JR Z,SCREPERR
-        CALL SCRECSTR
-        JP C,SCREPERR
+        JR Z,.FAIL
+        CALL REC_EXIT
+        JP C,.FAIL
         LD A,(ST_PLAY)             ; Nested replay keeps its enclosing auto flag.
         OR A
-        JP NZ,SCNEXT
+        JP NZ,REC_NEXT
         XOR A
         LD (ST_BACK),A
-        JP SCNEXT
-SCREPGET:
+        JP REC_NEXT
+.GET:
         LD HL,(ST_GETP)           ; Recover the event address after the check.
         LD A,(HL)                 ; Return its structural kind in A.
         INC HL
@@ -64,22 +64,22 @@ SCREPGET:
         EX DE,HL                  ; Return the saved payload in HL.
         LD A,C
         CP 5
-        JR NZ,SCNRET
+        JR NZ,.RETURN
         PUSH BC
         PUSH HL
-        CALL SCSPELL               ; Rebuild the lexer spelling for replayed symbols.
+        CALL REC_NAME              ; Rebuild the lexer spelling for replayed symbols.
         POP HL
         POP BC
-SCNRET:
+.RETURN:
         LD A,C                    ; Restore the event kind after the address swap.
         OR A                      ; Replay success returns with carry clear.
         RET
-SCREPERR:
+.FAIL:
         SCF                       ; The compiler treats an exhausted replay as bad input.
         RET
 
 ; Address the current sixteen-byte replay frame in the compiler workspace.
-SCRECADR:
+REC_ADDR:
         LD A,(ST_PLAYN)            ; The depth is one based while a frame is open.
         DEC A                     ; Select the most recently opened record.
         LD L,A
@@ -93,13 +93,13 @@ SCRECADR:
         RET
 
 ; Save the active recursive and replay state before entering a binding list.
-SCRECOPN:
+REC_OPEN:
         LD A,(ST_PLAYN)            ; Reject a nested source scope beyond the frame bound.
         CP 16
         JP NC,ERR_CAP
         INC A
         LD (ST_PLAYN),A
-        CALL SCRECADR
+        CALL REC_ADDR
         LD A,(ST_PLAY)             ; Save the enclosing replay mode.
         LD (HL),A
         INC HL
@@ -141,18 +141,18 @@ SCRECOPN:
         INC HL
         LD A,(ST_BACK)             ; Save automatic stream restoration mode.
         LD (HL),A
-        LD A,(ST_PLAY)             ; A top-level capture starts at SCREBUF.
+        LD A,(ST_PLAY)             ; A top-level capture starts at REC_BUF.
         OR A
-        JR NZ,SCRECPOK
-        LD HL,SCREBUF
+        JR NZ,.DONE
+        LD HL,REC_BUF
         LD (ST_PUTP),HL
-SCRECPOK:
+.DONE:
         XOR A
         RET
 
 ; Update the saved enclosing read cursor after a nested scanner consumes it.
-SCRECSAV:
-        CALL SCRECADR
+REC_SAVE:
+        CALL REC_ADDR
         LD DE,(ST_GETP)
         LD BC,8
         ADD HL,BC
@@ -161,13 +161,13 @@ SCRECSAV:
         LD (HL),D
         RET
 
-; Restore the recursive and replay state saved by SCRECOPN.
-SCRECPOP:
+; Restore the recursive and replay state saved by REC_OPEN.
+REC_POP:
         LD A,(ST_PLAYN)
         OR A
         SCF
         RET Z
-        CALL SCRECADR
+        CALL REC_ADDR
         LD A,(HL)
         LD (ST_PLAY),A
         INC HL
@@ -216,12 +216,12 @@ SCRECPOP:
         RET
 
 ; Restore only the saved stream cursors after an automatic replay.
-SCRECSTR:
+REC_EXIT:
         LD A,(ST_PLAYN)
         OR A
         SCF
         RET Z
-        CALL SCRECADR
+        CALL REC_ADDR
         LD A,(HL)
         LD (ST_PLAY),A
         INC HL

@@ -3,7 +3,7 @@
 ; Initializers compile outside tail position and restore the enclosing
 ; body context before the binding form continues.
 
-SCINIT:
+LET_INIT:
         LD A,(ST_TAIL)             ; Save the enclosing body's tail position.
         PUSH AF                    ; Nested initializers need independent saved state.
         LD A,(ST_LETLO)            ; Save the active definition boundary as well.

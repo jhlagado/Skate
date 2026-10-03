@@ -1,9 +1,9 @@
 ; Scope replay reconstruction of interned symbol spellings.
-; Entry point: SCSPELL.
+; Entry point: REC_NAME.
 ; Included in compiler order by ../replay.asm.
 
 ; Restore LX_BUF/LX_LEN for an interned symbol retained in a replay event.
-SCSPELL:
+REC_NAME:
         LD A,H                    ; Strip the symbol subtype from the identity.
         AND 01FH
         LD H,A

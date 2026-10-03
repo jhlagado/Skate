@@ -17,7 +17,7 @@ RT_COPY:
         CALL CPM_READ              ; Read one binary provider byte.
         POP BC                     ; Restore the remaining logical byte count.
         JR C,.FAIL                 ; A short file or transport error is a setup failure.
-        CALL SINKBYTE              ; Publish the byte through the ASO image sink.
+        CALL SINK_PUT              ; Publish the byte through the ASO image sink.
         RET C                      ; A spool failure is a setup failure.
         DEC BC                     ; Account for the byte just copied.
         JR .READ                   ; Continue until the metadata length is exhausted.

@@ -2,7 +2,7 @@
 ; This file contains parser-side branch address resolution.
 
 CMD_END:
-        CALL SCNEXT                ; The enclosing form must close now.
+        CALL REC_NEXT              ; The enclosing form must close now.
         RET C                      ; Preserve a source read failure.
         CP 2                       ; Event kind two is a closing parenthesis.
         JP NZ,.BAD                  ; Reject a missing or overlong form.
@@ -84,7 +84,7 @@ BR_PATCH:
         LD D,(HL)                 ; DE now identifies the staged patch word.
         EX DE,HL                  ; HL=patch address, DE=temporary old value.
         LD DE,(ST_DEST)            ; Restore the requested absolute target.
-        JP SINKPTCH                ; Write both target bytes and return.
+        JP SINK_FIX                ; Write both target bytes and return.
 
 ; Save an if false-branch patch address at the current if depth.
 BR_IFNEW:
@@ -145,7 +145,7 @@ BR_JOIN:
         LD D,(HL)                 ; DE now identifies the staged patch word.
         EX DE,HL                  ; HL=patch, DE=temporary old value.
         LD DE,(ST_DEST)            ; Restore the requested absolute target.
-        JP SINKPTCH                ; Write both target bytes and return.
+        JP SINK_FIX                ; Write both target bytes and return.
 
 ; False and end if records use the same table arithmetic.
 BR_FALSE:
@@ -164,7 +164,7 @@ BR_FALSE:
         LD D,(HL)                 ; DE now identifies the staged patch word.
         EX DE,HL                  ; HL=patch, DE=temporary old value.
         LD DE,(ST_DEST)            ; Restore the requested absolute target.
-        JP SINKPTCH                ; Write both target bytes and return.
+        JP SINK_FIX                ; Write both target bytes and return.
 
 ; Release the current if patch record after both branch targets are fixed.
 BR_IFPOP:

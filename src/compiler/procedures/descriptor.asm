@@ -1,21 +1,21 @@
 ; Compiler descriptor creation, closure prefixes and mutation forms.
-; Entry points: SCPREFX, SCMAKE, SCPNEW, SCPFIN and SCSETF.
+; Entry points: LAM_HEAD, LAM_MAKE, PROC_NEW, PROC_END and BIND_SET.
 ; Emit a descriptor load, fresh-closure allocation and JP over the body.
 ; The descriptor pointer is a kind-two fixup filled after slot layout closes.
-SCPREFX:
-        CALL SCMAKE                ; Build the closure value before the body.
+LAM_HEAD:
+        CALL LAM_MAKE              ; Build the closure value before the body.
         RET C                      ; Preserve staged-output or fixup exhaustion.
         CALL EM_JP                 ; Jump over the body during closure creation.
-        LD (ST_SKIP),HL            ; Save the jump-over patch for SCPFIN.
+        LD (ST_SKIP),HL            ; Save the jump-over patch for PROC_END.
         RET                        ; ST_PC now points at the procedure body.
 
 ; Emit the descriptor load and fresh closure allocation used by definitions and
 ; named let.  The caller decides where to store the value and how to skip code.
-SCMAKE:
+LAM_MAKE:
         LD A,21H                   ; LD HL,nn loads the immutable descriptor address.
-        CALL SINKBYTE                ; Append the load opcode.
+        CALL SINK_PUT                ; Append the load opcode.
         RET C                      ; Preserve staged-output exhaustion.
-        LD A,(ST_DESC)             ; SCPFIN patches this placeholder when the
+        LD A,(ST_DESC)             ; PROC_END patches this placeholder when the
         LD L,A                     ; descriptor is emitted; until then the
         LD H,0                     ; descriptor's address entry holds the site.
         ADD HL,HL
@@ -26,9 +26,9 @@ SCMAKE:
         INC HL
         LD (HL),D
         XOR A                      ; The descriptor address is unknown for now.
-        CALL SINKBYTE                ; Append its low placeholder byte.
+        CALL SINK_PUT                ; Append its low placeholder byte.
         RET C                      ; Preserve staged-output exhaustion.
-        CALL SINKBYTE                ; Append its high placeholder byte.
+        CALL SINK_PUT                ; Append its high placeholder byte.
         RET C                      ; Preserve staged-output exhaustion.
         LD HL,HEAP_LAM              ; Runtime allocates a fresh closure object.
         CALL EM_CALL               ; The returned value carries tag two.
@@ -36,10 +36,10 @@ SCMAKE:
         RET                        ; The generated value is in the runtime registers.
 
 ; Reserve and clear one procedure metadata record.
-; A record exists only while its procedure is open.  SCPFIN emits the
+; A record exists only while its procedure is open.  PROC_END emits the
 ; finished descriptor into the image and releases the record, so the count
 ; of procedures is bounded by W_PROC_N and their nesting by W_OPEN_N.
-SCPNEW:
+PROC_NEW:
         LD A,(ST_PNEST)            ; Open records form a stack by nesting depth.
         CP W_OPEN_N
         JP NC,ERR_CAP              ; Reject nesting beyond the record stack.
@@ -58,34 +58,34 @@ SCPNEW:
         INC A
         LD (ST_PNEST),A
         LD A,B                     ; Keep the descriptor index for the caller.
-        LD (ST_DESC),A             ; SCPREC uses this state to find its record.
-        CALL SCPREC                ; HL points at the twelve-byte metadata record.
+        LD (ST_DESC),A             ; PROC_REC uses this state to find its record.
+        CALL PROC_REC              ; HL points at the twelve-byte metadata record.
         LD B,W_PRECSZ              ; Clear body, arity, formals and ownership masks.
         XOR A                      ; A zero record has no body or formal slots.
-SCPNEWLP:
+.CLEAR:
         LD (HL),A                  ; Clear one metadata byte.
         INC HL                     ; Advance to the next field.
-        DJNZ SCPNEWLP              ; Clear the complete fixed-size record.
+        DJNZ .CLEAR                ; Clear the complete fixed-size record.
         XOR A                      ; A new descriptor starts with fixed-arity policy.
         LD (ST_REST),A
         LD (ST_RLIST),A
-        LD A,(ST_DESC)             ; Return the descriptor index to SCLAMBF.
+        LD A,(ST_DESC)             ; Return the descriptor index to LAM_FORM.
         OR A                       ; Clear carry without changing the index byte.
         RET                        ; The caller opens the new local scope.
 
 ; HL = metadata record for ST_DESC, which must be an open procedure.  BC is
 ; preserved.  A closed index selects a scratch record so a stray lookup can
 ; never write over an open procedure's metadata.
-SCPREC:
+PROC_REC:
         PUSH BC
         LD A,(ST_DESC)
         LD C,A                     ; C is the index being searched for.
         LD A,(ST_PNEST)
         LD B,A                     ; B counts the open records still to test.
-SCPRFIND:
+.FIND:
         LD A,B
         OR A
-        JR Z,SCPRSCR               ; No open record carries this index.
+        JR Z,.SCRATCH              ; No open record carries this index.
         DEC B                      ; Search from the innermost record outward.
         LD L,B
         LD H,0
@@ -93,7 +93,7 @@ SCPRFIND:
         ADD HL,DE
         LD A,(HL)
         CP C
-        JR NZ,SCPRFIND
+        JR NZ,.FIND
         LD L,B                     ; B is the record's position in the stack.
         POP BC
         LD H,0                     ; Each record carries two 128-bit masks.
@@ -114,21 +114,21 @@ SCPRFIND:
         ADD HL,DE                  ; Return the record address in HL.
         LD A,(ST_DESC)             ; Callers may rely on A holding the index.
         RET                        ; The caller selects the field offset.
-SCPRSCR:
+.SCRATCH:
         POP BC
         LD HL,W_PTMP
         LD A,(ST_DESC)
         RET
 
 ; Save the formal slot number in the current descriptor and advance its arity.
-SCPARAM:
-        PUSH AF                    ; Preserve the slot number returned by SCNSLOT.
-        CALL SCPREC                ; Locate the current descriptor metadata.
+PROC_ARG:
+        PUSH AF                    ; Preserve the slot number returned by BIND_NEW.
+        CALL PROC_REC              ; Locate the current descriptor metadata.
         INC HL                     ; Skip the body address low byte.
         INC HL                     ; Skip the body address high byte.
         LD A,(HL)                  ; Read the current formal count.
         CP 4                       ; Four fixed arguments keep descriptors compact.
-        JR NC,SCPERR               ; Reject a fifth formal before table overflow.
+        JR NC,.FULL                ; Reject a fifth formal before table overflow.
         LD E,A                     ; E is the formal index within the record.
         INC A                      ; Publish the new arity.
         LD (HL),A                  ; The runtime uses this count during dispatch.
@@ -138,12 +138,12 @@ SCPARAM:
         LD B,A                     ; The old arity is the number of slots to skip.
         LD A,B                     ; Keep the loop count in the DJNZ register.
         OR A                       ; Zero formals select the first slot directly.
-        JR Z,SCPARMAT              ; Avoid a wrapped DJNZ count for arity zero.
-SCPARMSK:
+        JR Z,.STORE                ; Avoid a wrapped DJNZ count for arity zero.
+.SKIP:
         INC HL                     ; Skip the low byte of one recorded formal.
         INC HL                     ; Skip its reserved high byte as well.
-        DJNZ SCPARMSK              ; Stop at the slot for the new formal.
-SCPARMAT:
+        DJNZ .SKIP                 ; Stop at the slot for the new formal.
+.STORE:
         POP AF                     ; Recover the compiler-local slot number.
         LD (HL),A                  ; Runtime publication resolves its address later.
         INC HL                     ; The descriptor keeps a fixed two-byte slot field.
@@ -151,19 +151,19 @@ SCPARMAT:
         LD (HL),A                  ; Keep the high byte reserved and deterministic.
         OR A                       ; Carry clear reports a complete formal record.
         RET                        ; The lambda parser reads the next name.
-SCPERR:
+.FULL:
         POP AF                     ; Keep the compiler stack balanced on rejection.
         SCF                        ; The procedure arity is a checked capacity.
         RET                        ; The lambda error path restores its scope.
 
 ; Save the body address, emit the finished descriptor after the body, release
 ; its record and patch the jump over both.  Byte three, the shared slot
-; extent, is only known at the end of the program; SCPDESC patches it.
-SCPFIN:
+; extent, is only known at the end of the program; PUB_DESC patches it.
+PROC_END:
         LD HL,(ST_PBODY)           ; Recover the staged body start recorded above.
         CALL BR_ABS                ; Convert the body pointer to a COM address.
         LD (ST_PBODY),HL           ; Keep it for descriptor serialization.
-        CALL SCPREC                ; Locate the descriptor metadata again.
+        CALL PROC_REC              ; Locate the descriptor metadata again.
         LD DE,(ST_PBODY)           ; Write the generated body address at offset zero.
         LD (HL),E                  ; Store the low body byte.
         INC HL                     ; Advance to the high body byte.
@@ -193,47 +193,47 @@ SCPFIN:
         DEC HL
         LD (HL),E
         POP HL
-        CALL SINKPTCH              ; Point the closure creation at the descriptor.
+        CALL SINK_FIX              ; Point the closure creation at the descriptor.
         RET C
-        CALL SCPREC                ; Body, arity, extent and formal fields.
+        CALL PROC_REC              ; Body, arity, extent and formal fields.
         LD A,W_OWNOFF
-        CALL SCPFEMB
+        CALL .EMIT
         RET C
-        CALL SCPREC                ; The masks are only as wide as needed.
-        CALL SCPFWID
-        LD (SCPWID),A
-        CALL SINKBYTE
+        CALL PROC_REC              ; The masks are only as wide as needed.
+        CALL .MEASURE
+        LD (.WIDTH),A
+        CALL SINK_PUT
         RET C
-        CALL SCPREC
+        CALL PROC_REC
         LD DE,W_OWNOFF
         ADD HL,DE
-        LD A,(SCPWID)
-        CALL SCPFEMB               ; The owned mask.
+        LD A,(.WIDTH)
+        CALL .EMIT                 ; The owned mask.
         RET C
-        CALL SCPREC
+        CALL PROC_REC
         LD DE,W_CAPOFF
         ADD HL,DE
-        LD A,(SCPWID)
-        CALL SCPFEMB               ; The capture mask.
+        LD A,(.WIDTH)
+        CALL .EMIT                 ; The capture mask.
         RET C
         LD A,(ST_PNEST)            ; Release the innermost open record.
         DEC A
         LD (ST_PNEST),A
         LD HL,(ST_PC)              ; The skip target follows the descriptor.
         CALL BR_ABS                ; Convert the target to a COM address.
-        EX DE,HL                   ; SCPATCH takes the patch address in HL.
+        EX DE,HL                   ; .ALIAS takes the patch address in HL.
         LD HL,(ST_SKIP)            ; Recover the jump-over patch location.
-        JP SINKPTCH                 ; Patch the closure creation jump.
+        JP SINK_FIX                 ; Patch the closure creation jump.
 
 ; Emit A bytes from HL.  Carry reports staged-output exhaustion.
-SCPFEMB:
+.EMIT:
         OR A
         RET Z
         LD B,A
 .BYTE:
         LD A,(HL)
         PUSH HL
-        CALL SINKBYTE              ; SINKBYTE preserves BC.
+        CALL SINK_PUT              ; SINK_PUT preserves BC.
         POP HL
         RET C
         INC HL
@@ -243,7 +243,7 @@ SCPFEMB:
 
 ; HL = metadata record: return in A the number of mask bytes up to the last
 ; nonzero byte of either the owned or the capture mask.
-SCPFWID:
+.MEASURE:
         LD DE,W_OWNOFF+W_MASKSZ-1  ; The last owned-mask byte.
         ADD HL,DE
         LD B,W_MASKSZ
@@ -261,16 +261,16 @@ SCPFWID:
         LD A,B
         RET
 
-SCPWID: DB 0                       ; Mask width of the descriptor being emitted.
+.WIDTH: DB 0                       ; Mask width of the descriptor being emitted.
 
 ; Compile set!, preserving the selected slot while the value expression runs.
-SCSETF:
-        CALL SCNEXT                ; Read the target binding name.
+BIND_SET:
+        CALL REC_NEXT              ; Read the target binding name.
         RET C                      ; Preserve source failure.
         CP 5                       ; A mutation target must be an identifier.
-        JP NZ,SCDESTSY              ; Reject a literal or nested list target.
+        JP NZ,.BAD_NAME             ; Reject a literal or nested list target.
         LD (ST_SYMID),HL           ; Preserve the target identity across lookup.
-        CALL SCDEST                 ; Select the local or global storage slot.
+        CALL .TARGET                ; Select the local or global storage slot.
         RET C                      ; An unknown or full binding table is terminal.
         LD A,(ST_SLOT)             ; Save the selected slot while compiling the value.
         PUSH AF                    ; A nested set! must not replace this slot.
@@ -279,7 +279,7 @@ SCSETF:
         XOR A                      ; The new value is evaluated before the store.
         LD (ST_TAIL),A             ; A mutation target never receives tail position.
         CALL CMD_NEXT              ; Compile the new value.
-        JR C,SCSETERR              ; Balance the destination frame on failure.
+        JR C,.FAIL                 ; Balance the destination frame on failure.
         POP AF                     ; Recover the selected destination kind.
         LD (ST_DKIND),A            ; Restore local or global storage selection.
         POP AF                     ; Recover the selected destination slot.
@@ -289,39 +289,39 @@ SCSETF:
         LD (ST_CHECK),A        ; Select a checked mutation store.
         LD A,(ST_DKIND)            ; Recover local or global destination kind.
         CALL EM_STORE              ; Emit the checked mutation update.
-        JR C,SCMUTERR          ; Balance the mode before reporting failure.
+        JR C,.MUT_FAIL         ; Balance the mode before reporting failure.
         XOR A
         LD (ST_CHECK),A        ; Definitions resume the initializing path.
         JP CMD_END                 ; Require exactly one closing parenthesis.
-SCMUTERR:
+.MUT_FAIL:
         XOR A
         LD (ST_CHECK),A        ; The compiler is terminating after this error.
         SCF
         RET C                      ; Preserve output or fixup exhaustion.
-SCSETERR:
+.FAIL:
         POP AF                     ; Discard the saved destination kind.
         POP AF                     ; Discard the saved destination slot.
         SCF                       ; Preserve the nested expression diagnostic.
         RET
 
 ; Resolve a mutation target without emitting a load.  ST_DKIND records its kind.
-SCDEST:
-        CALL SCLOCF                ; Prefer an active local binding.
-        JR C,SCDESTL               ; Carry identifies the local path.
-        CALL SCGGET                ; Global references allocate their slot here.
+.TARGET:
+        CALL BIND_HAS              ; Prefer an active local binding.
+        JR C,.LOCAL                ; Carry identifies the local path.
+        CALL GLB_GET               ; Global references allocate their slot here.
         RET C                      ; Preserve the global-capacity diagnostic.
         LD (ST_SLOT),A             ; Store the selected global slot.
         XOR A                      ; Kind zero denotes a package-global slot.
         LD (ST_DKIND),A            ; Remember it for the later EM_STORE.
         OR A                       ; Clear carry after a complete lookup.
         RET                        ; Return with the slot in ST_SLOT.
-SCDESTL:
+.LOCAL:
         LD (ST_SLOT),A             ; Store the selected local slot.
         LD A,1                     ; Kind one denotes a local slot.
         LD (ST_DKIND),A            ; Remember it for the later EM_STORE.
         OR A                       ; Clear carry without changing the slot byte.
-        RET                        ; Return to SCSETF before its value expression.
-SCDESTSY:
+        RET                        ; Return to BIND_SET before its value expression.
+.BAD_NAME:
         LD HL,M_DEST
         LD (ST_ERROR),HL
         JP ERR_BAD

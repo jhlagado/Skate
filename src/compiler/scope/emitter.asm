@@ -9,12 +9,12 @@
 
 ; Emit a little-endian word from HL.
 EM_WORD:
-        LD (ST_WORD),HL           ; Preserve both bytes across SCBYTE calls.
+        LD (ST_WORD),HL           ; Preserve both bytes across .ALIAS calls.
         LD A,(ST_WORD)            ; Emit the low address byte first.
-        CALL SINKBYTE               ; Append the low byte to the image.
+        CALL SINK_PUT               ; Append the low byte to the image.
         RET C                     ; Preserve a staged-output capacity failure.
         LD A,(ST_WORD+1)          ; Recover the high address byte.
-        JP SINKBYTE                 ; Append it and return through the emitter.
+        JP SINK_PUT                 ; Append it and return through the emitter.
 
 ; Emit CALL address in HL.
 EM_CALL:
@@ -30,7 +30,7 @@ EM_CALL:
         CP H
         JR NZ,.SKIP
         LD A,C                    ; A one-byte RST replaces the CALL.
-        JP SINKBYTE
+        JP SINK_PUT
 .SKIP:
         INC DE
         LD A,C
@@ -38,7 +38,7 @@ EM_CALL:
         LD C,A
         DJNZ .FIND
         LD A,0CDH                 ; Z80 CALL has opcode CDH.
-        CALL SINKBYTE               ; Append the opcode.
+        CALL SINK_PUT               ; Append the opcode.
         RET C                     ; Preserve a staged-output capacity failure.
         LD HL,(ST_WORD)           ; Restore the target word.
         JP EM_WORD                ; Append it and return.
@@ -50,28 +50,28 @@ EM_CALL:
 EM_INT:
         LD (ST_IMMED),HL          ; Preserve the literal while writing opcodes.
         LD A,21H                  ; LD HL,nn loads the result payload.
-        CALL SINKBYTE               ; Append the load opcode.
+        CALL SINK_PUT               ; Append the load opcode.
         RET C                     ; Preserve a staged-output capacity failure.
         LD HL,(ST_IMMED)          ; Recover the literal payload.
         CALL EM_WORD              ; Append the payload word.
         RET C                     ; Preserve a staged-output capacity failure.
         LD A,3EH                  ; LD A,3 selects the exact-integer tag.
-        CALL SINKBYTE               ; Append the tag-load opcode.
+        CALL SINK_PUT               ; Append the tag-load opcode.
         RET C                     ; Preserve a staged-output capacity failure.
         LD A,3                    ; The generated value is an exact integer.
-        JP SINKBYTE                 ; Append the tag and return.
+        JP SINK_PUT                 ; Append the tag and return.
 
 ; Emit a binary16 literal whose payload is already in HL.
 EM_FLOAT:
         LD (ST_IMMED),HL          ; Preserve the inexact payload during opcode emission.
         LD A,21H                  ; LD HL,nn loads the binary16 payload.
-        CALL SINKBYTE                ; Append the payload-load opcode.
+        CALL SINK_PUT                ; Append the payload-load opcode.
         RET C                     ; Preserve a staged-output capacity failure.
         LD HL,(ST_IMMED)          ; Recover the binary16 payload.
         CALL EM_WORD               ; Append the payload in little-endian order.
         RET C                     ; Preserve a staged-output capacity failure.
         LD A,0AFH                 ; XOR A: the tag is zero.
-        JP SINKBYTE
+        JP SINK_PUT
 
 ; Emit an unbound predefined procedure as a reserved immediate value.
 ; A contains its one-based primitive kind; the runtime subtracts $20 from the
@@ -79,18 +79,18 @@ EM_FLOAT:
 EM_PRIM:
         LD (ST_PRIM),A            ; Preserve the kind while writing the value.
         LD A,21H                  ; LD HL,nn loads the reserved payload.
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
         LD A,(ST_PRIM)
         DEC A
         ADD A,20H
-        CALL SINKBYTE                 ; Payload low byte is $20 plus kind minus one.
+        CALL SINK_PUT                 ; Payload low byte is $20 plus kind minus one.
         RET C
         LD A,0FEH
-        CALL SINKBYTE                 ; All primitive payloads use the reserved high byte.
+        CALL SINK_PUT                 ; All primitive payloads use the reserved high byte.
         RET C
         LD A,0AFH                 ; XOR A: the tag is zero.
-        JP SINKBYTE
+        JP SINK_PUT
 
 ; Emit and save a predefined procedure on the runtime operator side stack.
 .SAVE:
@@ -104,7 +104,7 @@ EM_PRIM:
 EM_BOOL:
         LD (ST_BYTE),A            ; Preserve the reader's zero-or-one value.
         LD A,21H                  ; Load the boolean payload into HL.
-        CALL SINKBYTE               ; Append the payload-load opcode.
+        CALL SINK_PUT               ; Append the payload-load opcode.
         RET C                     ; Preserve a staged-output capacity failure.
         LD H,0FEH                 ; Both booleans use the reserved FE scalar range.
         LD A,(ST_BYTE)            ; Recover the selected low payload byte.
@@ -112,20 +112,20 @@ EM_BOOL:
         CALL EM_WORD              ; Append the payload word.
         RET C                     ; Preserve a staged-output capacity failure.
         LD A,0AFH                 ; XOR A: the tag is zero.
-        JP SINKBYTE
+        JP SINK_PUT
 
 ; Emit a byte character.  Characters share the scalar tag with booleans, but
 ; keep the FFxx payload so predicates can distinguish them from numbers.
 EM_CHAR:
         LD (ST_IMMED),HL          ; Preserve the complete FFxx payload.
         LD A,21H                  ; Load the character payload into HL.
-        CALL SINKBYTE               ; Append the payload-load opcode.
+        CALL SINK_PUT               ; Append the payload-load opcode.
         RET C                     ; Preserve a staged-output capacity failure.
         LD HL,(ST_IMMED)          ; Recover the character payload.
         CALL EM_WORD              ; Append both payload bytes unchanged.
         RET C                     ; Preserve a staged-output capacity failure.
         LD A,0AFH                 ; XOR A: the tag is zero.
-        JP SINKBYTE
+        JP SINK_PUT
 
 ; Emit the canonical unspecified value (tag zero, payload FE04H).
 EM_VOID:
@@ -134,13 +134,13 @@ EM_VOID:
 EM_IMM:
         PUSH HL
         LD A,21H                  ; Load the reserved immediate payload.
-        CALL SINKBYTE               ; Append the LD HL,nn opcode.
+        CALL SINK_PUT               ; Append the LD HL,nn opcode.
         POP HL
         RET C                     ; Preserve a staged-output capacity failure.
         CALL EM_WORD               ; Append the payload in little-endian order.
         RET C                     ; Preserve a staged-output capacity failure.
         LD A,0AFH                 ; XOR A: the tag is zero.
-        JP SINKBYTE
+        JP SINK_PUT
 
 ; Record the value before emitting PUSH AF/PUSH HL.  The runtime collector
 ; uses the parallel records while a nested allocation is in progress.
@@ -161,16 +161,16 @@ EM_CLEAR:
         CALL EM_ISPKG
         JR Z,.STATIC
         LD A,06H
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
         LD A,(ST_FSLOT)
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
         LD HL,FRM_CLR
         JP EM_CALL
 .STATIC:
         LD A,21H
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
         LD HL,(ST_PC)
         LD A,1
@@ -179,9 +179,9 @@ EM_CLEAR:
         CALL EM_FIXUP
         RET C
         XOR A
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
         LD HL,RT_CLR
         JP EM_CALL
@@ -192,7 +192,7 @@ EM_SLOT:
         CALL EM_CALL
         RET C
         LD A,(ST_FSLOT)
-        JP SINKBYTE
+        JP SINK_PUT
 
 ; Emit the placeholder address word of static local ST_FSLOT.  Static locals
 ; are placed after the code, so the word is recorded as a fixup.
@@ -201,9 +201,9 @@ EM_ADDR:
         CALL EM_FIXUP             ; Record them before writing placeholder zeroes.
         RET C                     ; A full fixup table aborts the current form.
         XOR A                     ; Address bytes are filled after layout closes.
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
-        JP SINKBYTE
+        JP SINK_PUT
 
 ; Emit a direct load from a compiler-assigned slot.  A=0 selects a global
 ; slot; A=1 selects a local slot.  L contains the slot number.
@@ -224,7 +224,7 @@ EM_LOAD:
         LD HL,G_LOAD               ; Globals have fixed slots.
         JP Z,EM_SLOT
         LD A,21H                  ; LD HL,nn receives the slot address.
-        CALL SINKBYTE               ; Append the load opcode.
+        CALL SINK_PUT               ; Append the load opcode.
         RET C
         CALL EM_ADDR              ; Emit the address or its fixup placeholder.
         RET C
@@ -261,7 +261,7 @@ EM_STORE:
         JP EM_SLOT
 .ADDRESS:
         LD A,11H                  ; LD DE,nn receives the slot address.
-        CALL SINKBYTE               ; Append the store-address opcode.
+        CALL SINK_PUT               ; Append the store-address opcode.
         RET C
         CALL EM_ADDR              ; Emit the address or its fixup placeholder.
         RET C
@@ -380,7 +380,7 @@ EM_PLAIN:
 .ORDINARY:
         LD DE,INV_CALL             ; Ordinary calls preserve the continuation.
 .WRITE:
-        CALL SINKPTCH             ; Route tail-call rewrites through the sink.
+        CALL SINK_FIX             ; Route tail-call rewrites through the sink.
         INC B                      ; Advance to the next tail candidate.
         JR .LOOP
 .DONE:
@@ -404,14 +404,14 @@ EM_ISPKG:
 ; caller patches the address when the matching branch target is known.
 EM_JZ:
         LD A,0CAH                 ; JP Z,nn branches when RT_TEST returns Z.
-        CALL SINKBYTE               ; Append the conditional-jump opcode.
+        CALL SINK_PUT               ; Append the conditional-jump opcode.
         RET C                     ; Preserve a staged-output capacity failure.
         LD HL,(ST_PC)             ; The following word is the branch patch.
         PUSH HL                   ; Preserve the patch address across zero writes.
         XOR A                     ; Start with an unresolved target word.
-        CALL SINKBYTE               ; Append the low placeholder byte.
+        CALL SINK_PUT               ; Append the low placeholder byte.
         JR C,EM_ABORT             ; Leave the patch address off the stack.
-        CALL SINKBYTE               ; Append the high placeholder byte.
+        CALL SINK_PUT               ; Append the high placeholder byte.
         JR C,EM_ABORT             ; Leave the patch address off the stack.
         POP HL                    ; Return the branch patch location.
         OR A                      ; Successful emission returns carry clear.
@@ -419,14 +419,14 @@ EM_JZ:
 
 EM_JNZ:
         LD A,0C2H                 ; JP NZ,nn is the OR short-circuit branch.
-        CALL SINKBYTE               ; Append the conditional-jump opcode.
+        CALL SINK_PUT               ; Append the conditional-jump opcode.
         RET C                     ; Preserve a staged-output capacity failure.
         LD HL,(ST_PC)             ; The following word is the branch patch.
         PUSH HL                   ; Preserve the patch address across zero writes.
         XOR A                     ; Start with an unresolved target word.
-        CALL SINKBYTE               ; Append the low placeholder byte.
+        CALL SINK_PUT               ; Append the low placeholder byte.
         JR C,EM_ABORT             ; Leave the patch address off the stack.
-        CALL SINKBYTE               ; Append the high placeholder byte.
+        CALL SINK_PUT               ; Append the high placeholder byte.
         JR C,EM_ABORT             ; Leave the patch address off the stack.
         POP HL                    ; Return the branch patch location.
         OR A                      ; Successful emission returns carry clear.
@@ -435,14 +435,14 @@ EM_JNZ:
 ; Emit JP nn and return its two-byte patch location in HL.
 EM_JP:
         LD A,0C3H                 ; Absolute Z80 jump opcode.
-        CALL SINKBYTE               ; Append the unconditional-jump opcode.
+        CALL SINK_PUT               ; Append the unconditional-jump opcode.
         RET C                     ; Preserve a staged-output capacity failure.
         LD HL,(ST_PC)             ; The following word is the branch patch.
         PUSH HL                   ; Preserve the patch address across zero writes.
         XOR A                     ; Start with an unresolved target word.
-        CALL SINKBYTE               ; Append the low placeholder byte.
+        CALL SINK_PUT               ; Append the low placeholder byte.
         JR C,EM_ABORT             ; Leave the patch address off the stack.
-        CALL SINKBYTE               ; Append the high placeholder byte.
+        CALL SINK_PUT               ; Append the high placeholder byte.
         JR C,EM_ABORT             ; Leave the patch address off the stack.
         POP HL                    ; Return the branch patch location.
         OR A                      ; Successful emission returns carry clear.
@@ -456,4 +456,4 @@ EM_ABORT:
 ; Append the return instruction used by the runtime entry point.
 EM_RET:
         LD A,0C9H                 ; RET hands the final value to RT_CALL.
-        JP SINKBYTE                 ; Append the single-byte instruction.
+        JP SINK_PUT                 ; Append the single-byte instruction.

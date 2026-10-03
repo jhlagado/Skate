@@ -10,7 +10,7 @@ DIAG_OUT:
         LD (ST_ERROR),HL           ; A source failure replaces a later parse symptom.
 .SRC_OK:
         CALL CPM_ENDR              ; Close a transport stream left open by a failure.
-        CALL SINKABRT              ; Delete the spool after the input FCBs are closed.
+        CALL ASO_DROP              ; Delete the spool after the input FCBs are closed.
         LD A,(ST_PHASE)            ; Finalisation errors no longer have source text.
         OR A
         JR NZ,.PLAIN

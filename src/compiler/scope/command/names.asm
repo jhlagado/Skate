@@ -34,7 +34,7 @@ M_SOURCE:   DB "SOURCE ERROR",13,10,"$"
 M_MEMORY:   DB "INSUFFICIENT MEMORY",13,10,"$"
 K_QUOTE:    DB 5,"quote"
 K_CALLEC:    DB 7,"call/ec"
-; Predefined procedures: length, compiler kind and spelling for SCPLOOK.
+; Predefined procedures: length, compiler kind and spelling for GLB_PRIM.
 NAME_TAB:   DB 1,1,"+"
             DB 1,2,"-"
             DB 1,3,"*"

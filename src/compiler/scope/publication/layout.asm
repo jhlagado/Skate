@@ -1,17 +1,17 @@
 ; Scope publication layout and static data emission.
-; Entry points: SCFIN, SCGINIT, SCGDATA, SCPENTRY and SCPROOTS.
+; Entry points: PUB_END, .SEED, .GLOBALS, PUB_LINK and .ROOTS.
 ;=============================================================================
 ;  Scope compiler final layout and CP/M publication
 ;=============================================================================
 ;
-;  SCFIN closes the staged image and fixes every slot address.  SCOUT publishes
+;  PUB_END closes the staged image and fixes every slot address.  PUB_MAIN publishes
 ;  the matching ASO and COM images to temporary CP/M files before installing
 ;  their final names.
 ;=============================================================================
 
 ; Seed the fixed global area, append zeroed static slots and resolve generated
 ; addresses.  Globals were reserved after the runtime before any code.
-SCFIN:
+PUB_END:
         LD HL,(ST_PC)             ; Generated code ends at the current cursor.
         PUSH HL                    ; Keep the code end while sizing slot data.
         LD A,(ST_LMAX)             ; Four bytes for every local high-water slot.
@@ -20,7 +20,7 @@ SCFIN:
         ADD HL,HL
         ADD HL,HL
         PUSH HL                    ; Keep the static-slot extent.
-        LD A,(SCQCNT)             ; Add one four-byte cache cell per quoted list.
+        LD A,(QUO_CNT)            ; Add one four-byte cache cell per quoted list.
         LD L,A
         LD H,0
         ADD HL,HL
@@ -30,33 +30,33 @@ SCFIN:
         ADD HL,DE
         POP DE                     ; DE is the generated-code end address.
         ADD HL,DE                  ; HL is the complete staged-image end estimate.
-        JR NC,SCFENDNC             ; A nonwrapped endpoint is below $10000.
+        JR NC,.NO_WRAP             ; A nonwrapped endpoint is below $10000.
         LD A,H
         OR L
         JP NZ,ERR_CAP              ; A wrapped nonzero endpoint exceeds $10000.
         LD A,(ST_PCHI)
         OR A
         JP NZ,ERR_CAP              ; A second wrap exceeds the address space.
-        JR SCFENDOK
-SCFENDNC:
+        JR .FITS
+.NO_WRAP:
         LD A,(ST_PCHI)
         OR A
-        JR Z,SCFENDOK              ; The current cursor was below $10000.
+        JR Z,.FITS                 ; The current cursor was below $10000.
         LD A,H
         OR L
         JP NZ,ERR_CAP              ; A nonempty extent follows the endpoint.
-SCFENDOK:
+.FITS:
         LD HL,(ST_GBASE)           ; Globals occupy the area after the runtime.
-        LD (SCGBASE),HL
+        LD (PUB_GLB),HL
         LD BC,(ST_GLOBS)          ; One four-byte record is reserved per global.
         XOR A                     ; Global slot zero is the first primitive mark.
         LD (ST_GIDX),A
-        JP SCGDATA                 ; Skip the helper body before entering the loop.
+        JP .GLOBALS                ; Skip the helper body before entering the loop.
 
 ; Seed one predefined global with its primitive procedure value.  The area
 ; was emitted as zeroes, which leave ordinary names unbound, so only
 ; predefined names need the two PATCH words.
-SCGINIT:
+.SEED:
         LD A,(ST_GIDX)            ; The compiler mark table is byte indexed.
         LD L,A
         LD H,0
@@ -79,80 +79,80 @@ SCGINIT:
         ADD HL,DE
         POP DE
         PUSH HL
-        CALL SINKPTCH              ; Payload word; SINKPTCH preserves BC.
+        CALL SINK_FIX              ; Payload word; SINK_FIX preserves BC.
         POP HL
         RET C
         INC HL
         INC HL
         LD DE,1000H               ; Clear extension; initialized, tag zero.
-        JP SINKPTCH
+        JP SINK_FIX
 
-SCGDATA:
+.GLOBALS:
         LD A,B                     ; Test the high count byte first.
         OR C                       ; A zero pair means all global slots are present.
-        JR Z,SCLDATA               ; Continue with local storage after the globals.
-        CALL SCGINIT               ; Seed a predefined value.
+        JR Z,.LOCALS               ; Continue with local storage after the globals.
+        CALL .SEED                 ; Seed a predefined value.
         RET C
         LD A,(ST_GIDX)             ; Advance the primitive-mark cursor.
         INC A
         LD (ST_GIDX),A
         DEC BC                     ; Account for the slot just seeded.
-        JR SCGDATA                 ; Continue until the global count is exhausted.
-SCLDATA:
+        JR .GLOBALS                ; Continue until the global count is exhausted.
+.LOCALS:
         LD HL,(ST_PC)
-        LD (SCLBASE),HL            ; Static locals follow the generated code.
+        LD (PUB_LOC),HL            ; Static locals follow the generated code.
         LD A,(ST_LMAX)             ; The local high-water mark sets its extent.
         LD C,A                     ; Widen the byte count to a normal word.
         LD B,0                     ; Local slots also occupy four bytes each.
-SCLOOP:
+.LOCAL:
         LD A,B                     ; Test the high count byte first.
         OR C                       ; A zero pair means all local slots are present.
-        JR Z,SCDATAOK              ; Continue with address fixups.
+        JR Z,.CACHE                ; Continue with address fixups.
         XOR A                      ; Local slots start with zero payload and flag.
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
         DEC BC                     ; Account for the slot just appended.
-        JR SCLOOP                  ; Continue until the local extent is filled.
-SCDATAOK:
+        JR .LOCAL                  ; Continue until the local extent is filled.
+.CACHE:
         LD HL,(ST_PC)
-        LD (SCQBASE),HL            ; Quoted-list cache cells follow local storage.
-        LD A,(SCQCNT)
+        LD (QUO_BASE),HL           ; Quoted-list cache cells follow local storage.
+        LD A,(QUO_CNT)
         LD C,A
         LD B,0
-SCQCLOOP:
+.CELL:
         LD A,B
         OR C
-        JR Z,SCQCDONE
+        JR Z,.FINISH
         XOR A
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
         DEC BC
-        JR SCQCLOOP
-SCQCDONE:
+        JR .CELL
+.FINISH:
         LD HL,(ST_PC)              ; The sink owns the logical output cursor.
-        CALL SCPDESC               ; Patch the slot extent into every descriptor.
+        CALL PUB_DESC              ; Patch the slot extent into every descriptor.
         RET C                      ; Preserve the staged-image capacity guard.
-        CALL SCLITDAT             ; Append copied symbol and string literals.
+        CALL LIT_EMIT             ; Append copied symbol and string literals.
         RET C                      ; Preserve the staged-image capacity guard.
         LD HL,(ST_PC)              ; Literal data advances the final image cursor.
         LD A,(ST_PCHI)
-        LD (SCAETOP),A             ; Publish the 17-bit ASO endpoint marker.
+        LD (ASO_TOP),A             ; Publish the 17-bit ASO endpoint marker.
         LD DE,0100H                ; Convert the logical endpoint to a length.
         OR A                       ; Clear carry before measuring the image.
         SBC HL,DE                  ; HL becomes runtime plus code plus slot data.
-        LD (SCIMGL),HL             ; SCOUT streams this exact payload length.
-        CALL SCPENTRY              ; Point the runtime image at the generated program.
-        CALL SCPSLOTS              ; Replace every slot placeholder with an address.
+        LD (PUB_SIZE),HL           ; PUB_MAIN streams this exact payload length.
+        CALL PUB_LINK              ; Point the runtime image at the generated program.
+        CALL PUB_FIX               ; Replace every slot placeholder with an address.
         RET                        ; Carry reports any capacity or layout failure.

@@ -67,11 +67,11 @@ CMD_BODY:
         LD A,(ST_BMODE)            ; Procedure bodies may begin with definitions.
         OR A
         JR Z,.NO_DEFS
-        CALL SCDEFCAP              ; Install the leading names before replay.
+        CALL DEF_LEAD              ; Install the leading names before replay.
         JP C,.FAIL
 .NO_DEFS:
 .READ:
-        CALL SCNEXT                ; Read one body expression or its closing parenthesis.
+        CALL REC_NEXT              ; Read one body expression or its closing parenthesis.
         JR NC,.READ_OK
         JP .FAIL                   ; Restore the frame after a reader failure.
 .READ_OK:
@@ -88,7 +88,7 @@ CMD_BODY:
         LD A,(RD_TAG)              ; Preserve its scalar tag.
         LD (ST_EVTAG),A            ; Structural events ignore this field.
 .EXPR:
-        XOR A                      ; A definition marker belongs only to SCIDEF.
+        XOR A                      ; A definition marker belongs only to DEF_BODY.
         LD (ST_ISDEF),A
         LD A,(ST_TAILS)            ; Remember tail records made by this expression.
         LD (ST_MARK),A             ; Non-final expressions will rewrite those calls.
@@ -112,7 +112,7 @@ CMD_BODY:
         LD A,(ST_EXPRS)            ; Count the completed body expression.
         INC A
         LD (ST_EXPRS),A
-        CALL SCNEXT                ; The next event distinguishes final from non-final.
+        CALL REC_NEXT              ; The next event distinguishes final from non-final.
         JR NC,.NEXT_OK
         JP .FAIL                   ; The expression result is discarded on source failure.
 .NEXT_OK:
@@ -145,7 +145,7 @@ CMD_BODY:
         LD A,(ST_BACK)              ; An unfinished definition replay owns a frame.
         OR A
         JR Z,.FAIL_END
-        CALL SCRECPOP
+        CALL REC_POP
 .FAIL_END:
         CALL .RESTORE              ; Restore all body fields and the continuation.
         SCF                        ; Preserve the reader or expression failure.
