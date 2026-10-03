@@ -96,7 +96,7 @@ export async function assemble(entry: string) {
   };
   function call(name: string, left: number, right = 0, tag = 0, rightTag = 0) {
     lowestStack = 0xf000;
-    mem.fill((left ^ right) & 255, address("F16WORK"), address("F16WEND"));
+    mem.fill((left ^ right) & 255, address("F16_WORK"), address("F16_LIM"));
     cpu.flags.C = (left ^ right) & 1;
     cpu.pc = address(name);
     cpu.sp = 0xf000;

@@ -277,19 +277,19 @@ RT_BINOP:
         LD (SRTTAG),A             ; Preserve the left tag while selecting the op.
         LD A,(SRTOP)              ; Select the checked operation.
         OR A                      ; Addition is the zero operation.
-        JR Z,.ADD                 ; Call NADD with the recovered ABI values.
+        JR Z,.ADD                 ; Call NUM_ADD with the recovered ABI values.
         CP 1                      ; Subtraction is operation one.
-        JR Z,.SUB                 ; Call NSUB with the recovered ABI values.
+        JR Z,.SUB                 ; Call NUM_SUB with the recovered ABI values.
         LD A,(SRTTAG)             ; Restore the left tag for the numeric ABI.
-        CALL NMUL                 ; Operation two is checked multiplication.
+        CALL NUM_MUL              ; Operation two is checked multiplication.
         JR .RESULT           ; Common carry handling and return.
 .ADD:
         LD A,(SRTTAG)             ; Restore the left tag for the numeric ABI.
-        CALL NADD                 ; Checked addition uses A/B and HL/DE.
+        CALL NUM_ADD              ; Checked addition uses A/B and HL/DE.
         JR .RESULT           ; Common carry handling and return.
 .SUB:
         LD A,(SRTTAG)             ; Restore the left tag for the numeric ABI.
-        CALL NSUB                 ; Checked subtraction uses A/B and HL/DE.
+        CALL NUM_SUB              ; Checked subtraction uses A/B and HL/DE.
 .RESULT:
         JP C,SRTERROR             ; Overflow or an invalid value is terminal.
         LD B,2                    ; The two native operands are now consumed.

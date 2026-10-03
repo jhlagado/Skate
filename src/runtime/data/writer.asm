@@ -59,9 +59,9 @@ SRTWMSG:
 SRTWNUMS:
         PUSH HL                    ; Keep the payload across classification.
         XOR A                      ; Classify it as a binary16 scalar.
-        CALL NCLASS
+        CALL NUM_CHK
         POP HL
-        JP NC,SRTFPRN              ; Valid binary16 values use the float printer.
+        JP NC,FLT_EMIT             ; Valid binary16 values use the float printer.
         LD DE,SRTWQF               ; Keep the established fallback spelling.
         JR SRTWMSG
 

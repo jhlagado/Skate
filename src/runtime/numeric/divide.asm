@@ -1,129 +1,129 @@
 ; Exact integer division and remainder.
-; Entry points: NQUOT and NREM; helper path: NIDIV and NIDRUN.
+; Entry points: NUM_QUOT and NUM_REM; helper path: NUM_IDIV and .DIVIDE.
 ; Quotients truncate toward zero and remainders keep the dividend sign.
 ; Exact signed16 quotient and remainder.  The public quotient truncates toward
 ; zero; the remainder keeps the dividend's sign.  Both paths validate exact
 ; integer tags before checking the divisor or touching the operands.
-NQUOT:
-    LD (NIDLT),A            ; Preserve the caller's left representation tag.
+NUM_QUOT:
+    LD (NUM_NTAG),A         ; Preserve the caller's left representation tag.
     XOR A                   ; Operation zero returns the quotient.
-    JR NIDIV                ; Share the signed magnitude division path.
-NREM:
-    LD (NIDLT),A            ; Preserve the caller's left representation tag.
+    JR NUM_IDIV             ; Share the signed magnitude division path.
+NUM_REM:
+    LD (NUM_NTAG),A         ; Preserve the caller's left representation tag.
     LD A,1                  ; Operation one returns the remainder.
-NIDIV:
-    LD (NIDOP),A            ; Preserve the selected result across validation.
+NUM_IDIV:
+    LD (NUM_WANT),A         ; Preserve the selected result across validation.
     LD A,B                  ; Retain the right representation tag.
-    LD (NIDRT),A
-    LD (NIDLEFT),HL         ; Preserve the original left payload for errors.
-    LD (NORIGVAL),HL        ; The shared error exit returns that original word.
-    LD (NIDRIGHT),DE        ; Preserve the original right payload as well.
-    JR NIDIVCHK
+    LD (NUM_DTAG),A
+    LD (NUM_NARG),HL        ; Preserve the original left payload for errors.
+    LD (NUM_ORIG),HL        ; The shared error exit returns that original word.
+    LD (NUM_DARG),DE        ; Preserve the original right payload as well.
+    JR .CHECK
 
 ; Front ends preserve both tags before selecting the shared operation.
-NIDIVCHK:
-    LD A,(NIDLT)
+.CHECK:
+    LD A,(NUM_NTAG)
     CP 3
-    JP NZ,NIDTYPE
-    LD A,(NIDRT)
+    JP NZ,.BAD_TYPE
+    LD A,(NUM_DTAG)
     CP 3
-    JP NZ,NIDTYPE
-    LD HL,(NIDLEFT)
-    LD DE,(NIDRIGHT)
+    JP NZ,.BAD_TYPE
+    LD HL,(NUM_NARG)
+    LD DE,(NUM_DARG)
     LD A,D
     OR E
-    JP Z,NIDZERO
+    JP Z,.BY_ZERO
     LD A,H
     AND 80H
-    LD (NIDSIGN),A
+    LD (NUM_QNEG),A
     BIT 7,H
-    CALL NZ,NWORDNEG
-    LD (NIDNUM),HL
+    CALL NZ,NUM_FLIP
+    LD (NUM_NMAG),HL
     EX DE,HL
     LD A,H
     AND 80H
-    LD (NIDRSIGN),A
+    LD (NUM_DNEG),A
     BIT 7,H
-    CALL NZ,NWORDNEG
-    LD (NIDDIV),HL
-    CALL NIDRUN
-    LD A,(NIDOP)
+    CALL NZ,NUM_FLIP
+    LD (NUM_DMAG),HL
+    CALL .DIVIDE
+    LD A,(NUM_WANT)
     OR A
-    JR NZ,NIDREST
-    LD HL,(NIDQUO)
-    LD A,(NIDSIGN)
+    JR NZ,.REM
+    LD HL,(NUM_QMAG)
+    LD A,(NUM_QNEG)
     LD B,A
-    LD A,(NIDRSIGN)
+    LD A,(NUM_DNEG)
     XOR B
     AND 80H
-    LD (NIDSIGN),A
+    LD (NUM_QNEG),A
     OR A
-    JR Z,NIDQPOS
+    JR Z,.QUOT_POS
     LD A,H
     CP 80H
-    JR C,NIDQNEG
-    JR NZ,NIDOVF
+    JR C,.QUOT_NEG
+    JR NZ,.OVER
     LD A,L
     OR A
-    JR NZ,NIDOVF
-NIDQNEG:
-    CALL NWORDNEG
-    JP NINTGOOD
-NIDQPOS:
+    JR NZ,.OVER
+.QUOT_NEG:
+    CALL NUM_FLIP
+    JP NUM_GOOD
+.QUOT_POS:
     BIT 7,H
-    JP NZ,NIDOVF
-    JP NINTGOOD
-NIDREST:
-    LD HL,(NIDREM)
-    LD A,(NIDSIGN)
+    JP NZ,.OVER
+    JP NUM_GOOD
+.REM:
+    LD HL,(NUM_RMAG)
+    LD A,(NUM_QNEG)
     OR A
-    JP Z,NINTGOOD
+    JP Z,NUM_GOOD
     LD A,H
     OR L
-    JP Z,NINTGOOD
-    CALL NWORDNEG
-    JP NINTGOOD
-NIDTYPE:
+    JP Z,NUM_GOOD
+    CALL NUM_FLIP
+    JP NUM_GOOD
+.BAD_TYPE:
     LD A,1
-    JP NERRRET
-NIDZERO:
+    JP NUM_FAIL
+.BY_ZERO:
     LD A,3
-    JP NERRRET
-NIDOVF:
-    JP NOVERFLW
+    JP NUM_FAIL
+.OVER:
+    JP NUM_OVER
 
 ; Unsigned restoring division for two nonnegative 16-bit magnitudes.
-NIDRUN:
+.DIVIDE:
     LD HL,0
-    LD (NIDREM),HL
-    LD (NIDQUO),HL
+    LD (NUM_RMAG),HL
+    LD (NUM_QMAG),HL
     LD A,16
-    LD (NIDCNT),A
-NIDLOOP:
-    LD HL,(NIDNUM)
+    LD (NUM_CNT),A
+.LOOP:
+    LD HL,(NUM_NMAG)
     ADD HL,HL               ; Carry is the next dividend bit.
-    LD (NIDNUM),HL
-    LD HL,(NIDREM)
+    LD (NUM_NMAG),HL
+    LD HL,(NUM_RMAG)
     ADC HL,HL               ; Shift that bit into the partial remainder.
-    LD DE,(NIDDIV)
+    LD DE,(NUM_DMAG)
     OR A
     SBC HL,DE
-    JR C,NIDBIT0
-    LD (NIDREM),HL
-    LD HL,(NIDQUO)
+    JR C,.ZERO_BIT
+    LD (NUM_RMAG),HL
+    LD HL,(NUM_QMAG)
     ADD HL,HL
     INC L                   ; This quotient bit is one.
-    LD (NIDQUO),HL
-    JR NIDNEXT
-NIDBIT0:
+    LD (NUM_QMAG),HL
+    JR .NEXT
+.ZERO_BIT:
     ADD HL,DE               ; Restore the partial remainder after a failed test.
-    LD (NIDREM),HL
-    LD HL,(NIDQUO)
+    LD (NUM_RMAG),HL
+    LD HL,(NUM_QMAG)
     ADD HL,HL               ; This quotient bit remains zero.
-    LD (NIDQUO),HL
-NIDNEXT:
-    LD A,(NIDCNT)
+    LD (NUM_QMAG),HL
+.NEXT:
+    LD A,(NUM_CNT)
     DEC A
-    LD (NIDCNT),A
-    JR NZ,NIDLOOP
+    LD (NUM_CNT),A
+    JR NZ,.LOOP
     RET

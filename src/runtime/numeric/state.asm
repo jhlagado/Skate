@@ -1,30 +1,30 @@
 ; Numeric runtime workspace.
-; NEND marks the code boundary; the labels below are shared scratch storage.
-NEND:                      ; Exclusive end of numeric-dispatch instructions.
+; NUM_END marks the code boundary; the labels below are shared scratch storage.
+NUM_END:                   ; Exclusive end of numeric-dispatch instructions.
 ; Private static operands and scratch. Calls may also use binary16 workspace.
-NWORK:
-NORIGVAL: DW 0                 ; Original left/unary word returned on failure.
-NLEFTWK: DW 0                    ; Working left payload; later its converted float.
-NRIGHTWK: DW 0                    ; Original right payload.
-NLEFTTG: DB 0                   ; Original left representation tag.
-NRIGHTTG: DB 0                   ; Original right representation tag.
+.WORK:
+NUM_ORIG: DW 0                 ; Original left/unary word returned on failure.
+NUM_X: DW 0                      ; Working left payload; later its converted float.
+NUM_Y: DW 0                       ; Original right payload.
+NUM_XTAG: DB 0                  ; Original left representation tag.
+NUM_YTAG: DB 0                   ; Original right representation tag.
 ; Store BC together so setting operation C does not disturb input A/B.
-NOPCODE: DW 0                   ; Low byte: operation 0..3. High byte: saved B, unused.
-NPRODSGN: DB 0                 ; Product sign: 00H nonnegative, 80H negative.
-NREVORD: DB 0                  ; Mixed-comparison order: 0 normal, 1 reversed.
-NINTCMP: DW 0                    ; Exact integer in a mixed comparison.
-NFLOATV: DW 0                    ; Original binary16 word in a mixed comparison.
-NTRUNCV: DW 0                    ; Float truncated toward zero to a signed word.
-NIDOP:   DB 0                    ; Quotient/remainder selector.
-NIDLT:   DB 0                    ; Original left value tag.
-NIDRT:   DB 0                    ; Original right value tag.
-NIDLEFT: DW 0                    ; Original left payload.
-NIDRIGHT: DW 0                   ; Original right payload.
-NIDSIGN: DB 0                    ; Dividend or quotient sign bit.
-NIDRSIGN: DB 0                   ; Divisor sign bit.
-NIDNUM:  DW 0                    ; Shifting unsigned dividend magnitude.
-NIDDIV:  DW 0                    ; Unsigned divisor magnitude.
-NIDQUO:  DW 0                    ; Unsigned quotient magnitude.
-NIDREM:  DW 0                    ; Unsigned remainder magnitude.
-NIDCNT:  DB 0                    ; Remaining restoring-division iterations.
-NWEND:                     ; Exclusive end of private numeric workspace.
+NUM_OP: DW 0                    ; Low byte: operation 0..3. High byte: saved B, unused.
+NUM_PNEG: DB 0                 ; Product sign: 00H nonnegative, 80H negative.
+NUM_SWAP: DB 0                 ; Mixed-comparison order: 0 normal, 1 reversed.
+NUM_INT: DW 0                    ; Exact integer in a mixed comparison.
+NUM_FLT: DW 0                    ; Original binary16 word in a mixed comparison.
+NUM_CHOP: DW 0                   ; Float truncated toward zero to a signed word.
+NUM_WANT:   DB 0                 ; Quotient/remainder selector.
+NUM_NTAG:   DB 0                 ; Original left value tag.
+NUM_DTAG:   DB 0                 ; Original right value tag.
+NUM_NARG: DW 0                   ; Original left payload.
+NUM_DARG: DW 0                   ; Original right payload.
+NUM_QNEG: DB 0                   ; Dividend or quotient sign bit.
+NUM_DNEG: DB 0                   ; Divisor sign bit.
+NUM_NMAG:  DW 0                  ; Shifting unsigned dividend magnitude.
+NUM_DMAG:  DW 0                  ; Unsigned divisor magnitude.
+NUM_QMAG:  DW 0                  ; Unsigned quotient magnitude.
+NUM_RMAG:  DW 0                  ; Unsigned remainder magnitude.
+NUM_CNT:  DB 0                   ; Remaining restoring-division iterations.
+.WORK_END:                 ; Exclusive end of private numeric workspace.

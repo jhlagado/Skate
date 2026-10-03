@@ -551,7 +551,7 @@ STD_FMOD:
         JP NZ,SRTERROR
         LD DE,(STD_DIV)
         LD B,3
-        CALL NREM                  ; Rejects division by zero.
+        CALL NUM_REM               ; Rejects division by zero.
         JP C,SRTERROR
         LD A,H
         OR L

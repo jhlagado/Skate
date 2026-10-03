@@ -32,7 +32,7 @@ SRTNTAG:      DB 0                 ; Current packet value tag during numeric wor
 SRTNPTR:      DW 0                 ; Current packet cursor during a numeric fold.
 SRTNACCV:     DW 0                 ; Accumulator payload for a variadic numeric fold.
 SRTNVAL:      DW 0                 ; Current packet payload during numeric work.
-SRTCCOD:      DW 0                 ; Raw NCMP relation for the current pair.
+SRTCCOD:      DW 0                 ; Raw NUM_CMP relation for the current pair.
 SRTLCN:       DB 0                 ; Remaining packet values while building list.
 SRTLCP:       DW 0                 ; Packet cursor for the list builder.
 SRTATMP:      DB 0                 ; Temporary tag while packing one argument.

@@ -30,7 +30,7 @@ PRIM_NUM:
         CP 0FFH
         JR Z,.FAIL                ; FFxx is the reserved byte-character range.
         LD A,(SRTNTAG)
-        CALL NCLASS
+        CALL NUM_CHK
         RET
 .OK:
         OR A
@@ -57,7 +57,7 @@ PKT_NUMS:
         AND 0FH                     ; Recover the logical value tag.
         INC HL                      ; Step to the next record.
         PUSH HL                     ; Preserve the next packet address.
-        EX DE,HL                    ; NCLASS receives the payload in HL.
+        EX DE,HL                    ; NUM_CHK receives the payload in HL.
         CALL PRIM_NUM               ; Accept exact integers and valid numeric scalars.
         POP HL                      ; Restore the packet cursor after classification.
         JP C,SRTERROR               ; Every arithmetic argument must be a number.
@@ -98,7 +98,7 @@ PRIM_ALU:
         DEC A                         ; Leave the number of divisors to fold.
         LD (SRTNLEFT),A               ; Preserve the remaining operand count.
         LD HL,SRTARGPK+4              ; The next record is the second source operand.
-        LD (SRTNPTR),HL               ; Keep the packet cursor across NDIV.
+        LD (SRTNPTR),HL               ; Keep the packet cursor across NUM_DIV.
         JR .DIV_LOOP                  ; Fold the remaining operands from left to right.
 .DIV_ONE:
         LD (SRTNLEFT),A               ; Unary division consumes its sole operand below.
@@ -107,7 +107,7 @@ PRIM_ALU:
         LD HL,3C00H                  ; Binary16 1.0 is the left-fold identity.
         LD (SRTNACCV),HL             ; Store the initial reciprocal accumulator.
         LD HL,SRTARGPK               ; Begin at the first packed argument.
-        LD (SRTNPTR),HL              ; Keep the packet cursor across NDIV.
+        LD (SRTNPTR),HL              ; Keep the packet cursor across NUM_DIV.
 .DIV_LOOP:
         LD HL,(SRTNPTR)              ; Load the next four-byte argument record.
         CALL PKT_VAL                 ; Recover its payload in HL and tag in A.
@@ -118,7 +118,7 @@ PRIM_ALU:
         LD A,(SRTNTAG)               ; Put the right operand tag in the ABI's B register.
         LD B,A                       ; Preserve that tag while restoring the left tag.
         LD A,(SRTNACCT)              ; Put the accumulator tag in the ABI's A register.
-        CALL NDIV                    ; Divide the accumulator by the next operand.
+        CALL NUM_DIV                 ; Divide the accumulator by the next operand.
         JP C,SRTERROR                ; Reject a bad operand or invalid result.
         LD (SRTNACCV),HL             ; Save the binary16 quotient payload.
         LD (SRTNACCT),A              ; Save its successful result tag.
@@ -151,7 +151,7 @@ PRIM_ALU:
         JR NZ,.FOLD                 ; Two or more operands use left subtraction.
         LD HL,SRTARGPK
         CALL PKT_VAL
-        CALL NNEG                   ; Unary subtraction is checked negation.
+        CALL NUM_NEG                ; Unary subtraction is checked negation.
         JP C,SRTERROR
         PUSH IX
         RET
@@ -189,15 +189,15 @@ PRIM_ALU:
         CP 1
         JR Z,.OP_SUB
         LD A,(SRTNACCT)
-        CALL NMUL
+        CALL NUM_MUL
         JR .OP_CHK
 .OP_ADD:
         LD A,(SRTNACCT)
-        CALL NADD
+        CALL NUM_ADD
         JR .OP_CHK
 .OP_SUB:
         LD A,(SRTNACCT)
-        CALL NSUB
+        CALL NUM_SUB
 .OP_CHK:
         JP C,SRTERROR
         LD (SRTNACCV),HL
@@ -266,11 +266,11 @@ PRIM_QR:
         CP 14
         JR Z,.QUOTIENT
         LD A,(SRTNACCT)
-        CALL NREM
+        CALL NUM_REM
         JR .CHECK
 .QUOTIENT:
         LD A,(SRTNACCT)
-        CALL NQUOT
+        CALL NUM_QUOT
 .CHECK:
         JP C,SRTERROR
         PUSH IX
@@ -304,7 +304,7 @@ PRIM_CMP:
         LD A,(SRTNTAG)
         LD B,A
         LD A,(SRTNACCT)
-        CALL NCMP
+        CALL NUM_CMP
         JP C,SRTERROR
         LD (SRTCCOD),HL
         CALL .RELATION
@@ -323,7 +323,7 @@ PRIM_CMP:
         LD (SRTNLEFT),A
         JR .LOOP
 
-; Turn NCMP's -1, 0, +1 and unordered codes into the selected relation.
+; Turn NUM_CMP's -1, 0, +1 and unordered codes into the selected relation.
 .RELATION:
         LD A,(SRTCCOD+1)
         OR A
