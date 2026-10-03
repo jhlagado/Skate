@@ -47,7 +47,7 @@ SCAPLOOP:
         LD A,(SCAPEV)              ; Restore the event kind for SCEXPE.
         LD HL,(SCAPVAL)            ; Restore its interned ID or numeric payload.
         CALL SCEXPE                ; Compile the argument expression.
-        JR C,SCAPERR               ; Balance the saved application state on failure.
+        JP C,SCAPERR               ; Balance the saved application state on failure.
         POP AF                     ; Restore the enclosing global slot.
         LD (SCAPGSL),A
         POP AF                     ; Restore the enclosing compact-call mode.
@@ -90,24 +90,36 @@ SCAPTAIL:
         LD HL,SRTTAIL              ; Tail calls reuse the current return address.
         JP SCITAIL                 ; Emit the count load and runtime JP.
 
-; Emit LD A,count, CALL PRIM_OP or PRIM_TL, then the primitive's payload byte.
+; Emit CALL PRIM_OP, or a patchable CALL PRIM_TL in tail position, then the
+; primitive's payload byte and the argument count.
 SCAPPRIM:
         LD A,(SCTLSAV)
         OR A
         JR NZ,SCAPPTL
         LD (SCAPMODE),A            ; A is zero: the call is complete.
         LD HL,PRIM_OP
-        CALL SCINVOKE
+        CALL SCCALL
         RET C
         JR SCAPPKB
 SCAPPTL:
-        LD HL,PRIM_TL              ; SCITAIL records the candidate as mode three.
-        CALL SCITAIL
+        LD A,0CDH                  ; CALL, kept patchable for SCTFIX.
+        CALL SINKBYTE
+        RET C
+        LD HL,(SCPC)
+        CALL SCTSAVE               ; Mode three records a primitive candidate.
+        RET C
+        XOR A
+        LD (SCAPMODE),A
+        LD HL,PRIM_TL
+        CALL SCWORD
         RET C
 SCAPPKB:
         LD A,(SCAPGSL)             ; The primitive's one-based kind.
         DEC A
         ADD A,20H                  ; Its value's payload low byte.
+        CALL SINKBYTE
+        RET C
+        LD A,(SCARGN)              ; The argument count.
         JP SINKBYTE
 
 ; Remove the four compiler-stack words left by a failed nested argument.
@@ -152,13 +164,6 @@ SCITAIL:
         RET C                      ; Preserve tail-record capacity exhaustion.
         LD HL,SRTTCALL              ; The normal wrapper discards CALL's continuation.
         LD A,(SCAPMODE)
-        CP 3
-        JR NZ,SCITSIDE
-        LD HL,PRIM_TL              ; A direct primitive tail call.
-        XOR A
-        LD (SCAPMODE),A
-        JR SCITWR
-SCITSIDE:
         CP 2
         JR NZ,SCITWR
         LD HL,SRTOTCL              ; Side-stack calls use their matching wrapper.

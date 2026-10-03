@@ -49,16 +49,18 @@ ARG_POP:
         JP SRTNPOP1                ; Keeps A:HL.
 
 ; Call a predefined primitive whose kind is known when the program is
-; compiled.  Generated code is LD A,count, CALL PRIM_OP, DB payload, where the
+; compiled.  Generated code is CALL PRIM_OP, DB payload, DB count, where the
 ; payload byte is the primitive value's low byte.  No operator value is
 ; evaluated or pushed by the generated code; it is pushed here, so the call
 ; then continues exactly as an operator-stack call does.
 PRIM_OP:
-        LD (PRIM_CNT),A
-        POP HL                     ; The inline payload byte.
+        POP HL                     ; The inline payload and count bytes.
         LD E,(HL)
         INC HL
-        PUSH HL                    ; Return after the payload byte.
+        LD A,(HL)
+        INC HL
+        PUSH HL                    ; Return after the count byte.
+        LD (PRIM_CNT),A
         LD L,E
         LD H,0FEH
         XOR A
@@ -68,9 +70,12 @@ PRIM_OP:
 
 ; The tail-position form: the CALL's return is discarded, as by SRTOTCL.
 PRIM_TL:
+        POP HL                     ; The inline payload and count bytes.
+        LD E,(HL)
+        INC HL
+        LD A,(HL)
         LD (PRIM_CNT),A
-        POP HL                     ; The inline payload byte.
-        LD L,(HL)
+        LD L,E
         LD H,0FEH
         XOR A
         CALL SRTOPUSH
