@@ -35,10 +35,7 @@ for (const [i, r] of res.entries()) {
     else if (d.kind === "private") status = `priv of ${owner}`;
     else if (demoted.has(d.order)) status = `PRIV under ${owner}`;
     else status = "KEEP";
-    const pinned = d.kind === "label" && keptNames.has(d.name) &&
-          d.file.endsWith(".inc") || r.pinned.has(d.name)
-      ? " pinned"
-      : "";
+    const pinned = r.pinned.has(d.name) ? " pinned" : "";
     console.log(
       `${d.file}:${d.line + 1}\t${d.name}\t${status}${pinned}${
         elsewhere.length ? "\tused in " + elsewhere.join(" ") : ""
