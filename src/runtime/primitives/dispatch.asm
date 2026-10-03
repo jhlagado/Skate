@@ -46,7 +46,7 @@ SRTPKGZ:
         LD (SRTATMP),A
         LD A,(SRTARGC)           ; Arguments have been copied out of the native stack.
         LD B,A
-        CALL SRTNPOPB
+        CALL ROOT_CUT
         LD A,(SRTATMP)
         PUSH IX                  ; Restore the SRTPACKO helper return address.
         RET
@@ -59,7 +59,7 @@ SRTOPUSH:
         LD HL,(SRTOPS)           ; The side cursor grows upward in four-byte steps.
         LD DE,4
         ADD HL,DE
-        LD DE,SRTOPEND
+        LD DE,RT_OPHI
         OR A
         SBC HL,DE
         JP NC,SRTERROR            ; Too many nested operators is a runtime error.
@@ -82,7 +82,7 @@ SRTOPUSH:
 ; Pop the most recent operator value from the fixed side stack.
 SRTOPPOP:
         LD HL,(SRTOPS)
-        LD DE,SRTOPB
+        LD DE,RT_OPLO
         OR A
         SBC HL,DE
         JP Z,SRTERROR             ; A missing operator is a malformed call.
@@ -106,7 +106,7 @@ SRTOPPOP:
 ; values are read directly so a primitive call adds no argument stack frame.
 SRTPRIM:
         XOR A                       ; Normal primitive calls do not use apply-tail mode.
-        LD (SRTAPMOD),A
+        LD (APPLY_TL),A
         LD (SRTRET),IX              ; Every packet result returns through the clearer.
         LD IX,SRTPKRET              ; The clearer removes the packet roots first.
         LD A,(SRTPID)              ; Kinds zero through three are numeric primitives.
@@ -128,7 +128,7 @@ SRTPRIM:
         CP 39
         JP C,STR_PRIM                 ; String and character operations follow division.
         CP 45
-        JP Z,SRTAPPLY                 ; Apply spreads a checked proper list into a call.
+        JP Z,APPLY                    ; Apply spreads a checked proper list into a call.
         JP C,SRTVEC                   ; Vector operations use the preceding range.
         CP 54
         JP C,SRTPORTS                 ; Standard ports follow the vector services.

@@ -8,14 +8,14 @@ STR_NEW:
         CALL .SIZE
         CALL SLAB_NEW
         JR NC,.GOT
-        CALL SRTGC
+        CALL GC
         CALL .SIZE              ; Collection may reuse the sizing scratch.
         CALL SLAB_NEW
         RET C
 .GOT:
         LD (STR_DST),HL
         LD (SRTOBJ),HL
-        CALL SRTCLNEW               ; Record the exact block start for validation.
+        CALL GC_OBJON               ; Record the exact block start for validation.
         CALL STR_SETM             ; Set the adjacent string marker bit.
         LD HL,(STR_DST)
         LD A,6
@@ -52,16 +52,16 @@ STR_MARK:
         LD (SRTCLOBJ),HL
         CALL STR_CHK
         RET C
-        CALL SRTCLSEE
+        CALL GC_SEEN
         RET NZ
-        CALL SRTCLSET
+        CALL GC_VISIT
         RET
 
 ; Test the string marker adjacent to an exact closure allocation start.
 ; Z means the object is not a managed string.
 STR_TEST:
         LD HL,(SRTCLOBJ)
-        CALL SRTCLPOS
+        CALL GC_OBJAT
         LD C,A
         LD DE,SRTCLBM
         ADD HL,DE
@@ -79,7 +79,7 @@ STR_TEST:
 STR_SETM:
         LD HL,(SRTOBJ)
         LD (SRTCLOBJ),HL
-        CALL SRTCLPOS
+        CALL GC_OBJAT
         LD C,A
         LD DE,SRTCLBM
         ADD HL,DE
@@ -94,7 +94,7 @@ STR_SETM:
 ; Clear the string marker before a dead block returns to a closure free list.
 STR_CLRM:
         LD HL,(SRTCLOBJ)
-        CALL SRTCLPOS
+        CALL GC_OBJAT
         LD C,A
         LD DE,SRTCLBM
         ADD HL,DE
@@ -112,7 +112,7 @@ STR_CLRM:
 ; Validate a managed string's start, class extent and length byte.
 STR_CHK:
         LD (SRTCLOBJ),HL
-        LD DE,SRTHEAP
+        LD DE,RT_HEAP
         OR A
         SBC HL,DE
         JP C,.BAD

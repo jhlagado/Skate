@@ -1,21 +1,21 @@
 ; Binding start maps, page scanning and binding sweep.
-; Entry points: SRTBPOS, SRTBNEW and SRTBSW.
+; Entry points: GC_VARAT, GC_VARON and GC_CELLS.
 ; Included in runtime order by ../roots.asm.
 
 ; Convert an aligned binding byte address to its bitmap byte and bit mask.
-; The map holds one bit per four-byte cell from SRTHEAP.
-SRTBPOS:
+; The map holds one bit per four-byte cell from RT_HEAP.
+GC_VARAT:
         LD HL,(SRTBADDR)
-        LD DE,SRTHEAP
+        LD DE,RT_HEAP
         OR A
         SBC HL,DE
-        JR C,SRTBPF
+        JR C,.BAD
         LD A,H
         CP 90H
-        JR NC,SRTBPF
+        JR NC,.BAD
         LD A,L
         AND 3
-        JR NZ,SRTBPF
+        JR NZ,.BAD
         SRL H                      ; Count in four-byte cells: one bit per cell.
         RR L
         SRL H
@@ -23,16 +23,16 @@ SRTBPOS:
         LD A,L
         AND 7
         LD C,A
-        JR Z,SRTBPSZ
+        JR Z,.ZERO
         LD A,1
-SRTBPSH:
+.SHIFT:
         ADD A,A
         DEC C
-        JR NZ,SRTBPSH
-        JR SRTBPSD
-SRTBPSZ:
+        JR NZ,.SHIFT
+        JR .MASK
+.ZERO:
         LD A,1
-SRTBPSD:
+.MASK:
         LD C,A
         SRL H
         RR L
@@ -44,14 +44,14 @@ SRTBPSD:
         ADD HL,DE
         OR A
         RET
-SRTBPF:
+.BAD:
         XOR A
         SCF
         RET
 
 ; Return nonzero only when SRTBADDR is a recorded binding allocation start.
-SRTBSTA:
-        CALL SRTBPOS
+GC_ISVAR:
+        CALL GC_VARAT
         RET C
         LD A,(HL)
         AND C
@@ -59,22 +59,22 @@ SRTBSTA:
 
 ; Record the binding start most recently allocated by HEAP_NEW.  HL returns
 ; the cell address in both cases; carry set means it has no start-map bit.
-SRTBNEW:
+GC_VARON:
         LD HL,(SRTCELLP)
         LD (SRTBADDR),HL
-        CALL SRTBPOS
-        JR C,SRTBNEWX              ; An unmapped cell cannot be published.
+        CALL GC_VARAT
+        JR C,.DONE                 ; An unmapped cell cannot be published.
         LD A,(HL)
         OR C
         LD (HL),A
-SRTBNEWX:
+.DONE:
         LD HL,(SRTCELLP)           ; Restore the cell address; LD keeps carry.
         RET
 
 ; Clear one allocation-start bit in the closure-start map.
-SRTCLCLB:
+GC_DROP:
         LD HL,(SRTCLOBJ)
-        CALL SRTCLPOS
+        CALL GC_OBJAT
         LD C,A
         LD DE,SRTCLBM
         ADD HL,DE
@@ -89,9 +89,9 @@ SRTCLCLB:
         RET
 
 ; Clear one queued-mark bit in the closure mark map.
-SRTCLCLM:
+GC_UNSEE:
         LD HL,(SRTCLOBJ)
-        CALL SRTCLPOS
+        CALL GC_OBJAT
         LD C,A
         LD DE,SRTCLMK
         ADD HL,DE
@@ -107,20 +107,20 @@ SRTCLCLM:
 ; manager; dead cells form a page-local free list before it is joined to the
 ; global list.  An empty page is returned immediately, so no stale free-list
 ; address can survive the page release.
-SRTBSW:
+GC_CELLS:
         LD HL,0
         LD (SRTBHEAD),HL
         LD HL,(SRTBPGBA)
         LD (SRTBPGC),HL             ; Save the current page across the scan.
         XOR A
         LD (SRTBPGI),A
-SRTBPGLO:
+.PAGE:
         LD A,(SRTBPGI)
         LD D,A
         LD A,(SRTBPGN)
         CP D
-        JP C,SRTBPGDN
-        JP Z,SRTBPGDN
+        JP C,.DONE
+        JP Z,.DONE
         LD A,D
         LD L,A
         LD H,0
@@ -138,20 +138,20 @@ SRTBPGLO:
         LD (SRTBPLIV),A
         LD A,HEAP_CAP
         LD (SRTCLPGQ),A
-SRTBPGSL:
+.CELL:
         LD A,(SRTCLPGQ)
         OR A
-        JP Z,SRTBPGST
+        JP Z,.PAGE_END
         LD HL,(SRTBSCAN)
         LD (SRTBADDR),HL
-        CALL SRTBPOS
-        JR C,SRTBPGNX
+        CALL GC_VARAT
+        JR C,.NEXT
         LD (SRTBMAP),HL
         LD A,C
         LD (SRTBMSK),A
         LD A,(HL)
         AND C
-        JR Z,SRTBPGFR               ; A clear bitmap bit is never a live cell.
+        JR Z,.FREE                  ; A clear bitmap bit is never a live cell.
         LD HL,(SRTBADDR)
         INC HL
         INC HL
@@ -160,8 +160,8 @@ SRTBPGSL:
         LD (SRTBFLG),A
         LD A,(SRTBFLG)
         AND BND_MARK
-        JR NZ,SRTBPGLV
-SRTBPGFR:
+        JR NZ,.LIVE
+.FREE:
         ; Every unmarked cell is reusable.  This includes cells reclaimed by
         ; an earlier collection and virgin slots that were never allocated.
         ; A cell is live only when both its allocation bit and mark bit are
@@ -175,10 +175,10 @@ SRTBPGFR:
         LD HL,(SRTBPFRE)
         LD A,H
         OR L
-        JR NZ,SRTBPGHD
+        JR NZ,.HEAD
         LD HL,(SRTBADDR)
         LD (SRTBPLST),HL
-SRTBPGHD:
+.HEAD:
         LD HL,(SRTBADDR)
         LD (SRTBPFRE),HL
         INC HL
@@ -186,8 +186,8 @@ SRTBPGHD:
         INC HL
         XOR A
         LD (HL),A                  ; A reclaimed cell is no longer allocated.
-        JR SRTBPGCL
-SRTBPGLV:
+        JR .CLEAR
+.LIVE:
         LD HL,(SRTBMAP)
         LD A,(HL)
         OR C
@@ -202,8 +202,8 @@ SRTBPGLV:
         LD A,(SRTBPLIV)
         INC A
         LD (SRTBPLIV),A
-        JR SRTBPGNX
-SRTBPGCL:
+        JR .NEXT
+.CLEAR:
         LD HL,(SRTBMAP)
         LD A,(SRTBMSK)
         CPL
@@ -211,7 +211,7 @@ SRTBPGCL:
         LD A,(HL)
         AND D
         LD (HL),A
-SRTBPGNX:
+.NEXT:
         LD HL,(SRTBSCAN)
         LD DE,CELL_SZ
         ADD HL,DE
@@ -219,22 +219,22 @@ SRTBPGNX:
         LD A,(SRTCLPGQ)
         DEC A
         LD (SRTCLPGQ),A
-        JP SRTBPGSL
-SRTBPGST:
+        JP .CELL
+.PAGE_END:
         LD A,(SRTBPLIV)
         OR A
-        JR NZ,SRTBPGLP
+        JR NZ,.JOIN
         LD HL,(SRTBPGBA)
         LD DE,1
         CALL PAGE_REL
-        JR C,SRTBPGLP             ; Keep the descriptor if release was rejected.
+        JR C,.JOIN                ; Keep the descriptor if release was rejected.
         LD A,(SRTBPGN)
         DEC A
         LD (SRTBPGN),A
         LD D,A
         LD A,(SRTBPGI)
         CP D
-        JP NC,SRTBPGLO             ; The removed page was the final entry.
+        JP NC,.PAGE                ; The removed page was the final entry.
         LD L,D
         LD H,0
         LD DE,SRTBPGS
@@ -248,12 +248,12 @@ SRTBPGST:
         ADD HL,DE
         POP AF
         LD (HL),A                  ; Fill the hole with the former last entry.
-        JP SRTBPGLO
-SRTBPGLP:
+        JP .PAGE
+.JOIN:
         LD HL,(SRTBPFRE)
         LD A,H
         OR L
-        JR Z,SRTBPGIN
+        JR Z,.ADVANCE
         LD DE,(SRTBHEAD)
         LD HL,(SRTBPLST)
         LD (HL),E
@@ -261,24 +261,24 @@ SRTBPGLP:
         LD (HL),D
         LD HL,(SRTBPFRE)
         LD (SRTBHEAD),HL
-SRTBPGIN:
+.ADVANCE:
         LD A,(SRTBPGI)
         INC A
         LD (SRTBPGI),A
-        JP SRTBPGLO
-SRTBPGDN:
+        JP .PAGE
+.DONE:
         LD HL,(SRTBPGC)
         LD A,H
         OR L
-        JR Z,SRTBPGZE
+        JR Z,.EMPTY
         LD A,(SRTBPGN)
         LD (SRTCLPGQ),A
         XOR A
         LD (SRTBPGI),A
-SRTBPGCK:
+.FIND:
         LD A,(SRTCLPGQ)
         OR A
-        JR Z,SRTBPGZE
+        JR Z,.EMPTY
         LD A,(SRTBPGI)
         LD L,A
         LD H,0
@@ -289,22 +289,22 @@ SRTBPGCK:
         LD HL,(SRTBPGC)
         LD A,H
         CP D
-        JR Z,SRTBPGOK
+        JR Z,.FOUND
         LD A,(SRTBPGI)
         INC A
         LD (SRTBPGI),A
         LD A,(SRTCLPGQ)
         DEC A
         LD (SRTCLPGQ),A
-        JR SRTBPGCK
-SRTBPGOK:
+        JR .FIND
+.FOUND:
         LD HL,(SRTBPGC)
         LD (SRTBPGBA),HL
         LD HL,(SRTBPGED)
         LD (SRTBPGP),HL            ; All slots are on the rebuilt free chain.
         LD (SRTBEND),HL
         RET
-SRTBPGZE:
+.EMPTY:
         LD HL,0
         LD (SRTBPGBA),HL
         LD (SRTBPGP),HL

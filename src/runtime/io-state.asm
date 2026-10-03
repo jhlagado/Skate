@@ -11,7 +11,7 @@ SRTDRACT:    DB 0                    ; Nonzero while a datum read owns its roots
 SRTDRRC:  DB 0                    ; Active exact-root count for later units.
 SRTDRFC: DB 0                    ; Open construction frames for later units.
 SRTDRVC:   DB 0                    ; Used construction-value slots for later units.
-SRTDRVP:   DW SRTDRVB             ; Next free reader value-stack address.
+SRTDRVP:   DW RT_DRVLO            ; Next free reader value-stack address.
 SRTDRFP:   DW 0                    ; Current reader frame address, if any.
 SRTDRACC:  DB 0                    ; Nonzero while the list accumulator is a root.
 SRTDATAG: DB 0                    ; Accumulator tag during list construction.

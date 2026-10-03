@@ -79,7 +79,7 @@ SRTLLP:
         JR Z,SRTLDONE
         LD HL,(SRTLCP)
         CALL SRTPVAL
-        CALL SRTQPUT
+        CALL QT_PUSH
         LD HL,(SRTLCP)
         LD DE,4
         ADD HL,DE
@@ -91,7 +91,7 @@ SRTLLP:
 SRTLDONE:
         LD A,(SRTARGC)
         LD B,0
-        CALL SRTQBLD
+        CALL QT_FOLD
         PUSH IX
         RET
 

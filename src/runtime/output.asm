@@ -109,7 +109,7 @@ SRTDCLN:
         LD (SRTDRACC),A
         LD (SRTDRFP),A
         LD (SRTDRFP+1),A
-        LD HL,SRTDRVB                ; Failed construction cannot retain stack roots.
+        LD HL,RT_DRVLO               ; Failed construction cannot retain stack roots.
         LD (SRTDRVP),HL
         LD (SRTDRLEN),A
         LD (SRTDSLN),A

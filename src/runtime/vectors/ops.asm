@@ -15,7 +15,7 @@ SRTVHOOK:
         CALL SRTMVEC                ; Trace every tagged vector element.
         RET
 SRTVHCLS:
-        JP SRTMCLOS                 ; The remaining managed allocation is a closure.
+        JP GC_CAPS                  ; The remaining managed allocation is a closure.
 ; Dispatch the vector primitive range selected by SRTPRIM.
 SRTVEC:
         LD A,(SRTPID)              ; Read the zero-based vector operation kind.

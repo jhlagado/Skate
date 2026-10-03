@@ -44,7 +44,7 @@ SCCALL:
         JP SCWORD                 ; Append it and return.
 
 ; Runtime helpers reached by RST 08H..30H, in vector order (see RST_SET).
-SCRSTT: DW ARG_PUSH,L_LOAD,PRIM_OP,SRTQPUT,G_OPSH,SRTOPINV
+SCRSTT: DW ARG_PUSH,L_LOAD,PRIM_OP,QT_PUSH,G_OPSH,INV_OP
 
 ; Emit a literal exact integer in HL.
 SCLIT:
@@ -166,7 +166,7 @@ SCCLEAR:
         LD A,(SCFSLOT)
         CALL SINKBYTE
         RET C
-        LD HL,SRTCLRI
+        LD HL,FRM_CLR
         JP SCCALL
 SCCLRS:
         LD A,21H
@@ -183,7 +183,7 @@ SCCLRS:
         RET C
         CALL SINKBYTE
         RET C
-        LD HL,SRTCLRS
+        LD HL,RT_CLR
         JP SCCALL
 
 ; Emit CALL HL followed by the slot byte SCFSLOT.  Globals and procedure
@@ -375,10 +375,10 @@ SCTFIXLP:
         LD DE,PRIM_OP              ; A direct primitive returns normally.
         CP 2
         JR Z,SCTFIXW
-        LD DE,SRTOPINV             ; Keep operator-first evaluation for this call.
+        LD DE,INV_OP               ; Keep operator-first evaluation for this call.
         JR SCTFIXW
 SCTFIXG:
-        LD DE,SRTINVOK             ; Ordinary calls preserve the continuation.
+        LD DE,INV_CALL             ; Ordinary calls preserve the continuation.
 SCTFIXW:
         CALL SINKPTCH             ; Route tail-call rewrites through the sink.
         INC B                      ; Advance to the next tail candidate.
@@ -403,7 +403,7 @@ SCLOCALQ:
 ; Emit a conditional absolute jump and return its patch address in HL.  The
 ; caller patches the address when the matching branch target is known.
 SCJZ:
-        LD A,0CAH                 ; JP Z,nn branches when SRTFALSE returns Z.
+        LD A,0CAH                 ; JP Z,nn branches when RT_TEST returns Z.
         CALL SINKBYTE               ; Append the conditional-jump opcode.
         RET C                     ; Preserve a staged-output capacity failure.
         LD HL,(SCPC)              ; The following word is the branch patch.
@@ -455,5 +455,5 @@ SCJFAIL:
 
 ; Append the return instruction used by the runtime entry point.
 SCRET:
-        LD A,0C9H                 ; RET hands the final value to SRTCALL.
+        LD A,0C9H                 ; RET hands the final value to RT_CALL.
         JP SINKBYTE                 ; Append the single-byte instruction.

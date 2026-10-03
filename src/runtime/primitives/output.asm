@@ -46,7 +46,7 @@ SRTPVAL:
 ; A primitive tail call removes the current epilogue, then returns through it
 ; after the checked operation has consumed the packet values.
 SRTTPRIM:
-        CALL SRTIVAL               ; Validate and classify the reserved payload.
+        CALL INV_KIND              ; Validate and classify the reserved payload.
         LD A,(SRTPID)              ; Apply keeps the current frame for dynamic transfer.
         CP 45
         JR Z,SRTAPTAL
@@ -54,5 +54,5 @@ SRTTPRIM:
         JP SRTPRIM                 ; Evaluate with the reused procedure frame.
 SRTAPTAL:
         LD A,1
-        LD (SRTAPMOD),A            ; SRTAPPLY will finish through SRTTARG.
-        JP SRTAPPLY                ; Build the packet without popping the frame.
+        LD (APPLY_TL),A            ; APPLY will finish through INV_TLGO.
+        JP APPLY                   ; Build the packet without popping the frame.

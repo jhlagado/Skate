@@ -47,7 +47,7 @@ function runStartup(
 ) {
   const cpu = assembled.runtime.cpu;
   writeWord(memory, assembled.address("SRTIMGE"), imageEnd);
-  const transfer = assembled.address("SRTCALL");
+  const transfer = assembled.address("RT_CALL");
   memory[transfer] = 0xc3;
   writeWord(memory, transfer + 1, 0xef00);
   if (patchFailure) {
@@ -55,11 +55,11 @@ function runStartup(
     memory[failure] = 0xc3;
     writeWord(memory, failure + 1, 0xef00);
   }
-  cpu.pc = assembled.address("SRTSTART");
+  cpu.pc = assembled.address("START");
   cpu.sp = 0xdff0;
   let steps = 0;
   while (cpu.pc !== 0xef00) {
-    assert.ok(++steps < 1_000_000, "SRTSTART did not reach its probe exit");
+    assert.ok(++steps < 1_000_000, "START did not reach its probe exit");
     assembled.runtime.step();
   }
 }
@@ -134,7 +134,7 @@ Deno.test("runtime startup publishes page readiness and rejects an invalid image
   assert.ok(
     [...memory.slice(
       assembled.address("SRTBMB"),
-      assembled.address("SRTMPEND"),
+      assembled.address("RT_HIGH"),
     )].every((value) => value === 0),
     "binding-start bitmap was not cleared at startup",
   );

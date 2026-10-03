@@ -7,6 +7,6 @@
 
 ORG 0100H
 
-SRTSTART:
-        LD SP,SRTBOOTE            ; Use a private boot stack until the TPA is known.
-        JP SRTBOOT
+START:
+        LD SP,RT_STACK            ; Use a private boot stack until the TPA is known.
+        JP RT_BOOT

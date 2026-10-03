@@ -33,10 +33,10 @@ Deno.test("an unmapped binding cell stops before any cell bytes are written", as
   assert.deepEqual([...memory.slice(bad + 2, bad + 4)], [0x5a, 0x5a]);
 });
 
-Deno.test("SRTBNEW returns the cell address with carry on failure", async () => {
+Deno.test("GC_VARON returns the cell address with carry on failure", async () => {
   const { assembled, memory, call } = await managedRuntime();
   writeWord(memory, assembled.address("SRTCELLP"), 0xd702);
-  const result = call("SRTBNEW");
+  const result = call("GC_VARON");
   assert.equal(result.carry, 1);
   assert.equal(result.payload, 0xd702);
   assert.equal(readWord(memory, assembled.address("SRTCELLP")), 0xd702);

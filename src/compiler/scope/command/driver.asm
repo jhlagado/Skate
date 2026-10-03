@@ -194,7 +194,7 @@ SCSETPR:
         CALL IINIT                ; The current language rejects string events.
         RET C                     ; Preserve the reader's ordinary setup diagnostic.
         CALL SCSCAN                ; Choose how much of the runtime to load.
-        CALL SCLOADRT              ; Stream the provider into the ASO image records.
+        CALL RT_COPY               ; Stream the provider into the ASO image records.
         RET C                      ; A short, missing or unreadable provider is fatal.
         LD HL,(SCRTLEN)            ; The global area follows the loaded runtime.
         LD DE,0100H
@@ -293,7 +293,7 @@ SCEVGOOD:
         LD (SCFORMN),HL            ; Do not wrap after 256 definitions.
         JR SCTOPLP               ; Continue until the reader returns EOF.
 
-; Finish a nonempty package with the return instruction used by SRTCALL.
+; Finish a nonempty package with the return instruction used by RT_CALL.
 SCENDPK:
         CALL CSCLOSE               ; A missing, unreadable or bad part is an error.
         RET C                      ; SCDIAG selects the source diagnostic.

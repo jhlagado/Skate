@@ -11,7 +11,7 @@ PAGE_INI:
         LD (PAGE_OK),A             ; A failed reinitialisation must not leave it live.
         LD (PAGE_IMG),HL           ; Retain the exact unrounded image end.
         LD HL,(SRTHEAPP)           ; The caller may select a lower managed ceiling.
-        LD DE,SRTMPEND             ; It must still include the first high page.
+        LD DE,RT_HIGH              ; It must still include the first high page.
         OR A                       ; Clear carry before the lower-bound check.
         SBC HL,DE
         JP C,PAGE_ERR              ; A ceiling inside the protected map band fails.
@@ -19,7 +19,7 @@ PAGE_INI:
         OR A
         JP NZ,PAGE_ERR
         LD HL,(SRTHEAPP)           ; Check the configured ceiling against the TPA map.
-        LD DE,SRTHEPEN
+        LD DE,RT_HIEND
         OR A
         SBC HL,DE
         JR C,.TOP_OK
@@ -27,7 +27,7 @@ PAGE_INI:
         JP PAGE_ERR                ; A ceiling above the qualified TPA is invalid.
 .TOP_OK:
         LD HL,(SRTHEAPP)           ; Derive the number of pages after the map band.
-        LD DE,SRTMPEND
+        LD DE,RT_HIGH
         OR A
         SBC HL,DE
         LD A,H                     ; The high byte is the count of 256-byte pages.
@@ -36,7 +36,7 @@ PAGE_INI:
         LD H,A
         LD (PAGE_HI),HL            ; Keep the selected high extent in the domain.
         LD HL,(PAGE_IMG)           ; Recover the image end for the low-gap check.
-        LD DE,SRTLOEND            ; The low extent ends at the upper band.
+        LD DE,RT_LOEND            ; The low extent ends at the upper band.
         OR A                       ; Clear carry before comparing the extent.
         SBC HL,DE                  ; A carry-free result would overlap the heap.
         JP NC,PAGE_ERR             ; Reject an image at or beyond the closure base.
@@ -50,12 +50,12 @@ PAGE_INI:
         JP Z,PAGE_ERR              ; A wrapped address cannot describe the gap.
 .ALIGNED:
         PUSH HL                    ; Preserve the rounded image page while comparing.
-        LD DE,SRTHEAP              ; Collector maps cover the pool from 3000H.
+        LD DE,RT_HEAP              ; Collector maps cover the pool from 3000H.
         OR A                      ; Clear carry before testing the rounded base.
         SBC HL,DE                 ; Keep the first page at or above the map base.
         POP HL                    ; Restore the rounded page for the normal case.
         JR NC,.BASE               ; The image already leaves a valid map origin.
-        LD HL,SRTHEAP             ; Do not hand out pages below the map coverage.
+        LD HL,RT_HEAP             ; Do not hand out pages below the map coverage.
 .BASE:
         LD (PAGE_ORG),HL           ; Save the first page in the managed domain.
         LD A,090H                  ; 9000H ends the low managed extent.
@@ -97,7 +97,7 @@ PAGE_INI:
         LD DE,(PAGE_SYS)           ; Remove the reserved management pages.
         OR A                       ; Clear carry before the subtraction.
         SBC HL,DE                  ; The result is the initially free page count.
-        LD DE,SRTMHIGH              ; Reserve the fixed upper metadata pages.
+        LD DE,RT_EXTRA              ; Reserve the fixed upper metadata pages.
         SBC HL,DE                  ; Account for the reserved upper band.
         JP C,PAGE_ERR              ; A domain without object capacity is invalid.
         LD (PAGE_CAP),HL           ; Publish that capacity after validation.
@@ -119,7 +119,7 @@ PAGE_INI:
         LD L,0                      ; Set the first free page address exactly.
         JR .FIRST                   ; Publish the low-extent boundary.
 .FIRST_HI:
-        LD HL,SRTMPEND              ; Skip the protected map band to the high pool.
+        LD HL,RT_HIGH               ; Skip the protected map band to the high pool.
 .FIRST:
         LD (PAGE_MIN),HL           ; Keep the lower boundary for release checks.
         LD HL,(PAGE_MAP)           ; Clear the complete bitmap before setting bits.
@@ -171,7 +171,7 @@ PAGE_INI:
 .UPPER:
         LD HL,(PAGE_LO)            ; The upper extent starts after the low pages.
         LD (PAGE_IDX),HL           ; Select its first virtual page for reservation.
-        LD BC,SRTMHIGH              ; Reserve the fixed exact-root metadata band.
+        LD BC,RT_EXTRA              ; Reserve the fixed exact-root metadata band.
         LD A,B                     ; A zero count means the runtime image owns no band.
         OR C
         JR Z,.READY                 ; Do not enter the reservation loop at zero.

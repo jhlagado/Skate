@@ -8,14 +8,14 @@ SRTVACL:
         CALL SRTVSZ                ; Derive the rounded class from the request.
         CALL SLAB_NEW              ; Reuse a class block before growing the pool.
         JR NC,SRTVAK               ; Carry clear means a block is reserved.
-        CALL SRTGC                  ; Reclaim dead managed objects once.
+        CALL GC                     ; Reclaim dead managed objects once.
         CALL SRTVSZ                ; Recompute the request-sized class after collection.
         CALL SLAB_NEW              ; Retry the same class after sweeping.
         RET C                      ; Preserve the capacity failure for the caller.
 SRTVAK:
         LD (SRTVOBJ),HL            ; Retain the exact block start.
-        LD (SRTOBJ),HL             ; SRTCLNEW publishes the common start bitmap.
-        CALL SRTCLNEW               ; Publish the allocation start in the map.
+        LD (SRTOBJ),HL             ; GC_OBJON publishes the common start bitmap.
+        CALL GC_OBJON               ; Publish the allocation start in the map.
         CALL SRTVSMK                ; Mark the block as a vector, not a closure.
         LD HL,(SRTVOBJ)            ; Return the block base to the constructor.
         OR A                       ; Clear carry after successful publication.
@@ -47,7 +47,7 @@ SRTVSZ:
 ; Carry clear returns the object base in HL. Scratch registers are clobbered.
 SRTVLD:
         LD (SRTCLOBJ),HL           ; Preserve the candidate across range checks.
-        LD DE,SRTHEAP              ; Reject values below the managed pool.
+        LD DE,RT_HEAP              ; Reject values below the managed pool.
         OR A
         SBC HL,DE
         JP C,SRTVBD

@@ -7,7 +7,7 @@
 ; mark.
 
 ; Load a four-byte heap binding addressed by HL.  Static compiler slots use
-; SRTLOAD; this helper is selected only through an active environment map.
+; RT_LOAD; this helper is selected only through an active environment map.
 HEAP_GET:
         LD E,(HL)
         INC HL
@@ -82,7 +82,7 @@ HEAP_LAM:
         CALL SLAB_SZ              ; Calculate pointer bytes, rounded size and class.
         CALL SLAB_NEW             ; Reuse a dead object before growing the cursor.
         JR NC,.GOT
-        CALL SRTGC                ; A full closure pool may contain dead objects.
+        CALL GC                   ; A full closure pool may contain dead objects.
         LD A,(SRTCSLOT)           ; Collection may use the same sizing scratch.
         LD (SRTCLN),A             ; Restore the pending closure's slot count.
         CALL SLAB_SZ               ; Recompute bytes and class after collection.
@@ -106,7 +106,7 @@ HEAP_LAM:
         LD A,B
         OR C
         JR NZ,.CLEAR
-        CALL SRTCLNEW              ; Record the exact closure object boundary.
+        CALL GC_OBJON              ; Record the exact closure object boundary.
         LD DE,(SRTOBJ)             ; Restore the object base after bitmap arithmetic.
         LD HL,(SRTNEWD)            ; Store the descriptor pointer in the object.
         LD A,L                     ; Descriptor low byte.
@@ -122,7 +122,7 @@ HEAP_LAM:
         JR Z,.NO_ENV               ; Top-level closures receive cleared slots.
         CALL MAP_ENV               ; Copy only promoted captured pointers.
 .MARK:
-        CALL SRTMARKC              ; Captured cells must survive later tail calls.
+        CALL ENV_MARK              ; Captured cells must survive later tail calls.
         JR .DONE                   ; Return the object pointer and procedure tag.
 .NO_ENV:
         LD HL,(SRTNENV)            ; Clear the fresh environment when no parent exists.
@@ -224,7 +224,7 @@ SLAB_NEW:
 HEAP_NEW:
         CALL .ALLOC
         JR NC,.GOT
-        CALL SRTGC                  ; Reclaim dead bindings before reporting full.
+        CALL GC                     ; Reclaim dead bindings before reporting full.
         CALL .ALLOC
         JP C,SRTERROR
 .GOT:
@@ -232,7 +232,7 @@ HEAP_NEW:
         INC DE
         LD (SRTBCNT),DE
         LD (SRTCELLP),HL
-        CALL SRTBNEW                 ; Publish the exact binding start before stores.
+        CALL GC_VARON                ; Publish the exact binding start before stores.
         JP C,SRTERROR               ; Never initialise a cell the collector cannot see.
         XOR A
         LD (HL),A                   ; Clear the payload low byte.

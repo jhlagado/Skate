@@ -15,7 +15,7 @@ SRTDRPUT:
         LD HL,(SRTDRVP)             ; Advance by one four-byte value record.
         LD DE,4
         ADD HL,DE
-        LD DE,SRTDRVE
+        LD DE,RT_DRVHI
         OR A
         SBC HL,DE
         JP C,SRTDRPUS               ; A cursor below the end remains in range.
@@ -125,7 +125,7 @@ SRTDFOPN:
         ADD HL,HL                   ; Eight bytes describe one frame.
         ADD HL,HL
         ADD HL,HL
-        LD DE,SRTDRFB
+        LD DE,RT_DRFLO
         ADD HL,DE
         LD (SRTDRFP),HL
         LD DE,(SRTDRVP)             ; Save the value-stack base for diagnostics.

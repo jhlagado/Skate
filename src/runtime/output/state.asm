@@ -3,7 +3,7 @@
 SRTRES:    DW 0                 ; Result payload retained by SRTPRINT.
 SRTPTR:       DW 0                 ; Current decimal-output cursor.
 SRTBEG:   DB 0                 ; Nonzero after the first significant digit.
-SRTTAG:  DB 0                 ; Original tag retained by SRTFALSE.
+SRTTAG:  DB 0                 ; Original tag retained by RT_TEST.
 SRTBOOL:      DB 0                 ; Branch decision retained while restoring A.
 SRTOP:        DB 0                 ; Selected checked arithmetic operation.
 SRTPID:       DB 0                 ; Predefined primitive kind for the active call.
@@ -12,7 +12,7 @@ SRTRESTF:     DB 0                 ; High-bit policy for the active procedure.
 SRTMINAR:     DB 0                 ; Fixed minimum arity of the active procedure.
 SRTRESTN:     DB 0                 ; Surplus values still waiting for the rest list.
 SRTRESTI:     DB 0                 ; Packet index while reading surplus values.
-SRTRESTC:     DB 0                 ; Original surplus count passed to SRTQBLD.
+SRTRESTC:     DB 0                 ; Original surplus count passed to QT_FOLD.
 SRTNCT:       DB 0                 ; Number of generated operands not yet consumed.
 ; The exact-root operand table and allocation maps use a fixed work band
 ; outside the provider image.  The page domain ends its low band before 9000H,
@@ -48,7 +48,7 @@ SRTCENV:      DW 0                 ; Caller environment restored at return.
 SRTCENVN:     DB 0                 ; Active caller-map slot count for exact roots.
 SRTNEWD:      DW 0                 ; Descriptor being copied into a closure.
 SRTNENV:    DW 0                 ; Destination map during closure creation.
-SRTHEAPP:     DW SRTHEPEN          ; Exclusive end of the closure/binding pool.
+SRTHEAPP:     DW RT_HIEND          ; Exclusive end of the closure/binding pool.
 SRTBYTES:     DW 0                 ; Two-byte closure-map extent for the active shape.
 SRTMAPB:      DW 0                 ; Four-byte active-map extent for the active shape.
 SRTOLDSP:     DW 0                 ; Stack boundary before an activation map.
@@ -89,7 +89,7 @@ SRTQENDR:     DW 0                 ; Exclusive end of quoted-list cache records.
 SRTSYMB:      DW 0                 ; Absolute start of the published symbol directory.
 SRTSYME:      DW 0                 ; Exclusive end of the published symbol directory.
 SRTARGPK:     DS 32                ; Eight four-byte argument records.
-SRTOPS:       DW SRTOPB        ; Operator side-stack cursor between heap and guard.
+SRTOPS:       DW RT_OPLO       ; Operator side-stack cursor between heap and guard.
 SRTBUF:   DS 32                ; Decimal output buffer terminated for BDOS function 9.
 SRTERRTX:  DB "RUNTIME ERROR",13,10,"$"
 SRTUNBT: DB "UNBOUND",13,10,"$"

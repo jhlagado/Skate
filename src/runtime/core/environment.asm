@@ -1,10 +1,10 @@
 ; Scope runtime activation maps, capture and ownership.
-; Entry points: SRTENVIN, SRTCOPYC, SRTOWN and SRTESCAP.
+; Entry points: ENV_NEW, ENV_COPY, ENV_OWN and .ESCAPE.
 ; Included in runtime order by ../core.asm.
 
 ; Allocate a stack environment for an ordinary call and install fresh cells
 ; for every slot owned by the target procedure.
-SRTENVIN:
+ENV_NEW:
         POP HL                    ; Remove the helper return before moving SP.
         LD (SRTRET),HL            ; Restore it after the activation map is ready.
         LD HL,0                    ; Z80 has no direct LD HL,SP instruction.
@@ -27,7 +27,7 @@ SRTENVIN:
         OR A                       ; Clear carry before the subtraction.
         SBC HL,BC
         LD (SRTNEXT),HL            ; Keep the candidate while checking the guard.
-        LD DE,SRTSTKGU              ; Leave frame words above the heap boundary.
+        LD DE,RT_GUARD              ; Leave frame words above the heap boundary.
         OR A                       ; Clear carry before the boundary comparison.
         SBC HL,DE
         JP C,SRTERROR              ; Reject a frame before moving the native stack.
@@ -38,24 +38,24 @@ SRTENVIN:
         LD DE,(SRTLOWSP)           ; Compare it with the lowest prior boundary.
         OR A                       ; Clear carry before the signed comparison.
         SBC HL,DE
-        JR NC,SRTLOWDN             ; A higher boundary leaves the low-water mark.
+        JR NC,.MAP                 ; A higher boundary leaves the low-water mark.
         LD HL,(SRTNEXT)            ; Recover the candidate address after the compare.
         LD (SRTLOWSP),HL           ; Publish the deepest native stack boundary.
-SRTLOWDN:
+.MAP:
         CALL SLOT_INI              ; Publish a zeroed map before any allocation can run.
         CALL MAP_COPY              ; Expand captured closure pointers into active slots.
         CALL MAP_TRIM              ; Drop any unused entries before root scanning begins.
         LD HL,(SRTACNT)            ; Count each activation map before body entry.
         INC HL
         LD (SRTACNT),HL
-        CALL SRTOWN                ; Allocate fresh cells for owned slots.
+        CALL ENV_OWN               ; Allocate fresh cells for owned slots.
         LD HL,(SRTRET)             ; Place the helper return below the map.
         PUSH HL
         RET
 
 ; HL = descriptor: return HL = its owned mask and A = the mask width.
 DESC_OWN:
-        LD DE,SRTDWID
+        LD DE,DESC_LEN
         ADD HL,DE
         LD A,(HL)
         INC HL
@@ -70,7 +70,7 @@ DESC_CAP:
         RET
 
 ; Prepare the active four-byte slots named by the descriptor's owned mask.
-SRTOWN:
+ENV_OWN:
         LD HL,(SRTDESC)            ; Owned mask follows the formal index fields.
         CALL DESC_OWN
         LD (SRTMASKP),HL           ; The outer loop consumes one mask byte at a time.
@@ -79,17 +79,17 @@ SRTOWN:
         LD B,A                     ; Scan the descriptor's mask bytes.
         XOR A
         LD (SRTSLOTI),A            ; Slot zero is the first mask bit.
-SRTOWNB:
+.BYTE:
         LD HL,(SRTMASKP)
         LD A,(HL)                  ; Read the next eight ownership bits.
         INC HL
         LD (SRTMASKP),HL
         LD (SRTMASKV),A
         LD C,8
-SRTOWNBT:
+.BIT:
         LD A,(SRTMASKV)
         AND 1
-        JR Z,SRTOWNNX              ; An unset bit retains its captured pointer.
+        JR Z,.NEXT                 ; An unset bit retains its captured pointer.
         LD A,(SRTSLOTI)            ; Keep the logical index across slot inspection.
         LD (SRTSNUM),A
         CALL SLOT_AT               ; HL names the four-byte active slot.
@@ -99,21 +99,21 @@ SRTOWNBT:
         LD A,(HL)
         LD (SRTSFLG),A
         AND SLOT_PTR
-        JR Z,SRTOWNIN              ; Inline locals need no managed allocation.
+        JR Z,.INLINE               ; Inline locals need no managed allocation.
         LD HL,(SRTSADR)            ; A promoted slot may reuse its unescaped cell.
         LD E,(HL)
         INC HL
         LD D,(HL)
         LD A,D
         OR E
-        JR Z,SRTOWNIN              ; A malformed null promotion is reset safely.
+        JR Z,.INLINE               ; A malformed null promotion is reset safely.
         EX DE,HL
         LD (SRTCELLP),HL
         LD DE,3
         ADD HL,DE
         LD A,(HL)
         AND BND_ESC
-	JR NZ,SRTOWNNW             ; Escaped storage cannot be reused by this frame.
+	JR NZ,.NEW_CELL            ; Escaped storage cannot be reused by this frame.
 	LD HL,(SRTCELLP)
 	XOR A                       ; Reuse clears the old payload before argument stores.
 	LD (HL),A
@@ -124,8 +124,8 @@ SRTOWNBT:
 	INC HL
 	LD A,BND_USED               ; Retain allocation while clearing tag and initialization.
 	LD (HL),A
-	JR SRTOWNNX
-SRTOWNIN:
+	JR .NEXT
+.INLINE:
         LD HL,(SRTSADR)            ; Clear an inline slot without touching the heap.
         XOR A
         LD (HL),A
@@ -135,8 +135,8 @@ SRTOWNIN:
         LD (HL),A
         INC HL
         LD (HL),A
-        JR SRTOWNNX
-SRTOWNNW:
+        JR .NEXT
+.NEW_CELL:
         PUSH BC                    ; HEAP_NEW may collect and uses the loop registers.
         CALL HEAP_NEW              ; The old escaped cell remains a live root until publish.
         POP BC
@@ -155,7 +155,7 @@ SRTOWNNW:
         INC HL
         LD A,SLOT_PTR
         LD (HL),A
-SRTOWNNX:
+.NEXT:
         LD A,(SRTMASKV)            ; Shift this mask bit out before the next slot.
         SRL A
         LD (SRTMASKV),A
@@ -163,20 +163,20 @@ SRTOWNNX:
         INC A
         LD (SRTSLOTI),A            ; Advance through the fixed slot range.
         DEC C
-        JP NZ,SRTOWNBT             ; Consume all eight bits in this mask byte.
+        JP NZ,.BIT                 ; Consume all eight bits in this mask byte.
         DEC B
-        JP NZ,SRTOWNB              ; Continue through the sixteen mask bytes.
+        JP NZ,.BYTE                ; Continue through the sixteen mask bytes.
         RET
 
 ; Copy only captured pointers from the target closure into the active map.
 ; Owned pointers remain in place so a tail transfer can reuse their cells.
-SRTCOPYC:
+ENV_COPY:
         CALL MAP_COPY              ; Expand target captures into the active map.
         JP MAP_TRIM                ; Clear stale roots outside the target masks.
 
 ; Mark every cell copied into a closure as escaped.  The mark lives in the
 ; high bit of the cell's initialized byte and keeps tail-frame reuse safe.
-SRTMARKC:
+ENV_MARK:
         LD HL,(SRTNEWD)            ; The new descriptor owns the capture mask.
         CALL DESC_CAP
         LD (SRTMASKP),HL           ; The outer loop consumes one mask byte.
@@ -185,7 +185,7 @@ SRTMARKC:
         LD (SRTMASKN),A            ; The descriptor's mask bytes.
         XOR A
         LD (SRTSLOTI),A            ; Slot zero is the first capture bit.
-SRTMARKB:
+.BYTE:
         LD HL,(SRTMASKP)
         LD A,(HL)                  ; Read the next eight capture bits.
         INC HL
@@ -193,13 +193,13 @@ SRTMARKB:
         LD (SRTMASKV),A
         LD A,8
         LD (SRTBITN),A
-SRTMKBT:
+.BIT:
         LD A,(SRTMASKV)
         AND 1                       ; A set bit names one captured cell.
-        JR Z,SRTMKNX
+        JR Z,.NEXT
         LD A,(SRTSLOTI)
-        CALL SRTESCAP               ; Set the cell's persistent escape mark.
-SRTMKNX:
+        CALL .ESCAPE                ; Set the cell's persistent escape mark.
+.NEXT:
         LD A,(SRTMASKV)
         SRL A
         LD (SRTMASKV),A
@@ -209,15 +209,15 @@ SRTMKNX:
         LD A,(SRTBITN)
         DEC A
         LD (SRTBITN),A
-        JR NZ,SRTMKBT               ; Consume all eight bits in this byte.
+        JR NZ,.BIT                  ; Consume all eight bits in this byte.
         LD A,(SRTMASKN)
         DEC A
         LD (SRTMASKN),A
-        JR NZ,SRTMARKB             ; Continue through the complete mask.
+        JR NZ,.BYTE                ; Continue through the complete mask.
         RET
 
 ; Set the escape bit in the active environment cell for slot A.
-SRTESCAP:
+.ESCAPE:
         LD (SRTSNUM),A             ; Promotion may collect, so retain the index.
         CALL SLOT_BOX              ; Captured inline values become managed roots first.
         LD A,(SRTSNUM)

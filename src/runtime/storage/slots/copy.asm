@@ -159,7 +159,7 @@ MAP_TRIM:
         LD (SRTSRC),HL
         XOR A
         LD (SRTSLOTI),A
-        LD A,SRTMASKB              ; Every slot below SRTSLOTS is examined.
+        LD A,DESC_MAX              ; Every slot below SRTSLOTS is examined.
         LD (SRTMASKN),A
 .BYTE:
         LD A,(SRTMASKR)

@@ -3,7 +3,7 @@
 ; The words at SRTIOPUT and SRTIOGET are the only target-specific boundary
 ; used by normal text I/O. They initially point at the direct CP/M routines
 ; below. A resident provider or a test harness may replace the words before
-; SRTSTART without changing the Scheme value ABI. A service returns with
+; START without changing the Scheme value ABI. A service returns with
 ; carry clear after accepting or producing one byte; carry set is a checked
 ; provider failure.
 

@@ -6,9 +6,9 @@ SRTVMARK:
         LD (SRTCLOBJ),HL           ; Keep the object base for map operations.
         CALL SRTVLD                ; Validate before setting any mark bit.
         RET C
-        CALL SRTCLSEE              ; A previously queued vector needs no duplicate.
+        CALL GC_SEEN               ; A previously queued vector needs no duplicate.
         RET NZ
-        CALL SRTCLSET              ; Set the shared closure mark map.
+        CALL GC_VISIT              ; Set the shared closure mark map.
         LD DE,(SRTMSTK)            ; Queue the object for element tracing.
         LD A,D
         CP 0D4H
@@ -50,7 +50,7 @@ SRTVMLP:
         INC HL                     ; Advance past the cell metadata byte.
         LD (SRTVPTR),HL            ; Retain the cursor before tracing the value.
         EX DE,HL                   ; Present the child in the runtime ABI.
-        CALL SRTMVALU              ; Mark a pair, closure, string or vector child.
+        CALL GC_VALUE              ; Mark a pair, closure, string or vector child.
         LD A,(SRTVLEFT)
         DEC A
         LD (SRTVLEFT),A
@@ -59,7 +59,7 @@ SRTVMLP:
 ; Test the vector marker in the odd bit of the persistent mark map.
 SRTVSST:
         LD HL,(SRTCLOBJ)
-        CALL SRTCLPOS
+        CALL GC_OBJAT
         LD C,A
         LD DE,SRTCLMK
         ADD HL,DE
@@ -74,7 +74,7 @@ SRTVSST:
 SRTVSMK:
         LD HL,(SRTVOBJ)
         LD (SRTCLOBJ),HL
-        CALL SRTCLPOS
+        CALL GC_OBJAT
         LD C,A
         LD DE,SRTCLMK
         ADD HL,DE

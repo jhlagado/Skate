@@ -20,12 +20,12 @@ async function rootRuntime() {
   const cpu = assembled.runtime.cpu;
   assert.ok(assembled.image.end <= 0x6800, "runtime overlaps fixture scratch");
   const pairBase = 0x8000;
-  const heapBase = assembled.address("SRTHEAP");
+  const heapBase = assembled.address("RT_HEAP");
   const descriptor = assembled.address("SRTPSLT");
   const imageEnd = (assembled.image.end + 0xff) & 0xff00;
   const closureMapBytes = assembled.address("SRTCLMK") -
     assembled.address("SRTCLBM");
-  const bindingMapBytes = assembled.address("SRTMPEND") -
+  const bindingMapBytes = assembled.address("RT_HIGH") -
     assembled.address("SRTBMB");
 
   memory.fill(0, imageEnd, 0xe000);
@@ -79,8 +79,8 @@ async function rootRuntime() {
   writeWord(memory, assembled.address("SRTGEND"), 0);
   writeWord(memory, assembled.address("SRTQROOT"), 0);
   writeWord(memory, assembled.address("SRTQENDR"), 0);
-  writeWord(memory, assembled.address("SRTOPS"), assembled.address("SRTOPB"));
-  writeWord(memory, assembled.address("SRTQSP"), assembled.address("SRTQBASE"));
+  writeWord(memory, assembled.address("SRTOPS"), assembled.address("RT_OPLO"));
+  writeWord(memory, assembled.address("SRTQSP"), assembled.address("RT_QTLO"));
   memory[assembled.address("SRTARGC")] = 0;
   memory[assembled.address("SRTSLOTS")] = 0;
   writeWord(memory, assembled.address("SRTENV"), 0);
@@ -154,7 +154,7 @@ function preserveStaticPair(
   memory[0x6e03] = 0x11;
   writeWord(memory, assembled.address("SRTGBASE"), 0x6e00);
   writeWord(memory, assembled.address("SRTGEND"), 0x6e04);
-  call("SRTGC");
+  call("GC");
 }
 
 Deno.test("exact roots preserve a published global pair and ignore inactive bytes", async () => {
@@ -179,7 +179,7 @@ Deno.test("exact roots preserve an active argument packet", async () => {
   memory[packet + 2] = 0; // Clear extension byte.
   memory[packet + 3] = 0x11;
   memory[assembled.address("SRTARGC")] = 1;
-  call("SRTGC");
+  call("GC");
   assert.equal(memory[pairBase + CAR_META], 0x43);
 });
 
@@ -192,12 +192,12 @@ Deno.test("exact roots preserve generated operands", async () => {
   memory[roots + 2] = 0; // Clear extension byte.
   memory[roots + 3] = 0x11;
   memory[assembled.address("SRTNCT")] = 1;
-  call("SRTGC");
+  call("GC");
   assert.equal(memory[pairBase + CAR_META], 0x43);
 });
 
 Deno.test("exact roots preserve operator and quoted stack entries", async () => {
-  for (const stack of ["SRTOPB", "SRTQBASE"] as const) {
+  for (const stack of ["RT_OPLO", "RT_QTLO"] as const) {
     const fixture = await rootRuntime();
     const { assembled, memory, pairBase, pair, call } = fixture;
     pair(pairBase);
@@ -207,10 +207,10 @@ Deno.test("exact roots preserve operator and quoted stack entries", async () => 
     memory[base + 3] = 1;
     writeWord(
       memory,
-      assembled.address(stack === "SRTOPB" ? "SRTOPS" : "SRTQSP"),
+      assembled.address(stack === "RT_OPLO" ? "SRTOPS" : "SRTQSP"),
       base + 4,
     );
-    call("SRTGC");
+    call("GC");
     assert.equal(memory[pairBase + CAR_META], 0x43, stack);
   }
 });
@@ -238,7 +238,7 @@ Deno.test("an active environment traces its binding value", async () => {
   memory[binding + 3] = 0x51;
   writeWord(memory, assembled.address("SRTENV"), map);
   memory[assembled.address("SRTSLOTS")] = 1;
-  call("SRTGC");
+  call("GC");
   assert.equal(memory[pairBase + CAR_META], 0x43);
   assert.equal(memory[binding + 3] & 0xe0, 0x40);
 });
@@ -284,7 +284,7 @@ Deno.test("suspended environments remain roots through their frame maps", async 
   writeWord(memory, assembled.address("SRTENV"), currentMap);
   writeWord(memory, assembled.address("SRTFRAME"), currentMap);
   memory[assembled.address("SRTSLOTS")] = 1;
-  call("SRTGC");
+  call("GC");
   assert.equal(memory[pairBase + CAR_META], 0x43);
   assert.equal(memory[pairBase + PAIR_BYTES + CAR_META], 0x43);
 });
@@ -322,7 +322,7 @@ Deno.test("a captured closure traces only its declared binding slots", async () 
   memory[0x6e03] = 0x12;
   writeWord(memory, assembled.address("SRTGBASE"), 0x6e00);
   writeWord(memory, assembled.address("SRTGEND"), 0x6e04);
-  call("SRTGC");
+  call("GC");
   assert.equal(memory[pairBase + CAR_META], 0x43);
 });
 
@@ -332,7 +332,7 @@ Deno.test("closure roots drain a full worklist without reporting an error", asyn
   const descriptor = 0xc100;
   const closureBase = 0x7000;
   const roots = 0x8200;
-  assert.ok(roots + 513 * 4 <= assembled.address("SRTLOEND"));
+  assert.ok(roots + 513 * 4 <= assembled.address("RT_LOEND"));
   const count = 513;
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 2] = 0;
@@ -353,7 +353,7 @@ Deno.test("closure roots drain a full worklist without reporting an error", asyn
     memory[root + 2] = 0; // Clear extension byte.
     memory[root + 3] = 0x12;
   }
-  call("SRTGC");
+  call("GC");
   for (let index = 0; index < count; index++) {
     const unit = ((closureBase - heapBase) >> 1) + index * 2;
     const mark = assembled.address("SRTCLBM") + (unit >> 3);
@@ -381,7 +381,7 @@ Deno.test("closure overflow fallback stays within the native stack", async () =>
   const emptyBase = 0x7800;
   const bindingBase = 0x6800;
   const roots = 0x8200;
-  assert.ok(roots + 513 * 4 <= assembled.address("SRTLOEND"));
+  assert.ok(roots + 513 * 4 <= assembled.address("RT_LOEND"));
   const chainCount = 160;
   const emptyCount = 511;
   writeWord(memory, branchDescriptor, 0x4000);
@@ -433,7 +433,7 @@ Deno.test("closure overflow fallback stays within the native stack", async () =>
   writeWord(memory, assembled.address("SRTGBASE"), roots);
   writeWord(memory, assembled.address("SRTGEND"), roots + 512 * 4);
   writeWord(memory, assembled.address("SRTHEAPP"), 0xc000);
-  const result = call("SRTGC");
+  const result = call("GC");
   assert.equal(result.carry, 0);
   assert.equal(memory[assembled.address("SRTCLER")], 1);
   for (let index = 0; index < chainCount; index++) {
@@ -453,7 +453,7 @@ Deno.test("an interior pair pointer is rejected without touching the canary", as
   memory[0x7003] = 0x11;
   writeWord(memory, assembled.address("SRTGBASE"), 0x7000);
   writeWord(memory, assembled.address("SRTGEND"), 0x7004);
-  call("SRTGC");
+  call("GC");
   assert.equal(memory[pairBase + CAR_META], 0);
   assert.equal(memory[0x7f00], 0xa5);
 });
@@ -465,7 +465,7 @@ Deno.test("an unaligned binding interior is rejected before its flags change", a
   bindingStart(binding);
   memory[binding + 3] = 0x51;
   memory[binding + 4] = 1;
-  call("SRTBMARK", binding + 1);
+  call("GC_VAR", binding + 1);
   assert.equal(memory[binding + 4], 1);
   assert.equal(memory[assembled.address("SRTBFLG")], 0);
 });
@@ -482,7 +482,7 @@ Deno.test("a descriptor extent that wraps the address space is rejected", async 
   writeWord(memory, closure, descriptor);
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 3] = 0;
-  const result = call("SRTCLVLD");
+  const result = call("GC_OBJOK");
   assert.equal(result.carry, 1);
 });
 
@@ -492,6 +492,6 @@ Deno.test("a binding extent that wraps the address space is rejected", async () 
   writeWord(memory, assembled.address("SRTHEAPP"), 0xc000);
   memory[0xb5ff] = 0x80;
   memory[0x0001] = 1;
-  call("SRTBMARK", 0xfffe);
+  call("GC_VAR", 0xfffe);
   assert.equal(memory[0x0001], 1);
 });

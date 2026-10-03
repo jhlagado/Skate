@@ -32,19 +32,19 @@ SRTCECAL:
         ADD HL,SP
         LD (SRTCEBS),HL            ; The caller frame remains below this boundary.
         CALL SRTCEOPN              ; Reserve one dynamic record and make a token.
-        LD A,(SRTCEFT)             ; Restore the target value for SRTINVOK.
+        LD A,(SRTCEFT)             ; Restore the target value for INV_CALL.
         LD HL,(SRTCEFV)
         PUSH AF                    ; The target is the callee record.
         PUSH HL
         LD A,8                     ; Escape tokens use the private tag-eight type.
         LD HL,(SRTCETK)            ; The active record's generation is its payload.
-        CALL SRTNROOT              ; Keep the token visible during call setup.
+        CALL ROOT_ADD              ; Keep the token visible during call setup.
         PUSH AF                    ; The token is the one argument to the target.
         PUSH HL
         LD HL,SRTCEPRE             ; A normal target return completes call/ec.
         PUSH HL
         LD A,1                     ; The target receives exactly one escape value.
-        JP SRTINVOK                ; Use the ordinary closure and arity machinery.
+        JP INV_CALL                ; Use the ordinary closure and arity machinery.
 
 ; Compute the address of dynamic record A. Records are twenty-one bytes wide.
 SRTCEADR:
@@ -91,7 +91,7 @@ SRTCEOPN:
         JR Z,SRTCEGOK              ; The advanced token is still in E000H-EFFFH.
 SRTCEG0:
         LD L,B                     ; Generation 511 wraps to zero for this slot.
-        LD H,SRTETOK/256           ; Generation zero has only the slot bits set.
+        LD H,RT_ESC/256            ; Generation zero has only the slot bits set.
 SRTCEGOK:
         LD (SRTCETK),HL            ; SRTCECAL reads this value after the save.
         LD DE,(SRTCEPTR)
@@ -303,8 +303,8 @@ SRTCEHIT:
         LD (SRTCEDEP),A            ; Remove the matched record and all inner records.
         XOR A                       ; The escaped packet is no longer live.
         LD (SRTARGC),A
-        LD (SRTAPMOD),A            ; Return through the ordinary caller path.
-        LD (SRTAPDIS),A
+        LD (APPLY_TL),A            ; Return through the ordinary caller path.
+        LD (APPLY_IN),A
         LD HL,(SRTCEBS)
         LD SP,HL                   ; Discard the target and every nested call frame.
         LD A,(SRTCEAT)
@@ -336,7 +336,7 @@ SRTCERL:
         ADD HL,DE
         LD A,(HL)
         LD HL,(SRTCERMP)
-        CALL SRTENVM                ; Mark the saved caller map's binding cells.
+        CALL ROOT_MAP               ; Mark the saved caller map's binding cells.
         LD HL,(SRTCEPTR)
         LD DE,12
         ADD HL,DE
@@ -350,7 +350,7 @@ SRTCERL:
         ADD HL,DE
         LD A,(HL)
         LD HL,(SRTCERMP)
-        CALL SRTENVM                ; Mark its caller map as well.
+        CALL ROOT_MAP               ; Mark its caller map as well.
         LD A,(SRTCEIX)
         OR A
         JR NZ,SRTCERL

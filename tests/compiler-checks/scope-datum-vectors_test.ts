@@ -196,7 +196,7 @@ Deno.test("datum reader keeps vector elements live through a collection", async 
 
   // Keep one four-element vector alive and leave a second one unreachable in
   // the same slab. Clearing that class's free-list head and making the page
-  // allocator fail forces the final reader allocation through SRTGC, where the
+  // allocator fail forces the final reader allocation through GC, where the
   // reader value stack must keep every pair child alive.
   memory[assembled.address("SRTVREQ")] = 4;
   const retained = call("SRTVACL");
@@ -250,7 +250,7 @@ Deno.test("datum reader keeps vector elements live through a collection", async 
   assert.equal(memory[assembled.address("SRTDRVC")], 0);
   assert.equal(
     readWord(memory, assembled.address("SRTDRVP")),
-    assembled.address("SRTDRVB"),
+    assembled.address("RT_DRVLO"),
   );
   assert.equal(readWord(memory, assembled.address("SRTDRFP")), 0);
 });
@@ -296,7 +296,7 @@ Deno.test("datum reader cleans up when vector allocation is exhausted", async ()
   assert.equal(memory[assembled.address("SRTDRACC")], 0);
   assert.equal(
     readWord(memory, assembled.address("SRTDRVP")),
-    assembled.address("SRTDRVB"),
+    assembled.address("RT_DRVLO"),
   );
   assert.equal(readWord(memory, assembled.address("SRTDRFP")), 0);
   assert.equal(memory[assembled.address("SRTDRLEN")], 0);

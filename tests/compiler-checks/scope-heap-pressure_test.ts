@@ -37,7 +37,7 @@ function runEntry(
   limit = 20_000_000,
 ) {
   const returnAddress = 0xef00;
-  const gcAddress = assembled.address("SRTGC");
+  const gcAddress = assembled.address("GC");
   const constructorAddress = assembled.address("PAIR_NEW");
   cpu.pc = assembled.address(label);
   cpu.sp = 0xdff0;
@@ -187,10 +187,10 @@ Deno.test("quoted list construction survives collection at both allocations", as
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu as CpuState;
   const pairPage = initialiseSinglePairPage(assembled, memory, cpu);
-  const quoted = assembled.address("SRTQBASE");
+  const quoted = assembled.address("RT_QTLO");
   const result = runEntry(
     assembled,
-    "SRTQBLD",
+    "QT_FOLD",
     memory,
     cpu,
     () => {
@@ -259,7 +259,7 @@ Deno.test("tracing preserves a linked list of more than one thousand pairs", asy
   memory[0xd703] = 0x11;
   writeWord(memory, assembled.address("SRTGBASE"), 0xd700);
   writeWord(memory, assembled.address("SRTGEND"), 0xd704);
-  const result = callRoutine(assembled, "SRTGC", memory, cpu, 50_000_000);
+  const result = callRoutine(assembled, "GC", memory, cpu, 50_000_000);
   assert.equal(result.sp, 0xdff2);
   for (let index = 0; index < records.length; index++) {
     const address = records[index];

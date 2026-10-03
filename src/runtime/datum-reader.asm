@@ -466,7 +466,7 @@ SRTDRSTP:
         LD (SRTDRACC),A
         LD (SRTDRFP),A
         LD (SRTDRFP+1),A
-        LD HL,SRTDRVB                ; Discard any value slots consumed by the read.
+        LD HL,RT_DRVLO               ; Discard any value slots consumed by the read.
         LD (SRTDRVP),HL
         LD (SRTDRLEN),A
         LD (SRTDSLN),A

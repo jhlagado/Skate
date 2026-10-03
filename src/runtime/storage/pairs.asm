@@ -90,7 +90,7 @@ PAIR_NEW:
         LD (SRTCRON),A
         CALL PAIR_GET               ; Find a record or grow the pair class.
         JR NC,.INIT                 ; Carry clear means the record is reserved.
-        CALL SRTGC                  ; Reclaim unreachable records when full.
+        CALL GC                     ; Reclaim unreachable records when full.
         CALL PAIR_GET               ; Retry after the complete collection.
         JP C,SRTERROR               ; No managed page or record remains.
 .INIT:

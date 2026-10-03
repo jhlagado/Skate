@@ -432,7 +432,7 @@ Deno.test("datum reader clears roots when pair allocation fails", async () => {
   assert.equal(memory[assembled.address("SRTDRACC")], 0);
   assert.equal(
     readWord(memory, assembled.address("SRTDRVP")),
-    assembled.address("SRTDRVB"),
+    assembled.address("RT_DRVLO"),
   );
   assert.equal(readWord(memory, assembled.address("SRTDRFP")), 0);
 });

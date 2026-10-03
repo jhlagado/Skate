@@ -19,7 +19,7 @@ export async function managedRuntime(withPairs = false) {
   const imageEnd = (assembled.image.end + 0xff) & 0xff00;
   const closureMapBytes = assembled.address("SRTCLMK") -
     assembled.address("SRTCLBM");
-  const bindingMapBytes = assembled.address("SRTMPEND") -
+  const bindingMapBytes = assembled.address("RT_HIGH") -
     assembled.address("SRTBMB");
   memory.fill(0, imageEnd, 0xe000);
   memory.fill(
@@ -75,8 +75,8 @@ export async function managedRuntime(withPairs = false) {
   writeWord(memory, assembled.address("SRTQENDR"), 0);
   writeWord(memory, assembled.address("SRTENV"), 0);
   writeWord(memory, assembled.address("SRTCENV"), 0);
-  writeWord(memory, assembled.address("SRTOPS"), assembled.address("SRTOPB"));
-  writeWord(memory, assembled.address("SRTQSP"), assembled.address("SRTQBASE"));
+  writeWord(memory, assembled.address("SRTOPS"), assembled.address("RT_OPLO"));
+  writeWord(memory, assembled.address("SRTQSP"), assembled.address("RT_QTLO"));
   memory[assembled.address("SRTSLOTS")] = 0;
   memory[assembled.address("SRTCENVN")] = 0;
   memory[assembled.address("SRTARGC")] = 0;

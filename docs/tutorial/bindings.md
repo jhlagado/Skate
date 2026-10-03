@@ -150,7 +150,7 @@ slot + 2    value tag
 slot + 3    flags, including bit 0 for initialisation
 ```
 
-In `core/startup.asm`, `SRTSTORE` writes the payload and tag before setting the
+In `core/startup.asm`, `RT_STORE` writes the payload and tag before setting the
 initialisation bit. Its final flag update is:
 
 ```asm
@@ -169,7 +169,7 @@ stored value available to the generated code.
 
 The separate initialisation bit prevents a load from treating an uninitialised
 slot as an ordinary value. Zero is a legitimate Scheme number and cannot stand
-in for that state. `SRTLOAD` reads the payload and tag, tests bit zero of the
+in for that state. `RT_LOAD` reads the payload and tag, tests bit zero of the
 flags and branches to `SRTUNBD` if the slot is not ready. Otherwise it returns
 the saved value in `A:HL`.
 

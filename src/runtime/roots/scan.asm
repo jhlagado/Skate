@@ -1,5 +1,5 @@
 ; Exact root discovery for stacks, packets, static slots and frames.
-; Entry points: SRTROOTS, SRTNROOT, SRTRAW and SRTENRT.
+; Entry points: ROOT_ALL, ROOT_ADD, ROOT_RAW and ROOT_ENV.
 ; Included in runtime order by ../roots.asm.
 
 ; Exact root discovery for the scope-control runtime.
@@ -11,38 +11,38 @@
 
 ; Visit every declared root category.  Static ranges are compiler-patched;
 ; transient ranges use their active cursors, and frame maps use slot counts.
-SRTROOTS:
-        CALL SRTCRMK               ; Constructor inputs are roots at allocation.
+ROOT_ALL:
+        CALL GC_CONS               ; Constructor inputs are roots at allocation.
         LD HL,(SRTGBASE)
         LD DE,(SRTGEND)
-        CALL SRTROTRG
+        CALL ROOT_FIX
         LD HL,(SRTQROOT)
         LD DE,(SRTQENDR)
-        CALL SRTROTRG
-        CALL SRTPKRT
-        CALL SRTNRRT               ; Generated operand records remain live until consumed.
-        CALL SRTOPRT
-        CALL SRTQRT
-        CALL SRTDRRT               ; Reader values remain live during pair folding.
-        CALL SRTENRT
+        CALL ROOT_FIX
+        CALL ROOT_PKT
+        CALL ROOT_ARG              ; Generated operand records remain live until consumed.
+        CALL ROOT_OPS
+        CALL ROOT_QT
+        CALL ROOT_DR               ; Reader values remain live during pair folding.
+        CALL ROOT_ENV
         CALL SRTCEROT              ; Scan maps saved by active call/ec records.
         LD A,(SRTDRACC)
         OR A
-        JR Z,SRTQAC                 ; No separate list accumulator is active.
+        JR Z,.QUOTED                ; No separate list accumulator is active.
         LD A,(SRTDATAG)
         LD HL,(SRTDAVAL)
-        CALL SRTMVALU
-SRTQAC:
+        CALL GC_VALUE
+.QUOTED:
         LD A,(SRTQACTV)
         OR A
         RET Z
         LD A,(SRTQATAG)
         LD HL,(SRTQAVAL)
-        JP SRTMVALU
+        JP GC_VALUE
 
 ; Record one generated operand in the exact shadow root stack.  A:HL is
 ; returned unchanged so SCPUSH can continue with the native stack operation.
-SRTNROOT:
+ROOT_ADD:
         LD (SRTNRTAG),A
         LD (SRTNRVAL),HL
         LD A,(SRTNCT)
@@ -73,37 +73,37 @@ SRTNROOT:
         RET
 
 ; Remove B most-recent generated operand records while preserving A:HL.
-SRTNPOPB:
+ROOT_CUT:
         PUSH AF
         PUSH HL
         LD A,(SRTNCT)
         CP B
-        JR C,SRTNPOPX
+        JR C,.BAD
         SUB B
         LD (SRTNCT),A
         POP HL
         POP AF
         OR A                       ; A remains intact while successful removal clears carry.
         RET
-SRTNPOPX:
+.BAD:
         JP SRTERROR
 
 ; Remove one generated operand record while preserving A:HL.
-SRTNPOP1:
+ROOT_POP:
         LD B,1
-        JP SRTNPOPB
+        JP ROOT_CUT
 
 ; Mark the active reader value stack during a collection.
-SRTDRRT:
+ROOT_DR:
         LD A,(SRTDRACT)             ; An inactive reader has no temporary roots.
         OR A
         RET Z
-        LD HL,SRTDRVB               ; Reader values occupy four-byte records.
+        LD HL,RT_DRVLO              ; Reader values occupy four-byte records.
         LD DE,(SRTDRVP)             ; The live cursor bounds the root range.
-        JP SRTRAW
+        JP ROOT_RAW
 
 ; Scan the active generated-operand records.
-SRTNRRT:
+ROOT_ARG:
         LD A,(SRTNCT)
         OR A
         RET Z
@@ -115,29 +115,29 @@ SRTNRRT:
         ADD HL,DE
         EX DE,HL
         LD HL,SRTNRTAB
-        JP SRTRAW
+        JP ROOT_RAW
 
 ; Walk a half-open range of four-byte static value records.  The final byte
 ; is the publication flag, so unused cache and static slots are ignored.
-SRTROTRG:
+ROOT_FIX:
         LD (SRTROOTP),HL
         LD (SRTROOTE),DE
-SRTROLP:
+.LOOP:
         LD HL,(SRTROOTP)
         LD DE,(SRTROOTE)
         OR A
         SBC HL,DE
         RET NC
         LD HL,(SRTROOTP)
-        CALL SRTROREC
+        CALL .RECORD
         LD HL,(SRTROOTP)
         LD DE,4
         ADD HL,DE
         LD (SRTROOTP),HL
-        JR SRTROLP
+        JR .LOOP
 
 ; Visit one published four-byte value record when its initialized bit is set.
-SRTROREC:
+.RECORD:
         LD (SRTROOTV),HL
         INC HL
         INC HL
@@ -154,11 +154,11 @@ SRTROREC:
         INC HL
         LD D,(HL)
         EX DE,HL
-        JP SRTMVALU
+        JP GC_VALUE
 
 ; Visit a transient four-byte value record.  The enclosing cursor, rather than
 ; its spare byte, determines whether this record is live.
-SRTROWR:
+ROOT_REC:
         LD (SRTROOTV),HL
         INC HL
         INC HL
@@ -172,45 +172,45 @@ SRTROWR:
         INC HL
         LD D,(HL)
         EX DE,HL
-        JP SRTMVALU
+        JP GC_VALUE
 
 ; Scan exactly the active argument packet entries.
-SRTPKRT:
+ROOT_PKT:
         LD A,(SRTARGC)
         OR A
         RET Z
         LD B,A
         LD HL,SRTARGPK
         LD (SRTROOTP),HL
-SRTPKLP:
+.LOOP:
         LD HL,(SRTROOTP)
         PUSH BC
-        CALL SRTROWR
+        CALL ROOT_REC
         POP BC
         LD HL,(SRTROOTP)
         LD DE,4
         ADD HL,DE
         LD (SRTROOTP),HL
-        DJNZ SRTPKLP
+        DJNZ .LOOP
         RET
 
 ; Scan active operator-stack records up to the published cursor.
-SRTOPRT:
-        LD HL,SRTOPB
+ROOT_OPS:
+        LD HL,RT_OPLO
         LD DE,(SRTOPS)
-        JP SRTRAW
+        JP ROOT_RAW
 
 ; Scan active quoted-data records up to the published cursor.
-SRTQRT:
-        LD HL,SRTQBASE
+ROOT_QT:
+        LD HL,RT_QTLO
         LD DE,(SRTQSP)
-        JP SRTRAW
+        JP ROOT_RAW
 
 ; Walk a half-open range of active four-byte records without reading a flag.
-SRTRAW:
+ROOT_RAW:
         LD (SRTROOTP),HL
         LD (SRTROOTE),DE
-SRTRAWLP:
+.LOOP:
         LD HL,(SRTROOTP)
         LD DE,(SRTROOTE)
         OR A
@@ -218,36 +218,36 @@ SRTRAWLP:
         RET NC
         LD HL,(SRTROOTP)
         PUSH HL
-        CALL SRTROWR
+        CALL ROOT_REC
         POP HL
         LD DE,4
         ADD HL,DE
         LD (SRTROOTP),HL
-        JR SRTRAWLP
+        JR .LOOP
 
 ; Scan current and suspended environment maps.  Each entry is a binding
 ; pointer.  A frame is always ten bytes below its map.  Its caller descriptor
 ; is paired with the caller map saved in the same frame.
-SRTENRT:
+ROOT_ENV:
         LD HL,(SRTENV)
         LD A,(SRTSLOTS)
-        CALL SRTENVM
+        CALL ROOT_MAP
         LD HL,(SRTFRAME)
         LD (SRTROOTP),HL
         LD DE,(SRTENV)
         OR A
         SBC HL,DE
-        JR Z,SRTENCOM
+        JR Z,.WALK
         LD HL,(SRTCENV)
         LD A,(SRTCENVN)
-        CALL SRTENVM
+        CALL ROOT_MAP
         LD HL,(SRTFRAME)
-SRTENCOM:
+.WALK:
         LD HL,(SRTROOTP)
         LD A,H
         OR L
-        JR Z,SRTENPAR
-SRTFRMLP:
+        JR Z,.CALLER
+.FRAME:
         LD HL,(SRTROOTP)
         LD DE,8
         OR A
@@ -273,25 +273,25 @@ SRTFRMLP:
         LD HL,(SRTFRMD)
         LD A,H
         OR L
-        JR Z,SRTENPAR
+        JR Z,.CALLER
         LD DE,3
         ADD HL,DE
         LD A,(HL)
         LD HL,(SRTROOTP)
-        CALL SRTENVM
+        CALL ROOT_MAP
         LD HL,(SRTROOTP)
-        JR SRTFRMLP
-SRTENPAR:
+        JR .FRAME
+.CALLER:
         LD HL,(SRTCENV)
         LD A,(SRTCENVN)
-        JP SRTENVM
+        JP ROOT_MAP
 
-SRTENVM:
+ROOT_MAP:
         OR A
         RET Z
         LD (SRTENVP),HL
         LD (SRTENVN),A
-SRTENVLP:
+.LOOP:
         LD HL,(SRTENVP)
         PUSH BC
         CALL SLOT_GC              ; Active entries are four-byte inline/promoted slots.
@@ -303,5 +303,5 @@ SRTENVLP:
         LD A,(SRTENVN)
         DEC A
         LD (SRTENVN),A
-        JR NZ,SRTENVLP
+        JR NZ,.LOOP
         RET

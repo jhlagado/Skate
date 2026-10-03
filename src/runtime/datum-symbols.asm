@@ -7,8 +7,8 @@
 ; are copied into the fixed arena below the reader frames; those records remain
 ; pinned for the life of the program and are not managed heap objects.
 
-SRTSYA EQU SRTDRFE                ; Arena follows the reader's frame band.
-SRTSYAE EQU SRTMKBS               ; Keep the collector worklist untouched.
+SRTSYA EQU RT_DRFHI               ; Arena follows the reader's frame band.
+SRTSYAE EQU RT_GCLO               ; Keep the collector worklist untouched.
 
 ; Intern the spelling at HL with length BC and return tag four plus its pointer.
 SRTSYMIN:

@@ -73,21 +73,21 @@ SCAPDONE:
         LD A,(SCTLSAV)             ; Reuse the normal tail decision for the saved value.
         OR A
         JR NZ,SCAPOTL
-        LD HL,SRTOPINV              ; Dispatch the saved operator value.
+        LD HL,INV_OP                ; Dispatch the saved operator value.
         JP SCINVOKE
 SCAPOTL:
         LD A,2                      ; SCITAIL selects the side-stack tail wrapper.
         LD (SCAPMODE),A
-        LD HL,SRTOTAIL
+        LD HL,INV_OPTL
         JP SCITAIL
 SCAPGEND:
         LD A,(SCTLSAV)             ; Recover the application's tail context.
         OR A                       ; A tail call uses a jump through the runtime.
         JR NZ,SCAPTAIL             ; The target returns directly to our caller.
-        LD HL,SRTINVOK            ; Ordinary calls preserve the current return.
+        LD HL,INV_CALL            ; Ordinary calls preserve the current return.
         JP SCINVOKE                ; Emit the count load and runtime CALL.
 SCAPTAIL:
-        LD HL,SRTTAIL              ; Tail calls reuse the current return address.
+        LD HL,INV_TAIL             ; Tail calls reuse the current return address.
         JP SCITAIL                 ; Emit the count load and runtime JP.
 
 ; Emit CALL PRIM_OP, or a patchable CALL PRIM_TL in tail position, then the
@@ -162,11 +162,11 @@ SCITAIL:
         LD HL,(SCPC)               ; The following word names the tail wrapper.
         CALL SCTSAVE               ; Keep it until body finality is known.
         RET C                      ; Preserve tail-record capacity exhaustion.
-        LD HL,SRTTCALL              ; The normal wrapper discards CALL's continuation.
+        LD HL,INV_TC                ; The normal wrapper discards CALL's continuation.
         LD A,(SCAPMODE)
         CP 2
         JR NZ,SCITWR
-        LD HL,SRTOTCL              ; Side-stack calls use their matching wrapper.
+        LD HL,INV_OPTC             ; Side-stack calls use their matching wrapper.
         XOR A
         LD (SCAPMODE),A
 SCITWR:

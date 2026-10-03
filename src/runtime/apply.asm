@@ -8,14 +8,14 @@
 ; directly written call.
 
 ; Spread the final proper list argument into SRTARGPK and enter its procedure.
-SRTAPPLY:
+APPLY:
         LD A,(SRTARGC)             ; Apply needs a procedure and a final list.
         CP 2
         JP C,SRTERROR              ; A missing list or procedure is malformed.
         LD HL,SRTARGPK             ; Record zero contains the target procedure.
         CALL SRTPVAL
-        LD (SRTAPTAG),A            ; Keep its logical tag while the list is read.
-        LD (SRTAPVAL),HL          ; Keep its payload beside the tag.
+        LD (APPLY_A),A             ; Keep its logical tag while the list is read.
+        LD (APPLY_HL),HL          ; Keep its payload beside the tag.
         LD A,(SRTARGC)             ; The final packet record is the list argument.
         DEC A
         LD L,A
@@ -30,18 +30,18 @@ SRTAPPLY:
         LD A,(SRTARGC)             ; Leading arguments exclude procedure and list.
         SUB 2
         LD (SRTLCN),A              ; This is also the next output record index.
-        CALL SRTAPMOV              ; Move leading records over the procedure slot.
-SRTAPWLK:
+        CALL .MOVE                 ; Move leading records over the procedure slot.
+.WALK:
         LD A,(SRTQATAG)            ; NIL is the only non-pair list terminator.
         OR A
-        JR NZ,SRTAPPR
+        JR NZ,.PAIR
         LD HL,(SRTQAVAL)
         LD DE,0FE02H
         OR A
         SBC HL,DE
         JP NZ,SRTERROR              ; Reject booleans, numbers and other scalars.
-        JR SRTAPDN
-SRTAPPR:
+        JR .ENTER
+.PAIR:
         CP 1
         JP NZ,SRTERROR              ; A dotted tail is not an apply argument list.
         LD A,(SRTLCN)
@@ -83,17 +83,17 @@ SRTAPPR:
         JP C,SRTERROR
         LD (SRTQATAG),A
         LD (SRTQAVAL),HL
-        JR SRTAPWLK
+        JR .WALK
 
 ; Move the leading apply arguments from records one..n to records zero..n-1.
-SRTAPMOV:
+.MOVE:
         LD A,(SRTLCN)
         OR A
         RET Z
         LD B,A
         LD HL,SRTARGPK+4
         LD DE,SRTARGPK
-SRTAPML:
+.LOOP:
         LD A,(HL)
         LD (DE),A
         INC HL
@@ -110,24 +110,24 @@ SRTAPML:
         LD (DE),A
         INC HL
         INC DE
-        DJNZ SRTAPML
+        DJNZ .LOOP
         RET
 
 ; Enter the target through the ordinary or tail dispatcher selected by the
 ; caller.  SRTARGC is reduced to the number of spread arguments before entry.
-SRTAPDN:
+.ENTER:
         LD A,(SRTLCN)
         LD (SRTARGC),A
-        LD A,(SRTAPMOD)
+        LD A,(APPLY_TL)
         OR A
-        JR NZ,SRTAPTGO
+        JR NZ,.TAIL
         LD A,1
-        LD (SRTAPDIS),A            ; Preserve the outer continuation for either target.
+        LD (APPLY_IN),A            ; Preserve the outer continuation for either target.
         LD IX,(SRTRET)              ; Closure targets use the same saved continuation.
-        LD A,(SRTAPTAG)
-        LD HL,(SRTAPVAL)
-        JP SRTDISP
-SRTAPTGO:
-        LD A,(SRTAPTAG)
-        LD HL,(SRTAPVAL)
-        JP SRTTARG
+        LD A,(APPLY_A)
+        LD HL,(APPLY_HL)
+        JP INV_GO
+.TAIL:
+        LD A,(APPLY_A)
+        LD HL,(APPLY_HL)
+        JP INV_TLGO

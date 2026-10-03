@@ -9,7 +9,7 @@ SRTNOT:
         JP NZ,SRTERROR
         LD HL,SRTARGPK
         CALL SRTPVAL
-        CALL SRTFALSE
+        CALL RT_TEST
         JP Z,SRTBYES
         JP SRTBNO
 SRTTYPE:

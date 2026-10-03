@@ -307,16 +307,16 @@ SLAB_GC:
         JR Z,.PAGE_END
         LD HL,(SRTCLPGL)
         LD (SRTCLOBJ),HL
-        CALL SRTCLSTA
+        CALL GC_ISOBJ
         JR Z,.OBJ_NEXT
-        CALL SRTCLSEE
+        CALL GC_SEEN
         JR Z,.DEAD
-        CALL SRTCLCLM
+        CALL GC_UNSEE
         CALL SLAB_USE
         JR .OBJ_NEXT
 .DEAD:
         CALL STR_CLRM
-        CALL SRTCLCLM              ; Clear the mark and leave its map byte in HL.
+        CALL GC_UNSEE              ; Clear the mark and leave its map byte in HL.
         LD A,C                     ; Recover the allocation's even start mask.
         ADD A,A                    ; Select the adjacent odd vector marker.
         CPL                         ; Form the marker clearing mask.
@@ -324,7 +324,7 @@ SLAB_GC:
         LD A,(HL)                  ; Read the persistent type and mark bits.
         AND B                      ; Clear only this object's vector marker.
         LD (HL),A                  ; Retain neighboring allocation metadata.
-        CALL SRTCLCLB
+        CALL GC_DROP
 .OBJ_NEXT:
         LD HL,(SRTCLPGL)
         LD DE,(SRTCLSTR)
@@ -408,7 +408,7 @@ SLAB_FIX:
         RET Z
         LD HL,(SRTCLPGL)
         LD (SRTCLOBJ),HL
-        CALL SRTCLSTA
+        CALL GC_ISOBJ
         JR NZ,.NEXT
         LD HL,(SRTCLFP)           ; Address of the class-head word.
         LD E,(HL)                 ; Link to the previous free object.
@@ -442,11 +442,11 @@ SLAB_GC2:
         CALL SLAB_GET
         LD HL,(SRTCLPGA)
         LD (SRTCLOBJ),HL
-        CALL SRTCLSTA
+        CALL GC_ISOBJ
         JR Z,.FREE
-        CALL SRTCLSEE
+        CALL GC_SEEN
         JR Z,.FREE
-        CALL SRTCLCLM
+        CALL GC_UNSEE
         LD A,(SRTCLPGI)
         LD L,A
         LD H,0
@@ -457,7 +457,7 @@ SLAB_GC2:
         RET
 .FREE:
         LD HL,(SRTCLOBJ)
-        CALL SRTCLCLM              ; Clear the mark and leave its map byte in HL.
+        CALL GC_UNSEE              ; Clear the mark and leave its map byte in HL.
         LD A,C                     ; Recover the two-page object's even mask.
         ADD A,A                    ; Select the adjacent odd vector marker.
         CPL                         ; Form the marker clearing mask.
@@ -465,7 +465,7 @@ SLAB_GC2:
         LD A,(HL)                  ; Read the persistent type and mark bits.
         AND B                      ; Clear only this object's vector marker.
         LD (HL),A                  ; Retain neighboring allocation metadata.
-        CALL SRTCLCLB
+        CALL GC_DROP
         LD HL,(SRTCLPGA)
         LD DE,2
         CALL PAGE_REL

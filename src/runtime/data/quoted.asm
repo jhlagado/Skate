@@ -1,5 +1,5 @@
 ; Quoted data stacks and list construction.
-; Entry points: SRTQPUT, SRTQPOP and SRTQBLD.
+; Entry points: QT_PUSH, QT_POP and QT_FOLD.
 ; Included in runtime order by ../data.asm.
 
 ; Pair, quoted-list and literal output services for the generated runtime.
@@ -13,13 +13,13 @@
 ; length-prefixed output literal.
 
 ; Save one value on the quoted-data stack.
-SRTQPUT:
+QT_PUSH:
         LD (SRTQATAG),A            ; Keep the logical tag across the bound check.
         LD (SRTQAVAL),HL           ; Keep the payload beside it.
         LD HL,(SRTQSP)
         LD DE,4
         ADD HL,DE
-        LD DE,SRTQEND
+        LD DE,RT_QTHI
         OR A
         SBC HL,DE
         JP NC,SRTERROR             ; A malformed quoted list cannot overrun the stack.
@@ -42,9 +42,9 @@ SRTQPUT:
         RET
 
 ; Pop one value from the quoted-data stack.
-SRTQPOP:
+QT_POP:
         LD HL,(SRTQSP)
-        LD DE,SRTQBASE
+        LD DE,RT_QTLO
         OR A
         SBC HL,DE
         JP Z,SRTERROR
@@ -64,31 +64,31 @@ SRTQPOP:
         RET
 
 ; Fold the values on the quoted-data stack into a proper or dotted list.
-SRTQBLD:
+QT_FOLD:
         LD (SRTQNR),A              ; A counts heads plus the optional tail.
         LD A,1
         LD (SRTQACTV),A            ; The accumulator remains live across cons GC.
         LD A,B
         LD (SRTQDOTR),A            ; B is nonzero for a dotted tail.
         OR A
-        JR Z,SRTQNIL
-        CALL SRTQPOP                ; The dotted tail is the initial accumulator.
+        JR Z,.NIL
+        CALL QT_POP                 ; The dotted tail is the initial accumulator.
         LD (SRTQATAG),A
         LD (SRTQAVAL),HL
         LD A,(SRTQNR)
         DEC A
         LD (SRTQNR),A
-        JR SRTQLP
-SRTQNIL:
+        JR .LOOP
+.NIL:
         XOR A
         LD (SRTQATAG),A
         LD HL,0FE02H               ; Canonical empty-list value.
         LD (SRTQAVAL),HL
-SRTQLP:
+.LOOP:
         LD A,(SRTQNR)
         OR A
-        JR Z,SRTQDONE
-        CALL SRTQPOP                ; The preceding element becomes the new CAR.
+        JR Z,.DONE
+        CALL QT_POP                 ; The preceding element becomes the new CAR.
         LD (SRTQCTAG),A
         LD (SRTQCAR),HL
         LD A,(SRTQATAG)
@@ -101,8 +101,8 @@ SRTQLP:
         LD A,(SRTQNR)
         DEC A
         LD (SRTQNR),A
-        JR SRTQLP
-SRTQDONE:
+        JR .LOOP
+.DONE:
         LD A,(SRTQATAG)
         LD HL,(SRTQAVAL)
         XOR A

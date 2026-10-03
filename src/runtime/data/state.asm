@@ -9,7 +9,7 @@ SRTWEOF:   DB "#<eof>$"
 SRTWUNST:  DB "#<unspecified>$"
 SRTWHX:    DB "0123456789abcdef"
 
-SRTQSP:   DW SRTQBASE
+SRTQSP:   DW RT_QTLO
 SRTQNXT:  DW 0
 SRTQCAR:  DW 0
 SRTQCDR:  DW 0
@@ -89,7 +89,7 @@ SRTBMSK:  DB 0                  ; Binding bitmap bit during sweep.
 SRTBLEFT: DW 0                  ; Binding bytes left in the sweep interval.
 SRTCLMAP: DW 0                  ; Closure mark-map cursor during sweep.
 SRTCLMKV: DB 0                  ; Closure mark bit during sweep.
-SRTMSTK:  DW SRTMKBS
+SRTMSTK:  DW RT_GCLO
 SRTMOVER: DB 0                    ; Nonzero means the bounded mark queue filled.
 SRTMNEW:  DB 0                    ; Nonzero means a fallback pass marked an object.
 SRTSCP:   DW 0

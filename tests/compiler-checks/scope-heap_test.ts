@@ -87,7 +87,7 @@ async function collectorFixture(rootCount: number) {
   memory[parent + CDR_META] = 1; // pair CDR
   const orphan = recordAddress(530);
   memory[orphan + CAR_META] = 0x43;
-  cpu.pc = assembled.address("SRTGC");
+  cpu.pc = assembled.address("GC");
   cpu.sp = 0xdff0;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
@@ -135,7 +135,7 @@ Deno.test("collector does not read past a root scan interval", async () => {
   cpu.l = 0xfe;
   cpu.d = 0xa0;
   cpu.e = 0;
-  cpu.pc = assembled.address("SRTSCAN");
+  cpu.pc = assembled.address("GC_SCAN");
   cpu.sp = 0xdff0;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
@@ -189,7 +189,7 @@ Deno.test("pair allocator follows free chains across a second slab", async () =>
   assert.equal(records[PAIRS_PER_SLAB], secondBase);
   assert.equal(memory[assembled.address("SRTPSLBN")], 2);
 
-  assert.equal(call("SRTGC").carry, 0);
+  assert.equal(call("GC").carry, 0);
   const reused = call("PAIR_GET");
   assert.equal(reused.carry, 0);
   assert.ok(
@@ -287,7 +287,7 @@ Deno.test("overflow fallback restores its slab cursor after child tracing", asyn
   memory[first + PAIR_BYTES + CDR_META] = 1;
   memory[first + 2 * PAIR_BYTES + CAR_META] = 0x43;
   memory[second + CAR_META] = 0x43;
-  assert.equal(callLabel(assembled, "SRTFSCRN", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "GC_PAIRS", memory, cpu).carry, 0);
   assert.equal(memory[first + 2 * PAIR_BYTES + CAR_META], 0xc3);
   assert.equal(memory[second + CAR_META], 0xc3);
 });
@@ -305,7 +305,7 @@ Deno.test("pair slabs return pages and reuse released descriptors", async () => 
     memory[assembled.address("PAGE_CAP") + 1] << 8;
   assert.equal(callLabel(assembled, "PAIR_INI", memory, cpu).carry, 0);
   const firstPairPage = memory[assembled.address("SRTPSLT")] << 8;
-  assert.equal(callLabel(assembled, "SRTGC", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "GC", memory, cpu).carry, 0);
   const after = memory[assembled.address("PAGE_CAP")] |
     memory[assembled.address("PAGE_CAP") + 1] << 8;
   assert.equal(after, before, "empty slab did not return its page");

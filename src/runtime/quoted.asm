@@ -9,7 +9,7 @@
 ; The first evaluation decodes the value, stores it in the cache and returns
 ; it in A:HL; later evaluations return the cached value.  Elements are pushed
 ; on the quoted-data stack, which is a collector root, and folded into pairs
-; by SRTQBLD, exactly as the code the compiler used to emit did.
+; by QT_FOLD, exactly as the code the compiler used to emit did.
 ;
 ; Encoding of one value:
 ;     01 values... 02    a proper list
@@ -35,24 +35,24 @@ QT_BUILD:
         INC HL
         LD B,(HL)
         INC HL
-        LD (QT_PTR),HL
+        LD (.PTR),HL
         PUSH BC                    ; Return past the encoding.
         PUSH DE
         EX DE,HL
-        CALL SRTQGET               ; A hit returns the cached value.
+        CALL QT_CACHE              ; A hit returns the cached value.
         POP DE
         RET NC
         PUSH DE
-        CALL QT_VALUE
+        CALL .VALUE
         POP DE
-        JP SRTSTORE                ; Cache the value; A:HL is returned.
+        JP RT_STORE                ; Cache the value; A:HL is returned.
 
-; Decode one value at QT_PTR into A:HL.
-QT_VALUE:
-        LD HL,(QT_PTR)
+; Decode one value at .PTR into A:HL.
+.VALUE:
+        LD HL,(.PTR)
         LD A,(HL)
         INC HL
-        LD (QT_PTR),HL
+        LD (.PTR),HL
         CP QT_LIST
         JR Z,.LIST
         CP QT_BYTE
@@ -64,16 +64,16 @@ QT_VALUE:
         INC HL
         LD D,(HL)
         INC HL
-        LD (QT_PTR),HL
+        LD (.PTR),HL
         EX DE,HL
         RET
 .BYTE:
         LD L,(HL)
         LD H,0
         LD A,3
-        LD DE,(QT_PTR)
+        LD DE,(.PTR)
         INC DE
-        LD (QT_PTR),DE
+        LD (.PTR),DE
         RET
 .IMM:
         LD E,(HL)
@@ -82,31 +82,31 @@ QT_VALUE:
         INC HL
         LD A,(HL)
         INC HL
-        LD (QT_PTR),HL
+        LD (.PTR),HL
         EX DE,HL
         RET
 .LIST:
         LD B,0                     ; Elements pushed so far.
 .ELEMENT:
-        LD HL,(QT_PTR)
+        LD HL,(.PTR)
         LD A,(HL)
         CP QT_END
         JR Z,.CLOSE
         CP QT_DOT
         JR Z,.CLOSE
         PUSH BC
-        CALL QT_VALUE
-        CALL SRTQPUT
+        CALL .VALUE
+        CALL QT_PUSH
         POP BC
         INC B
         JR .ELEMENT
 .CLOSE:
         INC HL
-        LD (QT_PTR),HL
+        LD (.PTR),HL
         SUB QT_END                 ; Zero for a proper list, one for dotted.
         LD C,A
         LD A,B
         LD B,C
-        JP SRTQBLD
+        JP QT_FOLD
 
-QT_PTR: DW 0                       ; Next encoding byte.
+.PTR: DW 0                         ; Next encoding byte.

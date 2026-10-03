@@ -174,6 +174,6 @@ SLOT_CLR:
         INC HL
         LD D,(HL)
         EX DE,HL
-        JP SRTCLRC
+        JP RT_EMPTY
 
 ; Promote active slot A.  The inline slot remains the root until publication.

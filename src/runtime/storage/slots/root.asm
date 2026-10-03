@@ -18,7 +18,7 @@ SLOT_GC:
         INC HL
         LD D,(HL)
         EX DE,HL
-        JP SRTMVALU
+        JP GC_VALUE
 .HEAP:
         LD HL,(SRTSADR)
         LD E,(HL)
@@ -28,4 +28,4 @@ SLOT_GC:
         OR E
         RET Z
         EX DE,HL
-        JP SRTBMARK
+        JP GC_VAR
