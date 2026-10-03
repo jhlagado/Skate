@@ -10,7 +10,7 @@ SRTHEPEN  EQU 0C000H              ; Managed objects stop before transient storag
 SRTETOH   EQU 0E0H                ; Pair tag-seven values above this byte are escapes.
 SRTETOK   EQU 0E000H              ; Escape generations occupy the non-heap range.
 SRTOPB EQU 0C000H              ; Operator values use the next transient band.
-SRTOPEND  EQU 0C800H              ; Leave a 3 KiB transient band below the guard.
+SRTOPEND  EQU 0C400H              ; A 1 KiB operator band; page tables follow it.
 SRTQBASE  EQU 0C800H              ; Quoted-data values use the following band.
 SRTQEND   EQU 0CC00H              ; Keep 255 records for calls and rest lists.
 SRTDRVB   EQU 0CC00H              ; Reader values occupy 64 four-byte slots.
@@ -103,24 +103,9 @@ SRTTPAOK:
         XOR A
         LD (HL),A
         LDIR
-        LD HL,SRTCLOWN              ; No closure slab owns a page at startup.
-        LD DE,SRTCLOWN+1
-        LD BC,127                   ; The owner directory has 128 entries.
-        LD (HL),A
-        LDIR
-        LD HL,SRTCLUSE              ; No closure object occupies a slab yet.
-        LD DE,SRTCLUSE+1
-        LD BC,127
-        LD (HL),A
-        LDIR
-        LD HL,SRTCLPBA              ; No closure page has a physical base yet.
-        LD DE,SRTCLPBA+1
-        LD BC,127
-        LD (HL),A
-        LDIR
-        LD HL,SRTBPGS               ; No binding page has a physical base yet.
-        LD DE,SRTBPGS+1
-        LD BC,127
+        LD HL,SRTCLOWN              ; No closure page has an owner, a live count
+        LD DE,SRTCLOWN+1            ; or a physical base, and no binding page is
+        LD BC,SRTPTEND-SRTCLOWN-1   ; assigned: the four tables are one block.
         LD (HL),A
         LDIR
         LD HL,SRTHEAP               ; Keep a map base for the first allocation.

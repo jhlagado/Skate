@@ -46,10 +46,17 @@ SRTCLER:  DB 0                  ; Nonzero reports a closure worklist overflow.
 SRTCLCUR: DW 0                  ; High-water cursor for upward closure allocation.
 SRTCLSCN: DW 0                  ; Address-unit cursor for closure scans.
 SRTCFREE:  DS 130                ; Heads for rounded four-byte closure classes.
-SRTCLOWN:  DS 128                ; Class owner for each logical closure page.
+; The page tables live in the fixed band C400H..C780H beside the operator
+; side stack, outside the program image, so they cost no heap.  Startup
+; clears the four 128-byte tables as one block; SRTPSLT is read only up to
+; SRTPSLBN entries.
+SRTCLOWN   EQU 0C400H            ; Class owner for each logical closure page.
                                   ; Zero is free; 41H owns a two-page run; FFH continues it.
-SRTCLUSE:  DS 128                ; Live object count for each owned page.
-SRTCLPBA:  DS 128                ; Physical page high byte for each owner entry.
+SRTCLUSE   EQU 0C480H            ; Live object count for each owned page.
+SRTCLPBA   EQU 0C500H            ; Physical page high byte for each owner entry.
+SRTBPGS    EQU 0C580H            ; Physical page high bytes assigned to bindings.
+SRTPTEND   EQU 0C600H            ; End of the four cleared tables.
+SRTPSLT    EQU 0C600H            ; One hundred twenty-eight three-byte descriptors.
 SRTCLCAP:  DB 64,32,21,16,12,10,9,8,7,6,5,5,4,4,4,4
             DB 3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2
             DB 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
@@ -73,7 +80,6 @@ SRTBPGBA: DW 0                  ; Physical base of the current binding page.
 SRTBPGC:  DW 0                  ; Physical base saved across a binding sweep.
 SRTBPGN:  DB 0                  ; Number of pages assigned to bindings.
 SRTBPGI:  DB 0                  ; Binding page index during a sweep.
-SRTBPGS:  DS 128                ; Physical page high bytes assigned to bindings.
 SRTBPFRE: DW 0                  ; Page-local free-chain head during a sweep.
 SRTBPLST: DW 0                  ; Tail of the page-local free chain.
 SRTBPLIV: DB 0                  ; Live binding count on the current page.
@@ -96,7 +102,6 @@ SRTWMODE: DB 0                    ; Zero displays contents; one writes readable 
 
 ; Pair-class table and scan cursors.  Each entry is a page-aligned slab base.
 SRTPSLBN: DB 0                    ; Number of eight-byte pair slabs currently assigned.
-SRTPSLT:  DS 384                  ; One hundred twenty-eight three-byte descriptors.
 SRTPSLHD: DB 0                    ; One-based index of the first available slab.
 SRTPSLIM: DB 0                    ; Maximum descriptor slots for the page domain.
 SRTPSNXT: DB 0                    ; Temporary free-record or slab-list successor.
