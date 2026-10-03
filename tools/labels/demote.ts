@@ -26,8 +26,13 @@ export async function externalNames(root: string) {
 
 export async function analyse(root: string) {
   const ext = await externalNames(root);
-  const result: { entry: string; demote: Def[]; keep: Def[]; defs: Def[] }[] =
-    [];
+  const result: {
+    entry: string;
+    demote: Def[];
+    keep: Def[];
+    defs: Def[];
+    pinned: Set<string>;
+  }[] = [];
   for (const entry of ENTRIES) {
     const { defs, refs, lines, files } = await scan(root, entry);
     const labels = defs.filter((d) => d.kind === "label");
@@ -78,6 +83,7 @@ export async function analyse(root: string) {
       defs,
       demote: labels.filter((_, i) => !kept[i]),
       keep: labels.filter((_, i) => kept[i]),
+      pinned: new Set(labels.filter((d) => ext.has(d.name)).map((d) => d.name)),
     });
   }
   return result;

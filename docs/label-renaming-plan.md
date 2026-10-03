@@ -99,11 +99,12 @@ Runtime image (`src/runtime/`):
 | Pages, slabs, pairs, managed storage | `storage/page/*`, `storage/slabs.asm`, `storage/pairs.asm`, `storage/pair-management.asm`, `storage/managed.asm` | `PAGE_`, `SLAB_`, `PAIR_`, `HEAP_` |
 | Roots and collector | `roots/*`, `data/collector.asm` | `ROOT_`, `GC_` |
 | Primitive dispatch and packets | `primitives/*` | `PRIM_`, `PKT_` |
+| Standard library primitives | `primitives/standard.asm` | `STD_` |
 | Numeric and binary16 | `numeric/*`, `binary16/*`, `float.asm` | `NUM_`, `F16_`, `FLT_` |
 | Strings (done as the pilot) | `strings*.asm`, `strings/*` | `STR_` |
 | Vectors | `vectors/*` | `VEC_` |
 | Writer and output | `data/writer.asm`, `data/state.asm`, `output*.asm`, `output/*` | `WR_`, `OUT_` |
-| Quoted data | `data/quoted.asm` | `QT_` |
+| Quoted data | `data/quoted.asm`, `quoted.asm` | `QT_` |
 | Datum reader | `datum-*.asm` | `DR_` |
 | Ports, CP/M console, files | `ports.asm`, `cpm-ports.asm`, `file-ports.asm`, `primitives/io.asm` | `PORT_`, `CON_`, `FILE_` |
 | Escape continuations | `escape.asm` | `EC_` |
@@ -125,7 +126,7 @@ Compiler image (`src/compiler/`):
 | Definitions | `scope/definitions*.asm`, `scope/definitions/*` | `DEF_` |
 | Branches and conditionals | `scope/branches.asm`, `scope/command/conditionals.asm` | `BR_`, `IF_` |
 | Procedures and lambdas | `procedures/*`, `procedure-forms.asm`, `call-ec.asm` | `PROC_`, `LAM_`, `CAP_` |
-| Literals and quoted data | `scope/data*.asm`, `scope/data/*` | `LIT_`, `QT_` |
+| Literals and quoted data | `scope/data*.asm`, `scope/data/*` | `LIT_`, `QUO_` |
 | Publication | `scope/publication*.asm`, `scope/publication/*` | `PUB_` |
 | Replay records | `scope/replay*.asm`, `scope/replay/*` | `REC_` |
 | ASO stream and sink | `scope/aso-*.asm`, `scope/output-sink.asm` | `ASO_`, `SINK_` |
