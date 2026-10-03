@@ -52,6 +52,88 @@ PRIM_TL:
 
 PRIM_CNT: DB 0                     ; Argument count across the operator push.
 
+; Slot helpers.  Generated code names a global or a procedure local with one
+; byte after the CALL: CALL G_LOAD, DB slot.  Each helper steps the return
+; address over that byte.  Globals live in the fixed area at SRTGBASE.
+
+; Load global SLOT into A:HL.
+G_LOAD:
+        POP HL
+        LD E,(HL)
+        INC HL
+        PUSH HL
+G_FETCH:
+        LD L,E
+        LD H,0
+        ADD HL,HL
+        ADD HL,HL
+        LD DE,(SRTGBASE)
+        ADD HL,DE
+        JP SRTLOAD
+
+; Load global SLOT and save it on the operator side stack: the operator of a
+; call to a global procedure.
+G_OPSH:
+        POP HL
+        LD E,(HL)
+        INC HL
+        PUSH HL
+        CALL G_FETCH
+        JP SRTOPUSH
+
+; Store A:HL in global SLOT, initializing it (G_STORE) or as a checked
+; set! of a bound global (G_SET).  A:HL is returned unchanged by G_STORE.
+G_STORE:
+        LD (G_TAG),A
+        XOR A
+        JR G_PUT
+G_SET:
+        LD (G_TAG),A
+        LD A,1
+G_PUT:
+        LD (G_MODE),A
+        EX (SP),HL                 ; HL addresses the slot byte.
+        LD E,(HL)
+        INC HL
+        EX (SP),HL                 ; The return now skips the byte.
+        PUSH HL
+        LD L,E
+        LD H,0
+        ADD HL,HL
+        ADD HL,HL
+        LD DE,(SRTGBASE)
+        ADD HL,DE
+        EX DE,HL                   ; DE is the slot.
+        POP HL
+        LD A,(G_MODE)
+        OR A
+        LD A,(G_TAG)
+        JP Z,SRTSTORE
+        JP SRTSET
+
+G_TAG:  DB 0
+G_MODE: DB 0
+
+; Load or store procedure local SLOT through the active environment.
+L_LOAD:
+        POP HL
+        LD A,(HL)
+        INC HL
+        PUSH HL
+        JP SRTLOADI
+L_STORE:
+        EX (SP),HL
+        LD B,(HL)
+        INC HL
+        EX (SP),HL
+        JP SRTSTORI
+L_SET:
+        EX (SP),HL
+        LD B,(HL)
+        INC HL
+        EX (SP),HL
+        JP SRTSETI
+
 ; Call an operator value saved on the side stack before argument evaluation.
 ; A contains the argument count and the native stack contains only arguments.
 SRTOPINV:

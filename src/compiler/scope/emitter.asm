@@ -165,22 +165,17 @@ SCCLRS:
         LD HL,SRTCLRS
         JP SCCALL
 
-; Emit the address word of slot SCFSLOT of kind SCFKIND.  Globals live in the
-; fixed area after the runtime, so their address is known now; a static local
-; is placed after the code and records a fixup with a placeholder word.
-SCSLOTW:
-        LD A,(SCFKIND)
-        OR A
-        JR NZ,SCSLOTF
+; Emit CALL HL followed by the slot byte SCFSLOT.  Globals and procedure
+; locals are named this way; the runtime helper finds the slot.
+SCSLOTC:
+        CALL SCCALL
+        RET C
         LD A,(SCFSLOT)
-        LD L,A
-        LD H,0
-        ADD HL,HL
-        ADD HL,HL
-        LD DE,SCGREG
-        ADD HL,DE
-        JP SCWORD
-SCSLOTF:
+        JP SINKBYTE
+
+; Emit the placeholder address word of static local SCFSLOT.  Static locals
+; are placed after the code, so the word is recorded as a fixup.
+SCSLOTW:
         LD HL,(SCPC)              ; The next two bytes are the patch location.
         CALL SCFIX                ; Record them before writing placeholder zeroes.
         RET C                     ; A full fixup table aborts the current form.
@@ -200,15 +195,13 @@ SCLOAD:
         JR NZ,SCLDFIX               ; Globals and top-level lets retain static slots.
         CALL SCLOCALQ              ; Package-owned locals remain static.
         JR Z,SCLDFIX
-        LD A,3EH                   ; LD A,slot supplies the dynamic slot index.
-        CALL SINKBYTE
-        RET C
-        LD A,(SCFSLOT)
-        CALL SINKBYTE
-        RET C
-        LD HL,SRTLOADI             ; Load through the active environment map.
-        JP SCCALL
+        LD HL,L_LOAD               ; Load through the active environment map.
+        JP SCSLOTC
 SCLDFIX:
+        LD A,(SCFKIND)
+        OR A
+        LD HL,G_LOAD               ; Globals have fixed slots.
+        JP Z,SCSLOTC
         LD A,21H                  ; LD HL,nn receives the slot address.
         CALL SINKBYTE               ; Append the load opcode.
         RET C
@@ -229,20 +222,23 @@ SCSTORE:
         LD A,(SCCURPR)
         CALL SCLOCALQ              ; Package-owned locals remain static.
         JR Z,SCSTFIX
-        LD A,06H                   ; LD B,slot supplies the dynamic slot index.
-        CALL SINKBYTE
-        RET C
-        LD A,(SCFSLOT)
-        CALL SINKBYTE
-        RET C
-        LD HL,SRTSTORI             ; Store through the active environment map.
+        LD HL,L_STORE              ; Store through the active environment map.
         LD A,(SCMUT)           ; Mutation selects the checked local helper.
         OR A
-        JR Z,SCSTLOC              ; Definitions use the initializing helper.
-        LD HL,SRTSETI
-SCSTLOC:
-        JP SCCALL
+        JP Z,SCSLOTC              ; Definitions use the initializing helper.
+        LD HL,L_SET
+        JP SCSLOTC
 SCSTFIX:
+        LD A,(SCFKIND)
+        OR A
+        JR NZ,SCSTSTA
+        LD HL,G_STORE              ; Globals have fixed slots.
+        LD A,(SCMUT)
+        OR A
+        JP Z,SCSLOTC
+        LD HL,G_SET
+        JP SCSLOTC
+SCSTSTA:
         LD A,11H                  ; LD DE,nn receives the slot address.
         CALL SINKBYTE               ; Append the store-address opcode.
         RET C
@@ -260,20 +256,10 @@ SCSTSTAT:
 ; The side stack preserves Scheme's operator-first evaluation order without
 ; placing a callee word on the native stack for every recursive call.
 SCGMARK:
-        LD A,21H                  ; LD HL,nn receives the global cell address.
-        CALL SINKBYTE
-        RET C
-        XOR A                     ; Kind zero selects global storage.
-        LD (SCFKIND),A
         LD A,(SCAPGSL)            ; The marker carries the selected global slot.
         LD (SCFSLOT),A
-        CALL SCSLOTW              ; Globals have constant addresses.
-        RET C
-        LD HL,SRTLDA              ; Read the value while the operator is current.
-        CALL SCCALL
-        RET C
-        LD HL,SRTOPUSH            ; Preserve the four-byte value across arguments.
-        JP SCCALL
+        LD HL,G_OPSH              ; Load it and save it on the side stack.
+        JP SCSLOTC
 
 ; Record a two-byte staged address, slot kind and slot number.
 SCFIX:
