@@ -64,6 +64,8 @@ SCAPLOOP:
         JR SCAPLOOP                ; Continue in source order.
 SCAPDONE:
         LD A,(SCAPMODE)            ; A compact global call needs no callee value.
+        CP 3
+        JR Z,SCAPPRIM              ; A known primitive is named inline.
         OR A
         JR Z,SCAPGEND
         XOR A
@@ -87,6 +89,26 @@ SCAPGEND:
 SCAPTAIL:
         LD HL,SRTTAIL              ; Tail calls reuse the current return address.
         JP SCITAIL                 ; Emit the count load and runtime JP.
+
+; Emit LD A,count, CALL PRIM_OP or PRIM_TL, then the primitive's payload byte.
+SCAPPRIM:
+        LD A,(SCTLSAV)
+        OR A
+        JR NZ,SCAPPTL
+        LD (SCAPMODE),A            ; A is zero: the call is complete.
+        LD HL,PRIM_OP
+        CALL SCINVOKE
+        RET C
+        JR SCAPPKB
+SCAPPTL:
+        LD HL,PRIM_TL              ; SCITAIL records the candidate as mode three.
+        CALL SCITAIL
+        RET C
+SCAPPKB:
+        LD A,(SCAPGSL)             ; The primitive's one-based kind.
+        DEC A
+        ADD A,20H                  ; Its value's payload low byte.
+        JP SINKBYTE
 
 ; Remove the four compiler-stack words left by a failed nested argument.
 SCAPERR:
@@ -130,6 +152,13 @@ SCITAIL:
         RET C                      ; Preserve tail-record capacity exhaustion.
         LD HL,SRTTCALL              ; The normal wrapper discards CALL's continuation.
         LD A,(SCAPMODE)
+        CP 3
+        JR NZ,SCITSIDE
+        LD HL,PRIM_TL              ; A direct primitive tail call.
+        XOR A
+        LD (SCAPMODE),A
+        JR SCITWR
+SCITSIDE:
         CP 2
         JR NZ,SCITWR
         LD HL,SRTOTCL              ; Side-stack calls use their matching wrapper.

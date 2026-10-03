@@ -8,3 +8,4 @@
 %INCLUDE "primitives/data.asm"
 %INCLUDE "primitives/pairs.asm"
 %INCLUDE "primitives/output.asm"
+%INCLUDE "primitives/standard.asm"

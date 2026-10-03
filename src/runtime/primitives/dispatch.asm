@@ -4,7 +4,7 @@
 
 ; Predefined arithmetic procedure values for the scope-control runtime.
 ;
-; Primitive values use tag zero and payloads FE20H through FE5BH.  The
+; Primitive values use tag zero and payloads from FE20H below SRTPRLIM.  The
 ; dispatcher validates packet arity, pushes values in the numeric ABI order,
 ; and returns through the continuation supplied in IX.
 
@@ -131,6 +131,8 @@ SRTPRIM:
         JP C,SRTPORTS                 ; Standard ports follow the vector services.
         CP 60
         JP C,SRTFILE                   ; File ports use the same provider boundary.
+        CP SRTPRLIM-20H
+        JP C,STD_DISP                  ; Standard procedures added later.
         JP SRTERROR                ; The reserved range has no other services.
 
 ; Primitive paths use PUSH IX/RET, so one common continuation can retire the

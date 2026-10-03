@@ -2,6 +2,56 @@
 ; Entry points: SRTOPINV, SRTDISP, SRTAPPLY, SRTTAIL and SRTTCALL.
 ; Included in runtime order by ../core.asm.
 
+; Generated code pushes each argument with CALL ARG_PUSH: the value in A:HL is
+; recorded as an exact root and pushed as PUSH AF, PUSH HL below the return.
+; A and HL are kept.
+ARG_PUSH:
+        CALL SRTNROOT
+        POP DE                     ; The generated continuation.
+        PUSH AF
+        PUSH HL
+        PUSH DE
+        RET
+
+; Recover a value pushed by ARG_PUSH into A:HL and retire its root record.
+ARG_POP:
+        POP DE                     ; The generated continuation.
+        POP HL
+        POP AF
+        PUSH DE
+        JP SRTNPOP1                ; Keeps A:HL.
+
+; Call a predefined primitive whose kind is known when the program is
+; compiled.  Generated code is LD A,count, CALL PRIM_OP, DB payload, where the
+; payload byte is the primitive value's low byte.  No operator value is
+; evaluated or pushed by the generated code; it is pushed here, so the call
+; then continues exactly as an operator-stack call does.
+PRIM_OP:
+        LD (PRIM_CNT),A
+        POP HL                     ; The inline payload byte.
+        LD E,(HL)
+        INC HL
+        PUSH HL                    ; Return after the payload byte.
+        LD L,E
+        LD H,0FEH
+        XOR A
+        CALL SRTOPUSH
+        LD A,(PRIM_CNT)
+        JP SRTOPINV
+
+; The tail-position form: the CALL's return is discarded, as by SRTOTCL.
+PRIM_TL:
+        LD (PRIM_CNT),A
+        POP HL                     ; The inline payload byte.
+        LD L,(HL)
+        LD H,0FEH
+        XOR A
+        CALL SRTOPUSH
+        LD A,(PRIM_CNT)
+        JP SRTOTAIL
+
+PRIM_CNT: DB 0                     ; Argument count across the operator push.
+
 ; Call an operator value saved on the side stack before argument evaluation.
 ; A contains the argument count and the native stack contains only arguments.
 SRTOPINV:
@@ -118,14 +168,14 @@ SRTIPN:
 
 ; Validate a predefined primitive payload and retain its zero-based kind.
 SRTIVAL:
-        LD HL,(SRTVAL)             ; Primitive values use the reserved FE20..FE55 range.
+        LD HL,(SRTVAL)             ; Primitive values use the reserved FE20H range.
         LD A,H
         CP 0FEH
         JP NZ,SRTERROR             ; A tag-zero value outside the range is not callable.
         LD A,L
         CP 20H
         JP C,SRTERROR
-        CP 5CH                     ; File primitives extend the range through kind 59.
+        CP SRTPRLIM                ; Kinds run to the end of the standard set.
         JP NC,SRTERROR
         SUB 20H
         LD (SRTPID),A              ; Kind zero is addition; kind three is zero?.

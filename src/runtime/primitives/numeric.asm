@@ -22,8 +22,8 @@ SRTNCHK:
         JR C,SRTNFAIL
         CP 20H
         JR C,SRTNF16
-        CP 5CH
-        JR C,SRTNFAIL             ; FE20..FE5B are reserved primitive values.
+        CP SRTPRLIM
+        JR C,SRTNFAIL             ; FE20H upward are reserved primitive values.
 SRTNF16:
         LD HL,(SRTNVAL)
         LD A,H

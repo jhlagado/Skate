@@ -43,6 +43,15 @@ SCFORM:
         LD DE,SCCOND               ; Compare with the multi-clause conditional form.
         CALL SCMATCH               ; cond clauses are tested from left to right.
         JP Z,SCCONDF               ; Compile each clause and its fall-through.
+        LD DE,SCWHEN               ; when, unless and case are derived forms
+        CALL SCMATCH               ; compiled directly rather than rewritten.
+        JP Z,SCWHENF
+        LD DE,SCUNLESS
+        CALL SCMATCH
+        JP Z,SCUNLSF
+        LD DE,SCCASE
+        CALL SCMATCH
+        JP Z,SCCASEF
         LD DE,SCAND                ; Compare with the short-circuit conjunction.
         CALL SCMATCH               ; The two operands are evaluated left to right.
         JP Z,SCANDF                ; Preserve the first false value.
@@ -96,11 +105,9 @@ SCAPNAME:
         CALL SCPLOOK               ; Unbound primitives use a reserved immediate.
         OR A
         JR Z,SCAPGEN               ; Ordinary names still use a full value record.
-        LD (SCPKIND),A             ; Keep the primitive kind while emitting its marker.
-        CALL SCPRIMV               ; Save the immediate operator on the side stack.
-        RET C                      ; Preserve staged-output capacity failures.
-        LD A,1
-        LD (SCAPMODE),A            ; SCAPARGS now emits the compact call entry.
+        LD (SCAPGSL),A             ; Mode three keeps the kind in the slot byte.
+        LD A,3
+        LD (SCAPMODE),A            ; The call names the primitive directly.
         JP SCAPARGS
 SCAPBND:
         LD (SCAPGSL),A             ; Preserve the existing global slot for SCGMARK.

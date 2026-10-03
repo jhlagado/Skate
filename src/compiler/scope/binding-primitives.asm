@@ -56,4 +56,4 @@ SCPPMISM:
         XOR A                      ; Ordinary names receive no primitive mark.
         RET
 
-SCPRIMN  EQU 58                 ; Records in SCPRIMTB.
+SCPRIMN  EQU 93                 ; Records in SCPRIMTB.

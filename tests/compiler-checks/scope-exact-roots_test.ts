@@ -18,7 +18,7 @@ async function rootRuntime() {
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
-  assert.ok(assembled.image.end <= 0x5c00, "runtime overlaps fixture scratch");
+  assert.ok(assembled.image.end <= 0x6800, "runtime overlaps fixture scratch");
   const pairBase = 0x8000;
   const heapBase = assembled.address("SRTHEAP");
   const descriptor = assembled.address("SRTPSLT");
@@ -149,11 +149,11 @@ function preserveStaticPair(
   pairAddress: number,
 ) {
   const { assembled, memory, call } = fixture;
-  writeWord(memory, 0x5c00, pairAddress);
-  memory[0x5c02] = 1;
-  memory[0x5c03] = 1;
-  writeWord(memory, assembled.address("SRTGBASE"), 0x5c00);
-  writeWord(memory, assembled.address("SRTGEND"), 0x5c04);
+  writeWord(memory, 0x6e00, pairAddress);
+  memory[0x6e02] = 1;
+  memory[0x6e03] = 1;
+  writeWord(memory, assembled.address("SRTGBASE"), 0x6e00);
+  writeWord(memory, assembled.address("SRTGEND"), 0x6e04);
   call("SRTGC");
 }
 
@@ -162,9 +162,9 @@ Deno.test("exact roots preserve a published global pair and ignore inactive byte
   const { memory, pairBase, pair } = fixture;
   pair(pairBase);
   pair(pairBase + PAIR_BYTES);
-  memory[0x5c00] = pairBase & 255;
-  memory[0x5c01] = pairBase >>> 8;
-  memory[0x5c02] = 1;
+  memory[0x6e00] = pairBase & 255;
+  memory[0x6e01] = pairBase >>> 8;
+  memory[0x6e02] = 1;
   preserveStaticPair(fixture, pairBase);
   assert.equal(memory[pairBase + CAR_META], 0x43);
   assert.equal(memory[pairBase + PAIR_BYTES + CAR_META], 0);
@@ -227,10 +227,10 @@ Deno.test("an active environment traces its binding value", async () => {
     call,
   } = fixture;
   pair(pairBase);
-  const map = 0x5c00;
-  const binding = 0x6200;
+  const map = 0x6e00;
+  const binding = 0x6a00;
   bindingStart(binding);
-  bindingPages(0x62);
+  bindingPages(0x6a);
   writeWord(memory, map, binding);
   memory[map + 2] = 0;
   memory[map + 3] = 2;
@@ -256,15 +256,15 @@ Deno.test("suspended environments remain roots through their frame maps", async 
   } = fixture;
   pair(pairBase);
   pair(pairBase + PAIR_BYTES);
-  const currentMap = 0x5c00;
-  const callerMap = 0x5c10;
-  const currentBinding = 0x6200;
-  const callerBinding = 0x6204;
+  const currentMap = 0x6e00;
+  const callerMap = 0x6e10;
+  const currentBinding = 0x6a00;
+  const callerBinding = 0x6a04;
   const currentDescriptor = 0xc100;
   const callerDescriptor = 0xc140;
   bindingStart(currentBinding);
   bindingStart(callerBinding);
-  bindingPages(0x62);
+  bindingPages(0x6a);
   writeWord(memory, currentMap, currentBinding);
   writeWord(memory, callerMap, callerBinding);
   memory[currentMap + 2] = 0;
@@ -315,11 +315,11 @@ Deno.test("a captured closure traces only its declared binding slots", async () 
   writeWord(memory, closure + 2, binding);
   writeWord(memory, binding, pairBase);
   memory[binding + 3] = 0x29;
-  writeWord(memory, 0x5c00, closure);
-  memory[0x5c02] = 2;
-  memory[0x5c03] = 1;
-  writeWord(memory, assembled.address("SRTGBASE"), 0x5c00);
-  writeWord(memory, assembled.address("SRTGEND"), 0x5c04);
+  writeWord(memory, 0x6e00, closure);
+  memory[0x6e02] = 2;
+  memory[0x6e03] = 1;
+  writeWord(memory, assembled.address("SRTGBASE"), 0x6e00);
+  writeWord(memory, assembled.address("SRTGEND"), 0x6e04);
   call("SRTGC");
   assert.equal(memory[pairBase + CAR_META], 0x43);
 });
@@ -377,7 +377,7 @@ Deno.test("closure overflow fallback stays within the native stack", async () =>
   const emptyDescriptor = 0xc140;
   const chainBase = 0x7000;
   const emptyBase = 0x7800;
-  const bindingBase = 0x6000;
+  const bindingBase = 0x6800;
   const roots = 0x8200;
   assert.ok(roots + 513 * 4 <= assembled.address("SRTLOEND"));
   const chainCount = 160;
@@ -410,7 +410,7 @@ Deno.test("closure overflow fallback stays within the native stack", async () =>
     writeWord(memory, secondBinding, secondChild);
     memory[secondBinding + 3] = (index + 2 < chainCount ? 2 : 0) | 0x28;
   }
-  bindingPages(0x60, 0x61, 0x62, 0x63, 0x64);
+  bindingPages(0x68, 0x69, 0x6a, 0x6b, 0x6c);
   for (let index = 0; index < emptyCount; index++) {
     const closure = emptyBase + index * 4;
     closureStart(closure);
@@ -457,7 +457,7 @@ Deno.test("an interior pair pointer is rejected without touching the canary", as
 Deno.test("an unaligned binding interior is rejected before its flags change", async () => {
   const fixture = await rootRuntime();
   const { assembled, memory, bindingStart, call } = fixture;
-  const binding = 0x6200;
+  const binding = 0x6a00;
   bindingStart(binding);
   memory[binding + 3] = 0x29;
   memory[binding + 4] = 1;

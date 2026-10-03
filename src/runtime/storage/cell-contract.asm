@@ -15,6 +15,10 @@ SRTCTSH        EQU 4                ; The provisional tag nibble shift.
 SRTCTMSK       EQU 0F0H             ; Metadata bits 7..4 carry the tag.
 SRTCFMSK       EQU 00FH             ; Metadata bits 3..0 stay reserved.
 
+; Tag-zero payloads FE20H up to FE00H+SRTPRLIM (exclusive) are primitive
+; procedures; the low byte less 20H is the zero-based primitive kind.
+SRTPRLIM       EQU 7EH
+
 ; Current logical tag values.  Tag zero is the scalar family; tag eight is the
 ; shared escape/port family.  These constants document the current ABI only.
 SRTCTAG0       EQU 0

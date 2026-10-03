@@ -81,7 +81,7 @@ SRTTPROC:
         LD A,L
         CP 20H
         JP C,SRTBNO
-        CP 5CH
+        CP SRTPRLIM
         JP C,SRTBYES
         JP SRTBNO
 SRTTSTR:

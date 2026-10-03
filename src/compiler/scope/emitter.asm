@@ -49,11 +49,8 @@ FNUM:
         LD HL,(SCVTMP)            ; Recover the binary16 payload.
         CALL SCWORD                ; Append the payload in little-endian order.
         RET C                     ; Preserve a staged-output capacity failure.
-        LD A,3EH                  ; LD A,0 selects the scalar value tag.
-        CALL SINKBYTE                ; Append the tag-load opcode.
-        RET C                     ; Preserve a staged-output capacity failure.
-        XOR A                      ; Binary16 values use scalar tag zero.
-        JP SINKBYTE                  ; Append the tag and return.
+        LD A,0AFH                 ; XOR A: the tag is zero.
+        JP SINKBYTE
 
 ; Emit an unbound predefined procedure as a reserved immediate value.
 ; A contains its one-based primitive kind; the runtime subtracts $20 from the
@@ -71,10 +68,7 @@ SCPRIM:
         LD A,0FEH
         CALL SINKBYTE                 ; All primitive payloads use the reserved high byte.
         RET C
-        LD A,3EH                  ; LD A,n loads the immediate value tag.
-        CALL SINKBYTE
-        RET C
-        XOR A                      ; Tag zero identifies a primitive value.
+        LD A,0AFH                 ; XOR A: the tag is zero.
         JP SINKBYTE
 
 ; Emit and save a predefined procedure on the runtime operator side stack.
@@ -96,11 +90,8 @@ SCBOOL:
         LD L,A                    ; FE00H and FE01H distinguish the booleans.
         CALL SCWORD               ; Append the payload word.
         RET C                     ; Preserve a staged-output capacity failure.
-        LD A,3EH                  ; Load the scalar tag into A.
-        CALL SINKBYTE               ; Append the tag-load opcode.
-        RET C                     ; Preserve a staged-output capacity failure.
-        XOR A                     ; Booleans use tag zero.
-        JP SINKBYTE                 ; Append the tag and return.
+        LD A,0AFH                 ; XOR A: the tag is zero.
+        JP SINKBYTE
 
 ; Emit a byte character.  Characters share the scalar tag with booleans, but
 ; keep the FFxx payload so predicates can distinguish them from numbers.
@@ -112,47 +103,33 @@ SCCHAR:
         LD HL,(SCVTMP)            ; Recover the character payload.
         CALL SCWORD               ; Append both payload bytes unchanged.
         RET C                     ; Preserve a staged-output capacity failure.
-        LD A,3EH                  ; Load the scalar tag into A.
-        CALL SINKBYTE               ; Append the tag-load opcode.
-        RET C                     ; Preserve a staged-output capacity failure.
-        XOR A                     ; Characters use the established scalar tag.
-        JP SINKBYTE                 ; Append the tag and return.
+        LD A,0AFH                 ; XOR A: the tag is zero.
+        JP SINKBYTE
 
 ; Emit the canonical unspecified value (tag zero, payload FE04H).
 SCUNS:
+        LD HL,0FE04H              ; FE04H is the language's UNSPECIFIED value.
+; Emit LD HL,nn and LD A,0 for the tag-zero immediate in HL.
+SCIMM:
+        PUSH HL
         LD A,21H                  ; Load the reserved immediate payload.
         CALL SINKBYTE               ; Append the LD HL,nn opcode.
+        POP HL
         RET C                     ; Preserve a staged-output capacity failure.
-        LD HL,0FE04H              ; FE04H is the language's UNSPECIFIED value.
         CALL SCWORD                ; Append the payload in little-endian order.
         RET C                     ; Preserve a staged-output capacity failure.
-        LD A,3EH                  ; Load the tag register with zero.
-        CALL SINKBYTE               ; Append the LD A,n opcode.
-        RET C                     ; Preserve a staged-output capacity failure.
-        XOR A                      ; Tag zero identifies immediate values.
-        JP SINKBYTE                  ; Append the tag and return.
+        LD A,0AFH                 ; XOR A: the tag is zero.
+        JP SINKBYTE
 
 ; Record the value before emitting PUSH AF/PUSH HL.  The runtime collector
 ; uses the parallel records while a nested allocation is in progress.
 SCPUSH:
-        LD HL,SRTNROOT             ; Keep this operand visible across a GC.
-        CALL SCCALL
-        RET C
-        LD A,0F5H                 ; PUSH AF saves the value tag and flags.
-        CALL SINKBYTE               ; Append the tag push.
-        RET C                     ; Preserve a staged-output capacity failure.
-        LD A,0E5H                 ; PUSH HL saves the value payload.
-        JP SINKBYTE                 ; Append the payload push and return.
+        LD HL,ARG_PUSH             ; Root the operand, then PUSH AF and PUSH HL.
+        JP SCCALL
 
 ; Recover a value saved by SCPUSH.  The payload was pushed after its tag.
 SCPOP:
-        LD A,0E1H                 ; POP HL restores the payload first.
-        CALL SINKBYTE               ; Append the payload pop.
-        RET C                     ; Preserve staged-output exhaustion.
-        LD A,0F1H                 ; POP AF restores the scalar tag and flags.
-        CALL SINKBYTE
-        RET C
-        LD HL,SRTNPOP1            ; Retire the matching exact-root record.
+        LD HL,ARG_POP             ; POP HL, POP AF and retire the root record.
         JP SCCALL
 
 ; Emit a clear of a recursive cell before its first initializer runs.
@@ -350,10 +327,10 @@ SCTSAVE:
         LD H,0
         LD DE,SCTAILK
         ADD HL,DE
-        LD A,(SCAPMODE)            ; Mode two means the operator uses the side stack.
+        LD A,(SCAPMODE)            ; Modes two and three become flags one and two.
         CP 2
-        JR NZ,SCTSAVEG
-        LD A,1
+        JR C,SCTSAVEG
+        DEC A
 SCTSAVEG:
         LD (HL),A                  ; Preserve the dispatch path for later rewriting.
         LD A,(SCTTOP)              ; Advance the candidate count after the write.
@@ -388,6 +365,9 @@ SCTFIXLP:
         POP HL                     ; Restore the staged operand address.
         OR A
         JR Z,SCTFIXG
+        LD DE,PRIM_OP              ; A direct primitive returns normally.
+        CP 2
+        JR Z,SCTFIXW
         LD DE,SRTOPINV             ; Keep operator-first evaluation for this call.
         JR SCTFIXW
 SCTFIXG:

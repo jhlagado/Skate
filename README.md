@@ -8,14 +8,33 @@ a 64K machine, with a native compiler, a compact runtime and CP/M disk tools.
 
 The current source supports exact signed integers, binary16
 numbers, booleans, byte characters, symbols, strings, quoted data, pairs,
-lists and vectors. It provides `cons`, `car`, `cdr`, mutation, lexical `let`,
-`let*`, `letrec` and named `let`, `if`, `begin`, `cond`, `and`, `or`, numeric
-arithmetic and comparisons, type predicates, fixed-arity procedures, dotted
-rest parameters, bounded `apply`, closures, internal definitions, proper tail
-calls and one-shot `call/ec`. Standard input, output and error ports support character and datum I/O.
-Sequential text and binary file ports use CP/M files, with one input and one
-output file open at a time. Text input treats Control-Z as EOF. Decimal points and exponents select
+lists and vectors. It provides lexical `let`, `let*`, `letrec` and named
+`let`, `if`, `begin`, `cond`, `case`, `when`, `unless`, `and`, `or`, `set!`,
+fixed-arity procedures, dotted rest parameters, bounded `apply`, closures,
+internal definitions, proper tail calls and one-shot `call/ec`. Standard input,
+output and error ports support character and datum I/O. Sequential text and
+binary file ports use CP/M files, with one input and one output file open at a
+time. Text input treats Control-Z as EOF. Decimal points and exponents select
 binary16 values, and mixed arithmetic retains fractional results.
+
+The built-in procedures are:
+
+| Group | Procedures |
+| --- | --- |
+| Pairs and lists | `cons` `car` `cdr` `set-car!` `set-cdr!` `list` `length` `append` `reverse` `list-tail` `list-ref` `memq` `member` `assq` `assoc` `list?` `pair?` `null?` |
+| Equivalence | `eq?` `eqv?` `equal?` |
+| Numbers | `+` `-` `*` `/` `quotient` `remainder` `modulo` `abs` `=` `<` `>` `<=` `>=` `zero?` `number?` `number->string` |
+| Characters | `char=?` `char<?` `char>?` `char<=?` `char>=?` `char-upcase` `char-downcase` `char-alphabetic?` `char-numeric?` `char-whitespace?` `char->integer` `integer->char` `char?` |
+| Strings and symbols | `string` `string-length` `string-ref` `string-copy` `string-append` `substring` `string=?` `string<?` `string>?` `string<=?` `string>=?` `symbol->string` `string->symbol` `string?` `symbol?` |
+| Vectors | `vector` `make-vector` `vector-length` `vector-ref` `vector-set!` `vector?` |
+| Control and other | `apply` `not` `boolean?` `procedure?` `eof-object?` |
+| Input and output | `read` `read-char` `write` `display` `newline` `write-char`, the port procedures and the file openers |
+
+[`libraries/STDLIB.SK8`](libraries/STDLIB.SK8) adds `map`, `for-each`,
+`filter`, `fold-left`, `fold-right`, `reduce`, `list-copy`, `last-pair`,
+`iota`, `list->vector`, `vector->list`, `vector-fill!`, `string->list` and
+`list->string` in Skate itself. Including it adds about 7 KB of code, so a
+program that needs only a few of them may be better off copying those.
 
 The compiler and runtime are written in Z80 assembly using the ATOM assembler.
 The repository contains the Deno build commands and CP/M checks needed to assemble the compiler, publish a checked program and run
@@ -78,7 +97,8 @@ The compiler writes a checked `.COM` program for use from a CP/M prompt. Any
 intermediate publication data is an implementation detail of the build.
 
 Skate deliberately leaves general macros and quasiquote, reusable
-continuations and `eval` outside this small core. File names currently use
+continuations and `eval` outside this small core. `do` loops and quoted vector
+literals are not supported; use named `let` and `vector`. File names currently use
 current-drive CP/M 8.3 spelling; append, seeking and multiple handles per
 direction are not implemented. `libraries/io.sk8` provides line input, line
 output, prompting and stream copying with explicit ports.

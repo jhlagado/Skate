@@ -4,7 +4,8 @@
 //
 // Each NAME.SK8 may have a NAME.OUT beside it holding the exact expected
 // output; without one the output is printed instead of checked.  Pass file
-// paths to run other programs, for example while writing a new workload.
+// paths to run other programs, for example while writing a new workload, and
+// --save=DIR (with write permission) to keep the compiled COM files.
 import assert from "node:assert/strict";
 
 import { loadAssembly } from "../../tests/z80.ts";
@@ -24,6 +25,10 @@ import {
 
 const workloadRoot = "examples/workloads";
 const paths = Deno.args.filter((argument) => !argument.startsWith("--"));
+// --save=DIR keeps each compiled COM file there for inspection.
+const saveDirectory = Deno.args.find((argument) =>
+  argument.startsWith("--save=")
+)?.slice("--save=".length);
 if (paths.length === 0) {
   for await (const entry of Deno.readDir(workloadRoot)) {
     if (entry.isFile && /\.sk8$/i.test(entry.name)) {
@@ -62,12 +67,31 @@ for (const path of paths) {
   programs.push({ base, source: await Deno.readFile(path), expected });
 }
 
+// Every library is on the disk so that a workload can include it.
+const libraries = [];
+for await (const entry of Deno.readDir("libraries")) {
+  if (entry.isFile && /\.sk8$/i.test(entry.name)) {
+    libraries.push([
+      entry.name.toUpperCase(),
+      await Deno.readFile(`libraries/${entry.name}`),
+    ]);
+  }
+}
+
+for (const { base } of programs) {
+  assert.ok(
+    !libraries.some(([name]) => name === `${base}.SK8`),
+    `${base}.SK8 has the same name as a library`,
+  );
+}
+
 let disk = makeSystemDisk(firmware, sourceDisk);
 for (
   const [name, bytes] of [
     ["SKATE.COM", compiler.image.bytes.slice(0x100)],
     ["SKATE.RT", provider.image.bytes.slice(0x100)],
     ...programs.map(({ base, source }) => [`${base}.SK8`, source]),
+    ...libraries,
   ]
 ) {
   disk = installCpm22File(disk, { name, bytes, padByte: 0x1a });
@@ -97,6 +121,9 @@ try {
     const com = readCpm22File(image, `${base}.COM`);
     const aso = readCpm22File(image, `${base}.ASO`);
     const { imageBytes, asoBytes } = validateAso(aso, com, base);
+    if (saveDirectory !== undefined) {
+      await Deno.writeFile(`${saveDirectory}/${base}.COM`, com);
+    }
     const run = cpm.runCommandMeasured(base, "A>", `run ${base}`);
     const output = programOutput(run.output);
     const result = {
