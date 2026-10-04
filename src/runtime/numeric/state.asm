@@ -1,7 +1,7 @@
 ; Numeric runtime workspace.
 ; NUM_END marks the code boundary; the labels below are shared scratch storage.
 NUM_END:                   ; Exclusive end of numeric-dispatch instructions.
-; Private static operands and scratch. Calls may also use binary16 workspace.
+; Private static operands and scratch. Calls may also use the float24 workspace.
 ; Exact integers are signed twenty-four-bit values held as C:HL in registers
 ; and as three bytes, low first, in memory.
 .WORK:
@@ -13,7 +13,7 @@ NUM_PNEG: DB 0                 ; Product or text sign: 00H nonnegative, 80H nega
 NUM_MULT: DS 3                 ; Remaining multiplier magnitude.
 NUM_SWAP: DB 0                 ; Mixed-comparison order: 0 normal, 1 reversed.
 NUM_INT:  DS 3                 ; Exact integer in a mixed comparison.
-NUM_FLT:  DW 0                 ; Original binary16 word in a mixed comparison.
+NUM_FLT:  DS 3                 ; Original float in a mixed comparison.
 NUM_CHOP: DS 3                 ; Float truncated toward zero to a signed integer.
 NUM_QNEG: DB 0                 ; Dividend or quotient sign bit.
 NUM_DNEG: DB 0                 ; Divisor sign bit.

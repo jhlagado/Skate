@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { loadAssembly } from "../../tests/z80.ts";
+import * as F24 from "./float24-reference.ts";
 import { validateAso } from "./aso-proof.mjs";
 import {
   installCpm22File,
@@ -77,7 +78,7 @@ const cases = [
     "+inf.0\r\n-inf.0\r\n+nan.0\r\n",
   ],
   ["EXACTINT.SK8", "(begin (write (+ 1 2)) (newline))", "3\r\n"],
-  ["ROUNDING.SK8", "(begin (display 2049.0) (newline))", "2048.0\r\n"],
+  ["ROUNDING.SK8", "(begin (display 131073.0) (newline))", "131072.0\r\n"],
   [
     "ZEROPRED.SK8",
     "(begin (write (zero? 0.0)) (write (zero? -0.0)) (write (zero? 1.5)) (newline))",
@@ -100,6 +101,45 @@ const cases = [
     "(0.5 2.5)\r\n",
   ],
 ];
+// Float24 behaviour across its range, with every expected spelling computed
+// by the bit-exact host reference: literals that round, overflow and flush,
+// subnormals, ties at the 17-bit limit and arithmetic that needs every bit.
+const wideLiterals = [
+  "1e19",
+  "18446603336221196288.0",
+  "1e20",
+  "-1e20",
+  "3.3e-24",
+  "1e-25",
+  "2.168404344971009e-19",
+  "0.1",
+  "-131073.0",
+  "131075.0",
+  "123456.789",
+];
+cases.push([
+  "F24LIT.SK8",
+  `(begin ${wideLiterals.map((l) => `(display ${l}) (newline)`).join(" ")})`,
+  wideLiterals.map((l) => F24.print(F24.parse(l)) + "\r\n").join(""),
+]);
+const one = F24.parse("1.0"), three = F24.parse("3.0");
+const tenth = F24.parse("0.1"), big = F24.parse("1e19");
+cases.push([
+  "F24ARITH.SK8",
+  `(begin (display (/ 1 3)) (newline) (display (- 0.1 0.1)) (newline)
+    (display (* 1e19 2.0)) (newline) (display (/ 1e-20 1e10)) (newline)
+    (display (+ 8388607 0.5)) (newline) (display (* 3.0 0.1)) (newline)
+    (write (< 1e19 8388607)) (write (> 1e19 8388607)) (write (= 0.1 0.1))
+    (newline))`,
+  [
+    F24.div(one, three),
+    F24.sub(tenth, tenth),
+    F24.mul(big, F24.parse("2.0")),
+    F24.div(F24.parse("1e-20"), F24.parse("1e10")),
+    F24.add(F24.fromInteger(8388607), F24.parse("0.5")),
+    F24.mul(three, tenth),
+  ].map((bits) => F24.print(bits) + "\r\n").join("") + "#f#t#t\r\n",
+]);
 const errorCases = [
   ["NODIV.SK8", "(/)"],
   ["BADDIV.SK8", "(/ #t 2)"],

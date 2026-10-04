@@ -1,9 +1,9 @@
 # Value contract
 
-> **Status:** steps 1 to 3 are done. Every container uses the target cell,
+> **Status:** all four steps are done. Every container uses the target cell,
 > every value travels as `A:CHL` with byte 2 in `C`, as set out in
-> [Transport](#transport), and exact integers are twenty-four-bit. Step 4,
-> the twenty-four-bit float, is next.
+> [Transport](#transport), exact integers are twenty-four-bit and floats are
+> the twenty-four-bit format in [float24.md](float24.md), with tag 9.
 
 Skate is moving from sixteen-bit to twenty-four-bit payloads. The wider payload
 replaces the sixteen-bit one everywhere: exact integers become twenty-four-bit
@@ -277,10 +277,10 @@ Each step keeps every existing proof passing with unchanged results.
    as set out in [Transport](#transport), with the debug check.
 3. **Done. Twenty-four-bit exact integers.** Literals, arithmetic, division,
    comparison, printing and conversions.
-4. **Twenty-four-bit float.** Replace binary16 in one change: classification,
-   packing, arithmetic, comparison, conversion, literals and printing. The
-   binary16 modules are deleted, not kept alongside.
-
-[`wider-numerics.md`](wider-numerics.md) records the detailed numeric work for
-steps 3 and 4. Where it describes sixteen- and twenty-four-bit values side by
-side, this note supersedes it.
+4. **Done. Twenty-four-bit float.** Binary16 was replaced in one change:
+   classification, packing, arithmetic, comparison, conversion, literals and
+   printing, with the binary16 modules deleted. [float24.md](float24.md)
+   fixes the format; `tools/compiler-checks/float24-reference.ts` is its
+   bit-exact host reference, and `tests/compiler-checks/float24_test.ts`
+   checks the runtime against it. The runtime came out 41 bytes smaller
+   than with binary16 (24,165 bytes).

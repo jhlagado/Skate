@@ -44,7 +44,7 @@ mechanical pass with the tools below.
 | `ROOT_`, `GC_`, `CNT_` | Roots, collector, allocation counters |
 | `PRIM_`, `PKT_`, `OPS_` | Primitive dispatch, argument packets, operator side stack |
 | `STD_` | Standard procedures (`primitives/standard.asm`), one per Scheme procedure |
-| `NUM_`, `F16_`, `FLT_` | Integer arithmetic, binary16 internals, float printing |
+| `NUM_`, `F24_`, `FLT_` | Integer arithmetic, float24 internals, float printing |
 | `STR_`, `VEC_` | Strings and vectors |
 | `QT_`, `QUO_` | Quoted-data building and its encoding codes |
 | `WR_`, `OUT_`, `TX_` | Writer, output adapters, runtime message text |

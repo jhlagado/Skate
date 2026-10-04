@@ -97,8 +97,8 @@ export async function assemble(entry: string) {
   (runtime.hardware as typeof runtime.hardware & {
     memWrite: (address: number, value: number) => void;
   }).memWrite = (address, value) => {
-    const scratch = address >= symbols.get("f16_work")! &&
-      address < symbols.get("f16_lim")!;
+    const scratch = address >= symbols.get("f24_work")! &&
+      address < symbols.get("f24_lim")!;
     const stack = address >= 0xefe0 && address < 0xf000;
     if (!scratch && !stack) {
       throw new Error(`Unexpected write at ${address.toString(16)}`);
@@ -108,7 +108,7 @@ export async function assemble(entry: string) {
   };
   function call(name: string, left: number, right = 0, tag = 0, rightTag = 0) {
     lowestStack = 0xf000;
-    mem.fill((left ^ right) & 255, address("F16_WORK"), address("F16_LIM"));
+    mem.fill((left ^ right) & 255, address("F24_WORK"), address("F24_LIM"));
     cpu.flags.C = (left ^ right) & 1;
     cpu.pc = address(name);
     cpu.sp = 0xf000;

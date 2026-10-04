@@ -459,11 +459,13 @@ DR_INT:
         RET
 
 ; Publish a successful immediate result and preserve shared lookahead state.
-; Only an exact integer owns byte 2; every other value's is zero.
+; Only an exact integer or a float owns byte 2; every other value's is zero.
 DR_DONE:
         LD (DR_TAG),A                ; Save the result while clearing reader state.
         LD (DR_VAL),HL
         CP 3
+        JR Z,.WIDE
+        CP 9
         JR Z,.WIDE
         LD C,0
 .WIDE:

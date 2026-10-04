@@ -15,14 +15,14 @@ REC_NEXT:
         JP NZ,.REPLAY              ; Retained events already carry their numeric kind.
         CALL RD_NEXT               ; Read one event from the source reader.
         RET C                      ; Preserve the reader's latched error code.
-        CP 7                       ; Scalar events may be exact or binary16 numerics.
+        CP 7                       ; Scalar events may be exact integers or floats.
         JR NZ,.SOURCE              ; Other event kinds need no reader-tag adjustment.
         LD A,(RD_FLOAT)            ; Check whether this scalar came from decimal text.
         OR A
         JR Z,.EXACT                ; Exact integers retain the ordinary kind seven.
         XOR A
         LD (RD_FLOAT),A            ; Consume the marker once it has become an event kind.
-        LD A,87H                   ; High bit seven marks a binary16 source literal.
+        LD A,87H                   ; High bit seven marks a float source literal.
         RET                        ; RD_TAG:HL still contains the converted payload.
 .EXACT:
         LD A,7                     ; Restore the event kind after reading the marker byte.
@@ -54,6 +54,8 @@ REC_NEXT:
         INC HL
         CP 9                      ; Kind 9 is an exact integer with byte 2.
         JR Z,.WIDE
+        CP 10                     ; Kind 10 is a float with byte 2.
+        JR Z,.FLOAT
         LD C,A                    ; Preserve the kind across tag and payload loads.
         LD A,(HL)                 ; Restore the scalar tag used by CMD_EXPR.
         LD (RD_TAG),A
@@ -77,9 +79,17 @@ REC_NEXT:
         LD C,0                    ; Every replayed value but an integer has byte 2 zero.
         OR A                      ; Replay success returns with carry clear.
         RET
+.FLOAT:
+        LD A,9                    ; The record implies the float tag
+        LD (RD_TAG),A
+        LD A,87H                  ; and the float event.
+        JR .THREE
 .WIDE:
         LD A,3                    ; The record implies the exact-integer tag.
         LD (RD_TAG),A
+        LD A,7                    ; CMD_EXPR sees an ordinary scalar event.
+.THREE:
+        PUSH AF
         LD E,(HL)                 ; Payload low byte.
         INC HL
         LD D,(HL)                 ; Payload high byte.
@@ -88,7 +98,7 @@ REC_NEXT:
         INC HL
         LD (ST_GETP),HL           ; Publish the next event cursor.
         EX DE,HL
-        LD A,7                    ; CMD_EXPR sees an ordinary scalar event.
+        POP AF
         OR A
         RET
 .FAIL:

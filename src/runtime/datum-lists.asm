@@ -9,7 +9,9 @@
 DR_PUSH:
         LD (DR_TAG),A               ; Save the tag while checking the cursor.
         LD (DR_VAL),HL             ; Save the payload beside it.
-        CP 3                        ; Only an exact integer owns byte 2.
+        CP 3                        ; Only an integer or a float owns byte 2.
+        JR Z,.WIDE
+        CP 9
         JR Z,.WIDE
         LD C,0
 .WIDE:

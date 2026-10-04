@@ -1,4 +1,4 @@
-; Numeric negation and integer-to-binary16 conversion.
+; Numeric negation and integer-to-float conversion.
 ; Entry points: NUM_NEG and the arithmetic conversion path NUM_REAL.
 ; NUM_FLIP is the shared modular word helper for comparison codes.
 ; Public unary negation of A:CHL. The exact range is asymmetric around zero.
@@ -11,7 +11,7 @@ NUM_NEG:
     CALL NUM_CHK            ; Reject nonnumbers before inspecting representation.
     RET C                   ; Classification preserves HL on failure.
     CP 3                    ; Select integer negation only for tag 3.
-    JP NZ,F16_NEG           ; A numeric scalar uses binary16 sign rules.
+    JP NZ,F24_NEG           ; A float uses float sign rules.
     LD A,C                  ; Check for the unique integer with no positive opposite.
     CP 80H                  ; Its top byte is 80H.
     JP NZ,.INT              ; Every other top byte permits negation.
@@ -32,47 +32,47 @@ NUM_FLIP:
     LD H,A                  ; HL now holds the two's-complement opposite.
     RET                     ; DE and BC are unchanged by this helper.
 
-; Round integer inputs only after both original values pass classification,
-; then run the binary16 operation.  A float result has byte 2 zero.
+; Convert integer operands to floats in place, then run the float operation
+; on the operand cells.
 NUM_REAL:
-    LD HL,(NUM_X)           ; Reload the original left value.
-    LD A,(NUM_X+2)
-    LD C,A
-    LD A,(NUM_X+3)          ; Test whether it needs integer-to-float conversion.
-    CP 3                    ; Tag 3 selects the raw signed conversion.
-    CALL Z,F16_ITOF         ; Round an exact integer to binary16, ties to even.
-    LD (NUM_X),HL           ; Save the converted left across the right conversion.
-    LD HL,(NUM_Y)           ; Load the original right value.
-    LD A,(NUM_Y+2)
-    LD C,A
-    LD A,(NUM_Y+3)          ; Test the right representation independently.
-    CP 3                    ; Tag 3 again requires conversion.
-    CALL Z,F16_ITOF         ; Leave an existing float unchanged.
-    EX DE,HL                ; Place the right float in the binary16 DE register.
-    LD HL,(NUM_X)           ; Restore the left float in HL.
-    LD B,0                  ; The right operand is now tag 0.
-    LD A,(NUM_OP)           ; Recover the selected arithmetic operation.
+    LD HL,NUM_X
+    CALL .TO_FLOAT
+    LD HL,NUM_Y
+    CALL .TO_FLOAT
+    LD A,(NUM_OP)           ; Select the float operation.
     OR A
-    JR Z,.ADD
+    JP Z,F24_ADD
     DEC A
-    JR Z,.SUB
+    JP Z,F24_SUB
     DEC A
-    JR Z,.MUL
-    XOR A                   ; The left operand is now tag 0 too.
-    CALL F16_DIV            ; Operation 3 is division.
-    JR .DONE
-.MUL:
-    XOR A
-    CALL F16_MUL
-    JR .DONE
-.SUB:
-    XOR A
-    CALL F16_SUB
-    JR .DONE
-.ADD:
-    XOR A
-    CALL F16_ADD
-.DONE:
-    LD C,0                  ; A binary16 result has byte 2 zero; flags are kept.
-    RET NC
-    JP NUM_FAIL             ; A floating failure also exposes the original left.
+    JP Z,F24_MUL
+    JP F24_DIV
+
+; Replace the integer in the cell at HL by the nearest float.
+.TO_FLOAT:
+    PUSH HL
+    INC HL
+    INC HL
+    INC HL
+    LD A,(HL)
+    POP HL
+    CP 3
+    RET NZ                  ; A float stays as it is.
+    PUSH HL
+    LD E,(HL)
+    INC HL
+    LD D,(HL)
+    INC HL
+    LD C,(HL)
+    EX DE,HL
+    CALL F24_ITOF
+    EX DE,HL
+    POP HL
+    LD (HL),E
+    INC HL
+    LD (HL),D
+    INC HL
+    LD (HL),C
+    INC HL
+    LD (HL),9
+    RET

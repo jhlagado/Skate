@@ -1,8 +1,9 @@
 ; Transport probe, assembled only with PROBE set (see docs/value-contract.md).
 ; Each value consumer calls PROBE on entry with the value in A:CHL.  C is
-; payload byte 2 and may hold anything for an exact integer (tag 3); it
-; must be zero for every other tag.  A mismatch prints "PROBE site caller" in hex, where site is the
-; consumer's entry and caller is the consumer's return address, then corrects
+; payload byte 2 and may hold anything for an exact integer (tag 3) or a
+; float (tag 9); it must be zero for every other tag.  A mismatch prints
+; "PROBE site caller" in hex, where site is the consumer's entry and caller
+; is the consumer's return address, then corrects
 ; C so one missing producer reports once rather than at every consumer.
 ; Every register and flag is preserved.
 PROBE:
@@ -10,7 +11,9 @@ PROBE:
         PUSH HL
         PUSH DE
         CP 3
-        JR Z,.DONE                 ; An integer owns all of byte 2.
+        JR Z,.DONE                 ; An integer or a float owns all of byte 2.
+        CP 9
+        JR Z,.DONE
         LD E,0
         LD A,C
         CP E

@@ -11,7 +11,7 @@ REC_KEEP:
         LD (ST_NEST),A            ; The binding list is at structural depth zero.
         LD (ST_HEAD),A            ; No binding header is awaiting its symbol.
 .SCAN:
-        CALL REC_NEXT              ; Source or enclosing replay; binary16 literals
+        CALL REC_NEXT              ; Source or enclosing replay; float literals
                                    ; are captured as 87H so replay keeps them.
         RET C                      ; Preserve source I/O or syntax failure.
         LD (ST_EVENT),A           ; Save the event while it is copied.
@@ -80,7 +80,8 @@ REC_KEEP:
 
 ; Append one saved event from ST_EVENT/ST_EVTAG/ST_EVVAL/ST_EVEXT.  A record
 ; is the kind, the tag and the payload word, except that an exact integer is
-; recorded as kind 9 with its three payload bytes and the tag implied.
+; recorded as kind 9 and a float as kind 10, each with its three payload
+; bytes and the tag implied.
 REC_PUT:
         LD HL,(ST_PUTP)
         LD DE,W_REPEND
@@ -89,6 +90,8 @@ REC_PUT:
         JP NC,ERR_CAP
         LD HL,(ST_PUTP)
         LD A,(ST_EVENT)
+        CP 87H
+        JR Z,.FLOAT
         CP 7
         JR NZ,.KIND
         LD A,(ST_EVTAG)
@@ -96,6 +99,10 @@ REC_PUT:
         LD A,7
         JR NZ,.KIND
         LD (HL),9                  ; Kind 9: an exact integer with byte 2.
+        JR .WIDE
+.FLOAT:
+        LD (HL),10                 ; Kind 10: a float with byte 2.
+.WIDE:
         INC HL
         LD DE,(ST_EVVAL)
         LD (HL),E

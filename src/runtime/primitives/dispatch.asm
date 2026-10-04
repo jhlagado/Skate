@@ -140,8 +140,10 @@ PRIM_RUN:
 ; Primitive paths use PUSH IX/RET, so one common continuation can retire the
 ; packet after the operation has finished and any constructor GC has returned.
 .RETIRE:
-        CP 3                       ; Integer results carry their own byte 2;
-        JR Z,.WIDE                 ; every other result has byte 2 zero.
+        CP 3                       ; Integer and float results carry their own
+        JR Z,.WIDE                 ; byte 2; every other result has byte 2 zero.
+        CP 9
+        JR Z,.WIDE
         LD C,0
 .WIDE:
         LD (ARG_TAG),A

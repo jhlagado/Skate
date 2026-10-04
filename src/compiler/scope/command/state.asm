@@ -3,7 +3,7 @@
 ST_PC:       DW 0                  ; Staged generated-code cursor.
 ST_PCHI:     DB 0                  ; Top byte of the exclusive output cursor.
 ST_WORD:     DW 0                  ; Temporary word for opcode emission.
-ST_IMMED:     DS 3                 ; Temporary literal payload and byte 2.
+ST_IMMED:     DS 4                 ; Temporary literal payload, byte 2 and tag.
 ST_BYTE:     DB 0                  ; Temporary boolean payload.
 ST_ARITY:    DB 0                  ; Formal-slot high byte during descriptor output.
 ST_FADDR:     DW 0                 ; Staged address retained by EM_FIXUP.

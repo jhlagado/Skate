@@ -532,7 +532,7 @@ STD_FMOD:
         PUSH IX
         RET
 
-; abs for exact integers and binary16 numbers.
+; abs for exact integers and floats.
 STD_ABS:
         LD A,1
         CALL PKT_NARG
@@ -557,8 +557,8 @@ STD_ABS:
         CALL PRIM_NUM              ; Reject the reserved immediates.
         JP C,ERROR
         CALL PKT_ARG0
-        RES 7,H                    ; Clear the binary16 sign bit.
-        XOR A
+        RES 7,C                    ; Clear the float sign; NaN is already positive.
+        LD A,9
         PUSH IX
         RET
 

@@ -1,4 +1,4 @@
-; Decimal token grammar, exact rational normalisation and binary16 packing.
+; Decimal token grammar, exact rational normalisation and float24 packing.
 ; Entry point: DEC_READ.
 DEC_READ: LD A,B            ; A byte count above 255 exceeds the token bound.
         OR A
@@ -22,7 +22,7 @@ DEC_READ: LD A,B            ; A byte count above 255 exceeds the token bound.
         PUSH BC
         LD HL,DEC_WORK
         LD DE,DEC_WORK+1
-        LD BC,100           ; 101 workspace bytes; census test guards this size.
+        LD BC,101           ; 102 workspace bytes.
         LD (HL),0
         LDIR                ; Every call starts with zero limbs and flags.
         POP BC
@@ -60,8 +60,10 @@ DEC_READ: LD A,B            ; A byte count above 255 exceeds the token bound.
         LD DE,DEC_NAN0
         CALL DEC_SAME        ; Compare the remaining spelling with the selected constant.
         JP NZ,DEC_BAD          ; This grammar condition rejects the complete token.
-        LD HL,7E00H
-        XOR A
+        LD HL,8000H         ; The canonical NaN, 7F8000H.
+        LD C,7FH
+        LD A,9
+        OR A
         RET
 ; Validate the entire infinity tail before returning its signed encoding.
 .INF:   LD DE,DEC_INF0
@@ -69,7 +71,7 @@ DEC_READ: LD A,B            ; A byte count above 255 exceeds the token bound.
         JP NZ,DEC_BAD          ; This grammar condition rejects the complete token.
         JP DEC_INF
 ; Read the mantissa, retaining every digit exactly, including those beyond
-; binary16 precision. DEC_FRAC counts digits after the point; DEC_LEN ignores only
+; float precision. DEC_FRAC counts digits after the point; DEC_LEN ignores only
 ; leading zeroes and later gives the decimal order without wide arithmetic.
 .MANTISSA:  LD A,(DEC_LEFT)       ; Recover the remaining token-byte count.
         OR A
@@ -210,20 +212,20 @@ DEC_READ: LD A,B            ; A byte count above 255 exceeds the token bound.
         DEC A
         LD E,A
         ADD HL,DE           ; Decimal order = significant length - 1 + scale.
-        LD DE,6
+        LD DE,20
         OR A
         SBC HL,DE
-        JP P,DEC_INF         ; Order >= 6 is safely above half precision overflow.
+        JP P,DEC_INF         ; Order >= 20 is above the largest float, 1.8E19.
         LD HL,(DEC_TENS)       ; Recover the signed decimal scale.
         LD A,(DEC_LEN)          ; Recover the significant digit count.
         DEC A
         LD E,A
         LD D,0
         ADD HL,DE
-        LD DE,9
+        LD DE,24
         ADD HL,DE
         BIT 7,H             ; ADD HL does not set the sign flag.
-        JP NZ,DEC_ZERO         ; Order < -9 is below the first midpoint.
+        JP NZ,DEC_ZERO         ; Order < -24 is below half the smallest subnormal.
         LD A,1
         LD (DEC_DEN),A          ; Exact rational starts with denominator one.
         LD HL,(DEC_TENS)       ; Recover the signed decimal scale.
@@ -242,7 +244,7 @@ DEC_READ: LD A,B            ; A byte count above 255 exceeds the token bound.
         JR .NORMAL
 ; A negative decimal scale places its power of ten in the denominator.
 .NEGATIVE: XOR A
-        SUB L               ; Relevant negative scales fit in one byte (<=72).
+        SUB L               ; Relevant negative scales fit in one byte (<=88).
         LD (DEC_CNT),A         ; Save the phase-local loop count.
 ; Build that power of ten exactly; DEC_CNT is the remaining multiplication count.
 .DEN_TEN: LD HL,DEC_DEN          ; Select the denominator limbs for the wide operation.
@@ -271,26 +273,28 @@ DEC_READ: LD A,B            ; A byte count above 255 exceeds the token bound.
 .NORM_LO:  CALL DEC_CMP            ; Compare exact numerator with divisor; carry means less.
         JR NC,.QUOTIENT
         LD A,(DEC_EXP2)        ; Recover the signed binary exponent.
-        CP 242              ; Signed byte -14 is the subnormal exponent floor.
+        CP 194              ; Signed byte -62 is the subnormal exponent floor.
         JR Z,.QUOTIENT
         LD HL,DEC_NUM            ; Select the numerator limbs for the wide operation.
         CALL DEC_SHL            ; Double the selected wide integer without rounding.
         LD HL,DEC_EXP2
         DEC (HL)
         JR .NORM_LO
-; With scale fixed, extract eleven quotient bits into a zero-initialized word.
-.QUOTIENT:  LD A,11
+; With scale fixed, extract seventeen quotient bits into zeroed DEC_BITS.
+.QUOTIENT:  LD A,17
         LD (DEC_CNT),A         ; Save the phase-local loop count.
 ; Each step shifts the collected bits, then tests whether the next bit is one.
-.QUO_BIT: LD HL,(DEC_BITS)         ; Recover the collected significand bits.
-        ADD HL,HL           ; Make room for the next exact quotient bit.
-        LD (DEC_BITS),HL         ; Save the collected significand bits.
+.QUO_BIT: LD HL,DEC_BITS          ; Make room for the next exact quotient bit.
+        SLA (HL)
+        INC HL
+        RL (HL)
+        INC HL
+        RL (HL)
         CALL DEC_CMP             ; Compare exact numerator with divisor; carry means less.
         JR C,.QUO_NEXT
         CALL DEC_SUB            ; Remove the divisor for the quotient bit just proved to be one.
-        LD HL,(DEC_BITS)         ; Recover the collected significand bits.
-        INC HL
-        LD (DEC_BITS),HL         ; Save the collected significand bits.
+        LD HL,DEC_BITS           ; The new low bit is one.
+        SET 0,(HL)
 ; Both quotient-bit paths leave the exact remainder in DNUM.
 .QUO_NEXT: LD HL,DEC_CNT
         DEC (HL)
@@ -304,25 +308,27 @@ DEC_READ: LD A,B            ; A byte count above 255 exceeds the token bound.
         CALL DEC_CMP             ; Compare exact numerator with divisor; carry means less.
         JR C,.PACK
         JR NZ,.ROUND_UP
-        LD HL,(DEC_BITS)         ; Recover the collected significand bits.
-        BIT 0,L             ; At an exact midpoint retain an even significand.
+        LD A,(DEC_BITS)          ; At an exact midpoint retain an even significand.
+        BIT 0,A
         JR Z,.PACK
-; Round the significand upward; a carry into bit eleven is handled during packing.
-.ROUND_UP:    LD HL,(DEC_BITS)        ; Recover the collected significand bits.
-        INC HL
-        LD (DEC_BITS),HL         ; Save the collected significand bits.
-; Combine scale and rounded significand, including subnormal promotion and overflow.
-.PACK:  LD A,(DEC_EXP2)           ; Recover the signed binary exponent.
-        ADD A,14            ; Exponent -14 contributes zero, also for subnormals.
-        LD H,A
-        LD L,0
-        ADD HL,HL
-        ADD HL,HL           ; Bias contribution is (binary exponent + 14)*1024.
-        LD DE,(DEC_BITS)
-        ADD HL,DE           ; A rounded carry naturally promotes the exponent.
-        LD DE,7C00H
-        OR A
-        SBC HL,DE
-        JR NC,DEC_INF        ; Round-to-nearest overflow produces signed infinity.
+; Round the significand upward; a carry into bit 17 is handled during packing.
+.ROUND_UP:    LD HL,(DEC_BITS)
+        LD A,(DEC_BITS+2)
+        LD DE,1
         ADD HL,DE
-        JR DEC_SIGN
+        ADC A,0
+        LD (DEC_BITS),HL
+        LD (DEC_BITS+2),A
+; Combine scale and rounded significand: (exponent + 62) * 2^16 + bits, so a
+; normal significand's bit 16 completes the biased exponent, a subnormal at
+; the floor contributes zero, and a rounding carry promotes the exponent.
+.PACK:  LD A,(DEC_EXP2)           ; Recover the signed binary exponent.
+        ADD A,62
+        LD C,A
+        LD A,(DEC_BITS+2)
+        ADD A,C
+        LD C,A
+        CP 7FH
+        JP NC,DEC_INF        ; Round-to-nearest overflow produces signed infinity.
+        LD HL,(DEC_BITS)
+        JP DEC_SIGN

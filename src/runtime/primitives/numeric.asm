@@ -2,42 +2,9 @@
 ; Entry points: PRIM_NUM, PRIM_ALU, .DIVIDE and PRIM_CMP.
 ; Included in runtime order by ../primitives.asm.
 
-; Validate one logical numeric value. Tag three is exact integer; tag zero is
-; binary16 except for the reserved booleans, sentinels and primitive values.
+; Validate one logical numeric value in A:CHL: an exact integer or a float.
 PRIM_NUM:
-        LD (NUM_TAG),A
-        CP 3
-        JR Z,.OK
-        OR A
-        JR NZ,.FAIL
-        LD (NUM_VAL),HL
-        LD HL,(NUM_VAL)
-        LD A,H
-        CP 0FEH
-        JR NZ,.FLOAT
-        LD A,L
-        CP 2
-        JR C,.FAIL
-        CP 5
-        JR C,.FAIL
-        CP 20H
-        JR C,.FLOAT
-        CP PRIM_LIM
-        JR C,.FAIL                ; FE20H upward are reserved primitive values.
-.FLOAT:
-        LD HL,(NUM_VAL)
-        LD A,H
-        CP 0FFH
-        JR Z,.FAIL                ; FFxx is the reserved byte-character range.
-        LD A,(NUM_TAG)
-        CALL NUM_CHK
-        RET
-.OK:
-        OR A
-        RET
-.FAIL:
-        SCF
-        RET
+        JP NUM_CHK
 
 ; Validate every packet value before folding any result.  This preserves the
 ; language rule that a later type error is not hidden by an earlier overflow.
@@ -52,7 +19,8 @@ PKT_NUMS:
         INC HL
         LD D,(HL)                   ; Recover the payload high byte.
         INC HL
-        INC HL                      ; Skip the extension byte.
+        LD C,(HL)                   ; Byte 2.
+        INC HL
         LD A,(HL)
         AND 0FH                     ; Recover the logical value tag.
         INC HL                      ; Step to the next record.
@@ -73,7 +41,7 @@ PRIM_ALU:
         CALL PKT_NUMS               ; Validate the whole packet before arithmetic.
         LD A,(PRIM_ID)
         CP 31
-        JP Z,.DIVIDE                 ; Division always produces a binary16 value.
+        JP Z,.DIVIDE                 ; Division always produces a float.
         CP 3
         JP Z,.IS_ZERO               ; Kind three is the unary zero? predicate.
         CP 0
@@ -82,15 +50,15 @@ PRIM_ALU:
         JP Z,.MINUS                 ; Use an absolute branch for the later subtraction block.
         JP .TIMES                   ; The division block makes the old short jump too far.
 
-; Fold division from the binary16 value one.  This gives unary reciprocal
-; semantics and keeps every integer/integer result in the inexact domain.
+; Fold division from the float one.  This gives unary reciprocal semantics
+; and keeps every integer/integer result in the inexact domain.
 .DIVIDE:
         LD A,(ARG_CNT)               ; Read the number of operands in the packet.
         OR A                         ; Division has no identity for an empty call.
         JP Z,ERROR                   ; Report the invalid zero-argument form.
         CP 1                          ; A unary call computes the reciprocal of its value.
         JR Z,.DIV_ONE                ; Keep the one accumulator identity for that case.
-        LD HL,ARG_PKT                 ; Read the first operand as the binary16 dividend.
+        LD HL,ARG_PKT                 ; Read the first operand as the dividend.
         CALL PKT_VAL                  ; Recover its payload and logical tag.
         LD (NUM_ACC),HL               ; The first operand starts a left fold.
         LD (NUM_ATAG),A               ; Preserve its exact or inexact representation.
@@ -104,10 +72,11 @@ PRIM_ALU:
         JR .DIV_LOOP                  ; Fold the remaining operands from left to right.
 .DIV_ONE:
         LD (NUM_LEFT),A               ; Unary division consumes its sole operand below.
-        XOR A                         ; Tag zero identifies the binary16 accumulator.
-        LD (NUM_ATAG),A              ; Start with an inexact result representation.
+        LD A,9                        ; The accumulator starts as the float 1.0,
+        LD (NUM_ATAG),A
+        LD A,3FH                      ; 3F0000H.
         LD (NUM_AEXT),A
-        LD HL,3C00H                  ; Binary16 1.0 is the left-fold identity.
+        LD HL,0
         LD (NUM_ACC),HL              ; Store the initial reciprocal accumulator.
         LD HL,ARG_PKT                ; Begin at the first packed argument.
         LD (NUM_PTR),HL              ; Keep the packet cursor across NUM_DIV.
@@ -122,7 +91,7 @@ PRIM_ALU:
         LD A,(NUM_ATAG)              ; Put the accumulator tag in the ABI's A register.
         CALL NUM_DIV                 ; Divide the accumulator by the next operand.
         JP C,ERROR                   ; Reject a bad operand or invalid result.
-        LD (NUM_ACC),HL              ; Save the binary16 quotient payload.
+        LD (NUM_ACC),HL              ; Save the quotient payload.
         LD (NUM_ATAG),A              ; Save its successful result tag.
         LD A,C
         LD (NUM_AEXT),A
@@ -134,7 +103,7 @@ PRIM_ALU:
         DEC A                        ; One operand has now been folded.
         LD (NUM_LEFT),A              ; Publish the updated count.
         JR NZ,.DIV_LOOP              ; Continue until every operand is consumed.
-        JP .RESULT                   ; Return the accumulated binary16 result.
+        JP .RESULT                   ; Return the accumulated float.
 .PLUS:
         LD A,3                      ; Exact integer zero is the empty-sum identity.
         LD (NUM_ATAG),A
@@ -225,7 +194,7 @@ PRIM_ALU:
         PUSH IX
         RET
 
-; zero? accepts exact integers and both signed binary16 zero encodings.
+; zero? accepts exact integers and both signed float zeros.
 .IS_ZERO:
         LD A,(ARG_CNT)
         CP 1
@@ -239,12 +208,13 @@ PRIM_ALU:
         LD A,(NUM_TAG)
         CALL PRIM_NUM                ; Reject booleans, characters and other sentinels.
         JP C,ERROR                   ; zero? reports a type error for non-numbers.
-        LD A,(NUM_TAG)               ; Select the exact integer or binary16 zero test.
+        LD A,(NUM_TAG)               ; Select the exact integer or float zero test.
         CP 3
-        JR Z,.ZERO_INT               ; Exact zero is the all-zero signed word.
-        LD HL,(NUM_VAL)              ; Binary16 zero ignores only its sign bit.
-        LD A,H
-        AND 7FH                       ; Discard the sign while retaining exponent/fraction.
+        JR Z,.ZERO_INT               ; Exact zero has every payload byte clear.
+        LD HL,(NUM_VAL)              ; A float zero ignores only its sign bit.
+        LD A,(NUM_VEXT)
+        AND 7FH
+        OR H
         OR L
         JP Z,PKT_YES                 ; Both +0.0 and -0.0 compare as zero.
         JP PKT_NO                    ; Every other finite or special number is nonzero.

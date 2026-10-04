@@ -15,6 +15,7 @@ QUO_DOT   EQU 3
 QUO_IMM   EQU 4
 QUO_BYTE  EQU 5
 QUO_INT   EQU 8
+QUO_FLT   EQU 9
 
 ; Compile the explicit (quote datum) form.
 QUO_FORM:
@@ -114,7 +115,7 @@ QUO_NEST:
 QUO_DATA:
         CP 7                       ; Exact integers and booleans are immediate.
         JR Z,.NUMBER
-        CP 87H                     ; Binary16 numeric events retain their marker in replay.
+        CP 87H                     ; Float events retain their marker in replay.
         JR Z,.FLOAT
         CP 5                       ; A symbol is copied as an immutable literal.
         JP Z,.SYMBOL
@@ -135,8 +136,10 @@ QUO_DATA:
         OR A
         JP Z,EM_FLOAT
         LD (ST_IMMED),HL
-        LD C,0                     ; Binary16 values use tag zero.
-        JR .WIDE
+        LD A,C
+        LD (ST_IMMED+2),A
+        LD A,QUO_FLT               ; Code 9: a float with three payload bytes.
+        JR .THREE
 
 ; Encode a reader scalar: code 5 for a byte-sized exact integer, code 8 for
 ; a wider one, otherwise code 4 with its payload and tag.
@@ -167,6 +170,7 @@ QUO_DATA:
         JP SINK_PUT
 .INT:
         LD A,QUO_INT
+.THREE:
         CALL SINK_PUT
         RET C
         LD HL,(ST_IMMED)

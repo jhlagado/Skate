@@ -609,7 +609,7 @@ const integerCases = [
 ];
 // Twenty-four-bit exact integers: both endpoints, products and quotients at
 // the bounds, printing, identity and equality, quoted and vector storage,
-// case dispatch and mixed comparison with binary16 values.
+// case dispatch and mixed comparison with floats.
 const int24Case = [
   "INT24.SK8",
   `(begin
@@ -637,7 +637,7 @@ const int24Case = [
     (write (case 70000 ((70000) 1) (else 2))) (newline)
     (write (equal? (list 70000) (list 70000))) (newline)
     (write (member 70000 (quote (1 70000 3)))) (newline)
-    (write (+ 65536 0.5)) (newline)
+    (write (+ 32768 0.5)) (write (+ 65536 0.5)) (newline)
     (write (< 40000 50000.0)) (newline)
     (write (= 32768 32768.0)) (newline)
     (write (> 65505 65504.0)) (newline))`,
@@ -666,7 +666,7 @@ const int24Case = [
     "1",
     "#t",
     "(70000 3)",
-    "+inf.0",
+    "32768.565536.0",
     "#t",
     "#t",
     "#t",

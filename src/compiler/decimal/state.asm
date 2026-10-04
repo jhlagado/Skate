@@ -19,7 +19,7 @@ DEC_EXP:   DW 0                 ; Exponent magnitude, saturated at 1000.
 DEC_TENS: DW 0                ; Signed decimal exponent minus fractional digits.
 DEC_EXP2:  DB 0               ; Signed normalized binary exponent, floor -14.
 DEC_CNT: DB 0                 ; Phase-local scaling or quotient loop count.
-DEC_BITS:   DW 0                ; Eleven extracted significand bits before rounding.
+DEC_BITS:   DS 3                ; Seventeen extracted significand bits before rounding.
 DEC_NUM:   DS 40                ; Exact numerator, then division remainder.
 DEC_DEN:   DS 40                ; Exact denominator, then normalized divisor.
 .WORK_END:

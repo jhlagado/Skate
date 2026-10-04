@@ -105,7 +105,7 @@ CP/M source stream
     │
     ├─ bytes, positions and CR/LF handling
     ├─ lexical tokens and literals
-    ├─ decimal and binary16 conversion
+    ├─ decimal and float24 conversion
     └─ symbols and reader events
     │
     ▼
@@ -168,7 +168,7 @@ unless they start with `src/runtime/`.
 | `cpm-transport.asm` | CP/M binary record transport for compiler stages; the runtime image also includes it for file ports |
 | `src/runtime/loader.asm` | Load the checked `SKATE.RT` runtime into the staged output image; part of the compiler, not the runtime image |
 | `lexer.asm` and `lexer/` | Classify characters and produce tokens |
-| `decimal.asm` and `decimal/` | Parse exact integers and binary16 literals |
+| `decimal.asm` and `decimal/` | Parse exact integers and float24 literals |
 | `interner.asm` | Keep permanent symbol and string identities |
 | `reader.asm` | Turn tokens into structural datum events |
 
@@ -196,9 +196,9 @@ native compiler. The table follows its include order; paths are relative to
 | `output.asm` and `output/state.asm` | Value printing, port output and shared runtime state |
 | `roots.asm` and `roots/` | Root scanning, managed roots and binding roots |
 | `data.asm` and `data/` | Quoted data, the collector, the data writer and collector state |
-| `float.asm` | Binary16 value printing |
+| `float.asm` | Exact decimal printing of floats |
 | `storage/slabs.asm` | Closure pages within the runtime pool |
-| `binary16.asm` and `binary16/` | Binary16 classification, arithmetic, packing, comparison and conversion |
+| `float24.asm` and `float24/` | Float24 classification, arithmetic, rounding, comparison and conversion |
 | `numeric.asm` and `numeric/` | Exact arithmetic, division, conversion and comparison |
 | `strings.asm`, `managed-strings.asm` and `strings/` | String and character primitives and managed string storage |
 | `vectors.asm` and `vectors/` | Vector operations, storage and tracing |
@@ -280,7 +280,7 @@ live in `io-state.asm`; the exit and error paths close a file only when
 
 Literal parsing is in `lexer.asm` and `decimal.asm`. Literal and call emission
 is in `scope/emitter.asm`. The runtime primitive dispatches to `numeric.asm`
-and `binary16.asm`. `float.asm` handles the associated floating-point support.
+and `float24.asm`. `float.asm` prints floats.
 
 ### Lambdas, closures and tail calls
 
@@ -354,7 +354,7 @@ proofs; `deno task test:all` runs both plus `test:cpm:stress`.
 | `deno task test:cpm:console` | Standard and file ports, datum input and source I/O helpers |
 | `deno task test:cpm:examples` | The terminal demo with its included library and the house adventure |
 | `deno task test:cpm:generated-effects` | Provider-facing generated effect bytes |
-| `deno task test:cpm:float` | Binary16 literals, arithmetic and printing |
+| `deno task test:cpm:float` | Float literals, arithmetic and printing |
 | `deno task test:cpm:includes` | Nested, import-once, cyclic, missing and bounded include trees |
 | `deno task test:cpm:release` | Release disk, examples and publication checks |
 | `deno task test:cpm:recovery` | Replacement failure and preservation of prior output |

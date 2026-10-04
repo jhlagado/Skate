@@ -113,7 +113,7 @@ tag values, 0 through 8. They are not nine entirely separate language types:
 
 | Tag | Current meaning |
 | ---: | --- |
-| 0 | Scalar values: binary16 numbers, booleans, characters, sentinels and primitive values |
+| 0 | Scalar values: booleans, characters, sentinels and primitive values (floats are tag 9 since the float24 change) |
 | 1 | Pair |
 | 2 | Closure |
 | 3 | Exact integer |
@@ -241,9 +241,8 @@ experiment.
 
 With four tag bits, the reserved extension byte gives a clean future
 twenty-four-bit payload while preserving the current nine tag values. That is
-the first widening path to evaluate. Binary16 values can remain sixteen-bit
-values in the low payload; wider exact integers or another numeric format
-would be separate representation work and are outside this experiment.
+the first widening path to evaluate. It has since been taken: see
+[value-contract.md](value-contract.md) and [float24.md](float24.md).
 
 A twenty-six-bit payload would require four tag bits and two cell-resident flag
 bits (26 + 4 + 2 = 32). A twenty-seven-bit payload would require four tag bits

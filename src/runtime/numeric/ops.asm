@@ -1,7 +1,7 @@
 ; Numeric dispatch and exact arithmetic.
 ; Entry points: NUM_CHK, NUM_ADD, NUM_SUB, NUM_MUL, NUM_DIV, NUM_INV,
 ; NUM_TEXT and the NUM_I* helpers.  Validates tagged values, selects
-; binary16 paths, and checks exact results.
+; float24 paths, and checks exact results.
 ;
 ; Binary ABI: the left value is in A:CHL and the right value is the cell at
 ; NUM_Y (payload, byte 2, tag).  A result returns in A:CHL with carry clear.
@@ -9,12 +9,13 @@
 ; value in CHL: 1 for a nonnumber, 2 for an unrepresentable exact result and
 ; 3 for division by zero.  Exact integers are signed twenty-four-bit values.
 
-; Validate A/HL without changing HL. Integer payloads need no bit check.
+; Validate A:CHL as a number without changing it: an exact integer (tag 3)
+; or a float (tag 9).  A keeps the tag on success.
 NUM_CHK:
     CP 3                    ; Tag 3 accepts every signed integer payload.
-    JP NZ,F16_CHK           ; Other tags use the binary16 scalar checks.
+    JP NZ,F24_CHK           ; Floats need their encoding checked.
     OR A                    ; Preserve the integer tag and clear failure carry.
-    RET                     ; HL still contains the original payload.
+    RET
 
 NUM_ADD:
     LD B,0                  ; Operation 0 selects addition.

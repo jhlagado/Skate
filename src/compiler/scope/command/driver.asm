@@ -307,7 +307,7 @@ CMD_PASS:
 CMD_EXPR:
         CP 7                       ; Numeric events use the scalar payload contract.
         JR Z,CMD_NUM               ; Emit an exact integer literal.
-        CP 87H                     ; Binary16 source numerics carry a replay marker.
+        CP 87H                     ; Float source literals carry a replay marker.
         JP Z,EM_FLOAT              ; Emit their tag-zero payload unchanged.
         CP 5                       ; Symbol events carry an interned reference.
         JR Z,CMD_REF               ; Resolve a local or package-global slot.

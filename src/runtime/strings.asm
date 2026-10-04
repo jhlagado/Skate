@@ -110,7 +110,7 @@ STR_PRIM:
         LD HL,ARG_PKT
         CALL PKT_VAL
         CP 3
-        JP NZ,ERROR                 ; Binary16 values are not exact characters.
+        JP NZ,ERROR                 ; Floats are not exact characters.
         LD A,C
         OR H
         JP NZ,ERROR                 ; Accept only integers from zero through 255.

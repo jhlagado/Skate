@@ -45,15 +45,17 @@ DEC_INT: LD HL,DEC_NUM+3
         RET
 ; Underflow and an all-zero mantissa share the signed floating-zero result.
 DEC_ZERO:  LD HL,0
+        LD C,L
         JR DEC_SIGN
 ; Overflow and an explicit infinity spelling share the signed infinity result.
-DEC_INF: LD HL,7C00H
-; Apply the saved sign to a nonnegative IEEE encoding and return floating tag zero.
+DEC_INF: LD HL,0
+        LD C,7FH
+; Apply the saved sign to the float24 encoding C:HL and return tag 9.
 DEC_SIGN:  LD A,(DEC_NEG)           ; Recover the saved number sign bit.
-        OR H
-        LD H,A
-        XOR A               ; Floating tag zero and success carry clear.
-        LD C,A              ; A float's byte 2 is zero.
+        OR C
+        LD C,A
+        LD A,9              ; Float tag nine and success carry clear.
+        OR A
         RET
 ; Reject malformed grammar without publishing a numeric value.
 DEC_BAD:  LD A,128

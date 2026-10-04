@@ -79,7 +79,7 @@ RD_NEXT:
     LD A,C
     LD (RD_EXT),A           ; Keep byte 2 while the datum completes.
     LD A,B
-    OR A                    ; The decimal parser uses tag zero for binary16 values.
+    CP 9                    ; The decimal parser uses tag nine for floats.
     JR NZ,.SCALAR           ; Tag three remains an ordinary exact integer event.
     LD A,1                  ; Mark this source event as an inexact numeric token.
     LD (RD_FLOAT),A         ; The scope compiler preserves this bit through replay.
@@ -249,6 +249,6 @@ RD_READY: DB 0              ; One after RD_INIT.
 RD_EVENT: DB 0              ; Current lexical/public event across helper calls.
 RD_TAG: DB 0                ; Logical tag for the most recent atomic result.
 RD_EXT: DB 0                ; Byte 2 of the most recent exact integer.
-RD_FLOAT: DB 0              ; One while the current source event is a binary16 literal.
+RD_FLOAT: DB 0              ; One while the current source event is a float literal.
 RD_STACK: DS 64               ; One state byte per outstanding list or quote.
 .WORK_END:                  ; Exclusive end of fixed reader workspace.

@@ -17,6 +17,8 @@ WR_VALUE:
         JP C,ERROR
         JP WR_STR
 .OTHER:
+        CP 9                       ; Floats use the float printer.
+        JP Z,FLT_EMIT
         OR A                       ; Tag zero holds the scalar family below.
         JR Z,.SCALAR
         CP 2                       ; Closures print as opaque procedures.
@@ -35,7 +37,7 @@ WR_VALUE:
         CP 0FFH
         JP Z,WR_CHAR
         CP 0FEH                    ; FExx holds reserved singletons and primitives.
-        JR NZ,WR_FLOAT
+        JR NZ,.UNKNOWN
         LD A,L                     ; FE00..FE04 have fixed spellings.
         LD DE,WR_FALSE             ; FE00 is #f.
         OR A
@@ -54,16 +56,11 @@ WR_VALUE:
         JR Z,WR_SEND
 .PROC:
         LD DE,WR_PROC              ; Primitives, closures and escapes share this.
+        JR WR_SEND
+.UNKNOWN:
+        LD DE,WR_FALSE             ; No other tag-zero value exists.
 WR_SEND:
         JP OUT_TEXT                ; Send the spelling through the output adapter.
-WR_FLOAT:
-        PUSH HL                    ; Keep the payload across classification.
-        XOR A                      ; Classify it as a binary16 scalar.
-        CALL NUM_CHK
-        POP HL
-        JP NC,FLT_EMIT             ; Valid binary16 values use the float printer.
-        LD DE,WR_FALSE             ; Keep the established fallback spelling.
-        JR WR_SEND
 
 ; Print a character raw for display, or in write mode as #\c, #\space,
 ; #\newline or #\xHH so the datum reader accepts the spelling again.

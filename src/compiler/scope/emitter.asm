@@ -51,16 +51,20 @@ EM_INT:
         LD (ST_IMMED),HL          ; Preserve the literal while writing opcodes.
         LD A,C
         LD (ST_IMMED+2),A
+        LD A,3
+; Emit LD HL,nn / LD A,tag / LD C,n for the number in ST_IMMED, tag in A.
+EM_NUM:
+        LD (ST_IMMED+3),A
         LD A,21H                  ; LD HL,nn loads the result payload.
         CALL SINK_PUT               ; Append the load opcode.
         RET C                     ; Preserve a staged-output capacity failure.
         LD HL,(ST_IMMED)          ; Recover the literal payload.
         CALL EM_WORD              ; Append the payload word.
         RET C                     ; Preserve a staged-output capacity failure.
-        LD A,3EH                  ; LD A,3 selects the exact-integer tag.
+        LD A,3EH                  ; LD A,n selects the tag.
         CALL SINK_PUT               ; Append the tag-load opcode.
         RET C                     ; Preserve a staged-output capacity failure.
-        LD A,3                    ; The generated value is an exact integer.
+        LD A,(ST_IMMED+3)
         CALL SINK_PUT               ; Append the tag.
         RET C
         LD A,0EH                  ; LD C,n: the literal's byte 2.
@@ -77,16 +81,13 @@ EM_ZERO:
         LD A,4FH                  ; LD C,A: so is byte 2.
         JP SINK_PUT
 
-; Emit a binary16 literal whose payload is already in HL.
+; Emit a float literal in C:HL: LD HL,fraction / LD A,9 / LD C,sign-exponent.
 EM_FLOAT:
-        LD (ST_IMMED),HL          ; Preserve the inexact payload during opcode emission.
-        LD A,21H                  ; LD HL,nn loads the binary16 payload.
-        CALL SINK_PUT                ; Append the payload-load opcode.
-        RET C                     ; Preserve a staged-output capacity failure.
-        LD HL,(ST_IMMED)          ; Recover the binary16 payload.
-        CALL EM_WORD               ; Append the payload in little-endian order.
-        RET C                     ; Preserve a staged-output capacity failure.
-        JP EM_ZERO
+        LD (ST_IMMED),HL
+        LD A,C
+        LD (ST_IMMED+2),A
+        LD A,9
+        JR EM_NUM
 
 ; Emit an unbound predefined procedure as a reserved immediate value.
 ; A contains its one-based primitive kind; the runtime subtracts $20 from the
@@ -114,7 +115,7 @@ EM_PRIM:
         JP EM_CALL
 
 ; Emit #f or #t.  Booleans use the reserved FE00/FE01 scalar payloads so
-; every other tag-zero payload remains available to binary16 numbers.
+; the other tag-zero payloads stay reserved for characters and singletons.
 EM_BOOL:
         LD (ST_BYTE),A            ; Preserve the reader's zero-or-one value.
         LD A,21H                  ; Load the boolean payload into HL.

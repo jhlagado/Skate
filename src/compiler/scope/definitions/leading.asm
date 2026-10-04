@@ -87,7 +87,7 @@ DEF_LEAD:
         LD (ST_RMODE),A
         LD (ST_RINIT),A
 .FORM:
-        CALL REC_NEXT              ; Read the next body form, marking binary16 literals.
+        CALL REC_NEXT              ; Read the next body form, marking float literals.
         JP C,.FAIL
         CALL DEF_PUT
         JP C,.FAIL

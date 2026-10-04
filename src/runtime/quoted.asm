@@ -19,6 +19,7 @@
 ;     06 lo hi           a symbol literal
 ;     07 lo hi           a string literal
 ;     08 lo hi ext       an exact integer with three payload bytes
+;     09 lo hi ext       a float with three payload bytes
 
 QUO_LIST  EQU 1
 QUO_END   EQU 2
@@ -26,6 +27,7 @@ QUO_DOT   EQU 3
 QUO_IMM   EQU 4
 QUO_BYTE  EQU 5
 QUO_INT   EQU 8
+QUO_FLT   EQU 9
 
 QT_BUILD:
         POP HL                     ; The cache word follows the CALL.
@@ -63,6 +65,8 @@ QT_BUILD:
         JR Z,.IMM
         CP QUO_INT
         JR Z,.INT
+        CP QUO_FLT
+        JR Z,.FLT
         SUB 2                      ; Codes 6 and 7 are tags 4 and 5.
         LD E,(HL)
         INC HL
@@ -92,7 +96,12 @@ QT_BUILD:
         EX DE,HL
         LD C,0
         RET
+.FLT:
+        LD A,9
+        JR .WIDE
 .INT:
+        LD A,3
+.WIDE:
         LD E,(HL)
         INC HL
         LD D,(HL)
@@ -101,7 +110,6 @@ QT_BUILD:
         INC HL
         LD (.PTR),HL
         EX DE,HL
-        LD A,3
         RET
 .LIST:
         LD B,0                     ; Elements pushed so far.
