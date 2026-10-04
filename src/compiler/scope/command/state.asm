@@ -3,7 +3,7 @@
 ST_PC:       DW 0                  ; Staged generated-code cursor.
 ST_PCHI:     DB 0                  ; Top byte of the exclusive output cursor.
 ST_WORD:     DW 0                  ; Temporary word for opcode emission.
-ST_IMMED:     DW 0                 ; Temporary literal payload.
+ST_IMMED:     DS 3                 ; Temporary literal payload and byte 2.
 ST_BYTE:     DB 0                  ; Temporary boolean payload.
 ST_ARITY:    DB 0                  ; Formal-slot high byte during descriptor output.
 ST_FADDR:     DW 0                 ; Staged address retained by EM_FIXUP.
@@ -112,6 +112,7 @@ ST_LETLO:   DB 0                   ; Active-binding base saved when a let opens.
 ST_EVENT:      DB 0                ; Current body-frame event kind.
 ST_EVTAG:     DB 0                 ; Current body-frame scalar tag.
 ST_EVVAL:     DW 0                 ; Current body-frame payload.
+ST_EVEXT:     DB 0                 ; Current body-frame payload byte 2.
 ST_TAILS:     DB 0                 ; Number of tail-call target words in this body.
 ST_MARK:    DB 0                   ; Start of the current expression's tail records.
 ST_TAILP:     DW 0                 ; Tail-call patch address during table writes.

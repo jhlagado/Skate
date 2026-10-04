@@ -1,8 +1,9 @@
 # Value contract
 
-> **Status:** steps 1 and 2 are done. Every container uses the target cell,
-> and every value travels as `A:CHL` with byte 2 in `C`, as set out in
-> [Transport](#transport). Integers are still sixteen-bit; step 3 is next.
+> **Status:** steps 1 to 3 are done. Every container uses the target cell,
+> every value travels as `A:CHL` with byte 2 in `C`, as set out in
+> [Transport](#transport), and exact integers are twenty-four-bit. Step 4,
+> the twenty-four-bit float, is next.
 
 Skate is moving from sixteen-bit to twenty-four-bit payloads. The wider payload
 replaces the sixteen-bit one everywhere: exact integers become twenty-four-bit
@@ -78,9 +79,9 @@ payload space to keep immediates apart from float encodings.
 
 ## Payload rules
 
-* **Exact integers** use the full twenty-four bits as a two's-complement value.
-  Until the integer step, every integer is in sixteen-bit range and byte 2
-  is its sign extension.
+* **Exact integers** use the full twenty-four bits as a two's-complement
+  value, -8,388,608 to 8,388,607. Overflow is a runtime error, as it was at
+  sixteen bits.
 * **Floats** use 1 sign bit, 7 exponent bits and 16 fraction bits. The
   sixteen-bit fraction keeps the multiplication and division loops
   byte-aligned and gives seventeen bits of precision. The encodings of zero,
@@ -93,8 +94,7 @@ payload space to keep immediates apart from float encodings.
 * **Immediates** (tag 0) keep their current sixteen-bit encodings with byte 2
   zero.
 
-Until the integer step, every routine may assume byte 2 is zero or the sign
-extension of an exact integer, and must preserve it when it copies a value.
+Every routine that copies a value copies byte 2 with it.
 
 ## Transport
 
@@ -131,10 +131,9 @@ freely unless its own header says it keeps them.
 3. **Every consumer copies `C`.** Storing a value writes `C` to byte 2;
    pushing one pushes it. Nothing writes a constant zero to byte 2 of a value
    it was given.
-4. **What `C` holds:** for an exact integer, the sign extension of `H` until
-   the integer step and the top payload byte after it; for every other tag,
-   zero (the reserved bank byte for pointers). The debug check below enforces
-   exactly this during step 2.
+4. **What `C` holds:** for an exact integer, payload bits 16–23; for every
+   other tag, zero (the reserved bank byte for pointers). The debug check
+   below enforces the zero.
 
 ### Native stack
 
@@ -226,7 +225,8 @@ Each switch regenerates the runtime tables. With the probe on, every value
 consumer calls `PROBE` on entry: `ARG_PUSH`, `ROOT_ADD`, `RT_STORE` (and so
 `G_STORE` and `RT_SET`), `HEAP_PUT`, `HEAP_SET`, `SLOT_PUT`, `SLOT_SET`,
 `OPS_PUSH`, `QT_PUSH`, and `PAIR_NEW` for both constructor inputs. It checks
-`C` against rule 4 for the tag in `A` and payload in `HL`. A mismatch prints
+`C` against rule 4 for the tag in `A` (an integer's `C` is never wrong). A
+mismatch prints
 `PROBE site caller` (the consumer's entry and its return address, in hex) on
 the console, which fails the proof's output check, then continues with the
 corrected byte so one missing producer reports once per site.
@@ -238,18 +238,25 @@ full-image proof fail by design; every other group must pass with no
 not set `C` (the primitive operator push in `PRIM_OP`/`PRIM_TL` and the rest
 list store in `REST_ARG`), and the whole CP/M suite was then silent.
 
-### Sixteen-bit stand-ins for step 3
+### Numeric ABI
 
-Step 2 sets byte 2 from the sixteen-bit result in a few places with
-`RT_WIDEN`, which step 3 must replace with real twenty-four-bit results:
+The binary numeric routines (`NUM_ADD`, `NUM_SUB`, `NUM_MUL`, `NUM_DIV`,
+`NUM_CMP`, `NUM_QUOT`, `NUM_REM`) take the left value in `A:CHL` and the
+right value as a four-byte cell at `NUM_Y` (payload, byte 2, tag; the tag
+byte may carry a packet's flag nibble, which `NUM_LOAD` masks). A packet
+record is copied there with one `LDIR`. Results return in `A:CHL`; on
+failure carry is set, `A` is the error code and `CHL` the original left
+value. `equal?` (`STD_DEEP`) takes its right value the same way, in `STD_R`.
 
-* the primitive dispatcher's retire point (`PRIM_RUN`), for every primitive
-  result;
-* the inline arithmetic helpers (`RT_ADD`, `RT_SUB`, `RT_MUL`);
-* quoted-data decoding (`QT_BUILD`) and the datum reader's value stack.
+Where a value is produced by a routine that does not know its tag, the
+boundary normalises `C`: the primitive dispatcher's retire point and the
+datum reader's `DR_PUSH` and `DR_DONE` clear `C` for every tag but 3.
 
-Step 3 also widens rule 4 for integers in the probe, and `STD_CASE` (the
-`case` key comparison) must compare byte 2 once integers use it.
+Where the compiler handles an integer literal, byte 2 travels in `C` from
+`DEC_INT` through `RD_NEXT` (`RD_EXT`) and the emitter (`ST_IMMED+2`), and a
+replay record for an exact integer is kind 9 with the three payload bytes
+and the tag implied. Quoted data encodes an integer outside 0–255 as code 8
+with three payload bytes.
 
 ## Migration steps
 
@@ -262,7 +269,7 @@ Each step keeps every existing proof passing with unchanged results.
 2. **Done. Three-byte transport.** Carry byte 2 through registers, the native stack,
    packets, slots and the collector, still always zero or a sign extension,
    as set out in [Transport](#transport), with the debug check.
-3. **Twenty-four-bit exact integers.** Literals, arithmetic, division,
+3. **Done. Twenty-four-bit exact integers.** Literals, arithmetic, division,
    comparison, printing and conversions.
 4. **Twenty-four-bit float.** Replace binary16 in one change: classification,
    packing, arithmetic, comparison, conversion, literals and printing. The

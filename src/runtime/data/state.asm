@@ -100,7 +100,6 @@ GC_LIMIT:   DW 0
 GC_QPAIR:  DW 0
 .TAG:  DB 0
 .WR_PTR:   DW 0
-WR_SEEN:  DB 0
 WR_MODE: DB 0                     ; Zero displays contents; one writes readable syntax.
 
 ; Pair-class table and scan cursors.  Each entry is a page-aligned slab base.

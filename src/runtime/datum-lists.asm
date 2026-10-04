@@ -9,6 +9,12 @@
 DR_PUSH:
         LD (DR_TAG),A               ; Save the tag while checking the cursor.
         LD (DR_VAL),HL             ; Save the payload beside it.
+        CP 3                        ; Only an exact integer owns byte 2.
+        JR Z,.WIDE
+        LD C,0
+.WIDE:
+        LD A,C
+        LD (DR_EXT),A
         LD A,(DR_SLOTS)             ; The aggregate construction limit is 64 values.
         CP 64
         JP NC,ERROR
@@ -28,12 +34,8 @@ DR_PUSH:
         INC HL
         LD (HL),D
         INC HL
-        PUSH HL
-        LD A,(DR_TAG)
-        EX DE,HL
-        CALL RT_WIDEN               ; Reader values are sixteen-bit for now.
-        POP HL
-        LD (HL),C                   ; Byte 2.
+        LD A,(DR_EXT)
+        LD (HL),A                   ; Byte 2.
         INC HL
         LD A,(DR_TAG)
         LD (HL),A

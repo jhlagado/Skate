@@ -57,8 +57,8 @@ VEC_PRIM:
         CALL PKT_VAL               ; Return its payload in HL and tag in A.
         CP 3                       ; The length must be an exact integer.
         JP NZ,ERROR
-        LD A,H                     ; Only a small nonnegative count is supported.
-        OR A
+        LD A,C                     ; Only a small nonnegative count is supported.
+        OR H
         JP NZ,ERROR
         LD A,L                     ; Preserve the checked count for allocation.
         CP 65                      ; Class 64 is the largest supported vector.
@@ -111,6 +111,7 @@ VEC_PRIM:
         LD A,(VEC_LEN)             ; Widen its count into an exact integer value.
         LD L,A
         LD H,0
+        LD C,H
         LD A,3                      ; Exact integers use logical tag three.
         PUSH IX                    ; Retire the packet through the common cleanup.
         RET                        ; Deliver the length result.
@@ -189,8 +190,8 @@ VEC_BAD:
 VEC_IDX:
         CP 3                       ; Index values must be exact integers.
         JR NZ,VEC_BAD
-        LD A,H                     ; Negative and wide indexes are out of range.
-        OR A
+        LD A,C                     ; Negative and wide indexes are out of range.
+        OR H
         JR NZ,VEC_BAD
         LD A,L                     ; Compare the low byte with the vector count.
         LD A,(VEC_LEN)

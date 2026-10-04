@@ -23,8 +23,11 @@ CMD_BODY:
         PUSH AF                    ; Frame word two: previous body tail flag.
         LD A,(ST_EVENT)            ; Preserve the previous current event.
         PUSH AF                    ; Frame word one: previous event kind.
-        LD A,(ST_EVTAG)            ; Preserve the previous current tag.
-        PUSH AF                    ; Frame word zero: previous scalar tag.
+        LD A,(ST_EVTAG)            ; Preserve the previous current tag
+        LD H,A                     ; beside its payload byte 2.
+        LD A,(ST_EVEXT)
+        LD L,A
+        PUSH HL                    ; Frame word zero: previous scalar tag and byte 2.
         LD HL,(ST_EVVAL)           ; Preserve the previous current payload.
         PUSH HL                    ; Body payload completes the saved frame.
         LD A,(ST_RBASE)            ; Preserve any enclosing recursive slot range.
@@ -85,6 +88,8 @@ CMD_BODY:
 .NO_EOF:
         LD (ST_EVENT),A            ; Preserve the event until CMD_EXPR dispatches it.
         LD (ST_EVVAL),HL           ; Preserve the event payload.
+        LD A,C
+        LD (ST_EVEXT),A            ; Preserve an integer's byte 2.
         LD A,(RD_TAG)              ; Preserve its scalar tag.
         LD (ST_EVTAG),A            ; Structural events ignore this field.
 .EXPR:
@@ -96,6 +101,8 @@ CMD_BODY:
         LD (ST_TAIL),A             ; Tail candidates use a wrapper until finality is known.
         LD A,(ST_EVTAG)            ; Restore the event's reader tag.
         LD (RD_TAG),A
+        LD A,(ST_EVEXT)            ; Restore its byte 2.
+        LD C,A
         LD A,(ST_EVENT)            ; Restore the event kind for CMD_EXPR.
         LD HL,(ST_EVVAL)           ; Restore its payload for CMD_EXPR.
         CALL CMD_EXPR              ; Compile this complete expression immediately.
@@ -124,6 +131,8 @@ CMD_BODY:
 .MORE:
         LD (ST_EVENT),A            ; Save the next expression while rewriting candidates.
         LD (ST_EVVAL),HL           ; Preserve its payload across EM_PLAIN.
+        LD A,C
+        LD (ST_EVEXT),A            ; Preserve an integer's byte 2.
         LD A,(RD_TAG)              ; Preserve its logical scalar tag.
         LD (ST_EVTAG),A
         CALL EM_PLAIN              ; Non-final tail calls become ordinary calls.
@@ -171,8 +180,11 @@ CMD_BODY:
         LD (ST_RBASE),A
         POP HL                     ; Restore the previous body payload.
         LD (ST_EVVAL),HL           ; Publish it before returning to the caller.
-        POP AF                     ; Restore the previous scalar tag.
-        LD (ST_EVTAG),A            ; Preserve it for another nested body.
+        POP HL                     ; Restore the previous scalar tag and byte 2.
+        LD A,H
+        LD (ST_EVTAG),A            ; Preserve them for another nested body.
+        LD A,L
+        LD (ST_EVEXT),A
         POP AF                     ; Restore the previous event kind.
         LD (ST_EVENT),A            ; Publish the old current event.
         POP AF                     ; Restore the previous incoming tail flag.

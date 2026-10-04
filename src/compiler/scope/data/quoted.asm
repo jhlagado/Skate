@@ -14,6 +14,7 @@ QUO_END   EQU 2
 QUO_DOT   EQU 3
 QUO_IMM   EQU 4
 QUO_BYTE  EQU 5
+QUO_INT   EQU 8
 
 ; Compile the explicit (quote datum) form.
 QUO_FORM:
@@ -137,10 +138,12 @@ QUO_DATA:
         LD C,0                     ; Binary16 values use tag zero.
         JR .WIDE
 
-; Encode a reader scalar: code 5 for a byte-sized exact integer, otherwise
-; code 4 with its payload and tag.
+; Encode a reader scalar: code 5 for a byte-sized exact integer, code 8 for
+; a wider one, otherwise code 4 with its payload and tag.
 .SCALAR:
         LD (ST_IMMED),HL
+        LD A,C
+        LD (ST_IMMED+2),A
         LD A,(RD_TAG)
         LD C,A
         OR A
@@ -154,13 +157,22 @@ QUO_DATA:
 .TAGGED:
         CP 3
         JP NZ,ERR_TODO             ; Other scalar tags are not supported.
-        LD A,H
-        OR A
-        JR NZ,.WIDE
+        LD A,(ST_IMMED+2)
+        OR H
+        JR NZ,.INT
         LD A,QUO_BYTE
         CALL SINK_PUT
         RET C
         LD A,(ST_IMMED)
+        JP SINK_PUT
+.INT:
+        LD A,QUO_INT
+        CALL SINK_PUT
+        RET C
+        LD HL,(ST_IMMED)
+        CALL EM_WORD
+        RET C
+        LD A,(ST_IMMED+2)
         JP SINK_PUT
 .WIDE:
         LD A,QUO_IMM
@@ -199,8 +211,10 @@ QUO_DATA:
         PUSH HL
         LD A,(RD_TAG)
         PUSH AF
+        PUSH BC                    ; C is the first value's byte 2.
         CALL QUO_HEAD
         JR C,.HEAD_BAD
+        POP BC
         POP AF
         LD (RD_TAG),A
         POP HL
@@ -209,6 +223,7 @@ QUO_DATA:
         RET C
         JP QUO_FOOT
 .HEAD_BAD:
+        POP BC
         POP AF
         POP HL
         POP AF
@@ -225,9 +240,11 @@ QUO_DATA:
         PUSH HL
         LD A,(RD_TAG)
         PUSH AF
+        PUSH BC                    ; C is the first value's byte 2.
         LD A,QUO_LIST
         CALL SINK_PUT
         JR C,.LIST_BAD
+        POP BC
         POP AF
         LD (RD_TAG),A
         POP HL
@@ -241,6 +258,7 @@ QUO_DATA:
         LD A,B
         JR .ITEM
 .LIST_BAD:
+        POP BC
         POP AF
         POP HL
         POP AF

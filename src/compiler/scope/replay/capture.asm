@@ -16,9 +16,11 @@ REC_KEEP:
         RET C                      ; Preserve source I/O or syntax failure.
         LD (ST_EVENT),A           ; Save the event while it is copied.
         LD (ST_EVVAL),HL
+        LD A,C
+        LD (ST_EVEXT),A
         LD A,(RD_TAG)
         LD (ST_EVTAG),A
-        CALL REC_PUT               ; Store kind, tag and payload as four bytes.
+        CALL REC_PUT               ; Store the event as four bytes.
         RET C
         LD A,(ST_HEAD)             ; The first item in a binding must be a symbol.
         OR A
@@ -76,7 +78,9 @@ REC_KEEP:
         XOR A
         RET
 
-; Append one saved event from ST_EVENT/ST_EVTAG/ST_EVVAL.
+; Append one saved event from ST_EVENT/ST_EVTAG/ST_EVVAL/ST_EVEXT.  A record
+; is the kind, the tag and the payload word, except that an exact integer is
+; recorded as kind 9 with its three payload bytes and the tag implied.
 REC_PUT:
         LD HL,(ST_PUTP)
         LD DE,W_REPEND
@@ -85,6 +89,23 @@ REC_PUT:
         JP NC,ERR_CAP
         LD HL,(ST_PUTP)
         LD A,(ST_EVENT)
+        CP 7
+        JR NZ,.KIND
+        LD A,(ST_EVTAG)
+        CP 3
+        LD A,7
+        JR NZ,.KIND
+        LD (HL),9                  ; Kind 9: an exact integer with byte 2.
+        INC HL
+        LD DE,(ST_EVVAL)
+        LD (HL),E
+        INC HL
+        LD (HL),D
+        INC HL
+        LD A,(ST_EVEXT)
+        LD (HL),A
+        JR .DONE
+.KIND:
         LD (HL),A
         INC HL
         LD A,(ST_EVTAG)
@@ -94,6 +115,7 @@ REC_PUT:
         LD (HL),E
         INC HL
         LD (HL),D
+.DONE:
         INC HL
         LD (ST_PUTP),HL
         XOR A

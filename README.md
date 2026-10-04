@@ -6,7 +6,7 @@ Skate compiles `.sk8` source into runnable `.COM` programs and a checked
 publication stream. It is an ongoing implementation aimed at useful Scheme programs on
 a 64K machine, with a native compiler, a compact runtime and CP/M disk tools.
 
-The current source supports exact signed integers, binary16
+The current source supports exact signed 24-bit integers, binary16
 numbers, booleans, byte characters, symbols, strings, quoted data, pairs,
 lists and vectors. It provides lexical `let`, `let*`, `letrec` and named
 `let`, `if`, `begin`, `cond`, `case`, `when`, `unless`, `and`, `or`, `set!`,
@@ -111,6 +111,7 @@ bounds. Exceeding one stops compilation with `CAP` (a few report
 
 | Limit | Value |
 | --- | --- |
+| Exact integers | -8,388,608 to 8,388,607; overflow is a runtime error |
 | Procedures (`lambda`, procedure `define`, named `let`) | 128 per program, 13 nested |
 | Fixed parameters per procedure | 4, plus an optional rest parameter |
 | Arguments in one call | 8 |

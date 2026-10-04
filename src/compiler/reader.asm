@@ -1,6 +1,7 @@
 ; Native datum reader.
 ; RD_INIT: HL -> byte callback, DE -> symbol context, BC -> string context.
-; RD_NEXT: A = event kind; RD_TAG:HL carries value events; carry reports an error.
+; RD_NEXT: A = event kind; RD_TAG:CHL carries value events (C is byte 2 of an
+; exact integer and zero otherwise); carry reports an error.
 ; EOF and errors remain terminal until RD_INIT. Events are EOF, list open/close,
 ; quote, dot, symbol, scalar and string (0, 1, 2, 3, 4, 5, 7 and 8).
 ; Error codes 128..133 identify syntax, capacity, integer range, encoding,
@@ -36,6 +37,7 @@ RD_NEXT:
     JP NZ,RD_ERR            ; Repeated reads preserve the original reason.
     XOR A                   ; No numeric marker belongs to the next source event.
     LD (RD_FLOAT),A         ; DEC_READ sets it again only for an inexact literal.
+    LD (RD_EXT),A           ; Only an exact integer has a third payload byte.
     LD A,(RD_ENDED)             ; A completed source needs no further callback.
     OR A                    ; Test whether EOF has already been delivered.
     JP NZ,RD_EOFOK            ; Return stable EOF without touching the source.
@@ -73,6 +75,10 @@ RD_NEXT:
     CALL DEC_READ           ; Validate and convert the bounded numeric token.
     JP C,RD_FAIL             ; Numeric errors already use reader codes 128..130.
     LD (RD_TAG),A           ; Retain exact-integer versus floating representation.
+    LD B,A
+    LD A,C
+    LD (RD_EXT),A           ; Keep byte 2 while the datum completes.
+    LD A,B
     OR A                    ; The decimal parser uses tag zero for binary16 values.
     JR NZ,.SCALAR           ; Tag three remains an ordinary exact integer event.
     LD A,1                  ; Mark this source event as an inexact numeric token.
@@ -202,9 +208,11 @@ RD_EOFOK:
     XOR A                   ; Event zero, carry clear.
     RET                     ; Return stable EOF.
 RD_OK:
+    LD A,(RD_EXT)           ; Byte 2 of an exact integer, zero otherwise.
+    LD C,A
     LD A,(RD_EVENT)         ; Restore the public event kind.
     OR A                    ; Clear carry without changing the event.
-    RET                     ; RD_TAG:HL holds a result for atomic events.
+    RET                     ; RD_TAG:CHL holds a result for atomic events.
 
 ; Keep native module error namespaces separate at the public reader boundary.
 RD_LEXER:
@@ -240,6 +248,7 @@ RD_ENDED: DB 0                  ; One after successful EOF.
 RD_READY: DB 0              ; One after RD_INIT.
 RD_EVENT: DB 0              ; Current lexical/public event across helper calls.
 RD_TAG: DB 0                ; Logical tag for the most recent atomic result.
+RD_EXT: DB 0                ; Byte 2 of the most recent exact integer.
 RD_FLOAT: DB 0              ; One while the current source event is a binary16 literal.
 RD_STACK: DS 64               ; One state byte per outstanding list or quote.
 .WORK_END:                  ; Exclusive end of fixed reader workspace.

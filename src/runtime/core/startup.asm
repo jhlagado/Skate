@@ -240,22 +240,6 @@ RT_SET:
         LD C,A
         RET                        ; The caller receives the language result value.
 
-; Set C, byte 2 of the value in A:HL, from its sixteen-bit form: the sign
-; extension of H for an exact integer and zero for every other tag.  Every
-; register but C and every flag is kept.  Producers of sixteen-bit results
-; use it until arithmetic is twenty-four bits wide.
-RT_WIDEN:
-        PUSH AF
-        LD C,0
-        CP 3
-        JR NZ,.DONE
-        BIT 7,H
-        JR Z,.DONE
-        DEC C
-.DONE:
-        POP AF
-        RET
-
 ; Return Z exactly when the value is #f, preserving A and HL for short-circuit
 ; forms.  Other tag-zero scalars, including numeric zero, are true.
 RT_TEST:
@@ -292,30 +276,34 @@ RT_MUL:
 RT_BINOP:
         LD (RT_OP),A              ; Save the operation while popping operands.
         POP IX                    ; Save the CALL return address above the values.
-        POP DE                    ; Recover the right payload.
-        POP BC                    ; Recover right AF; B is the right tag.
-        POP HL                    ; Recover the left payload.
-        POP AF                    ; Recover left AF; A is the left tag.
-        LD (RT_TAG),A             ; Preserve the left tag while selecting the op.
+        POP HL                    ; The right value becomes the numeric ABI's cell.
+        LD (NUM_Y),HL
+        POP BC                    ; Right tag in B, byte 2 in C.
+        LD A,C
+        LD (NUM_Y+2),A
+        LD A,B
+        LD (NUM_Y+3),A
+        POP HL                    ; The left value stays in registers.
+        POP BC                    ; Left tag in B, byte 2 in C.
         LD A,(RT_OP)              ; Select the checked operation.
         OR A                      ; Addition is the zero operation.
-        JR Z,.ADD                 ; Call NUM_ADD with the recovered ABI values.
+        JR Z,.ADD
         CP 1                      ; Subtraction is operation one.
-        JR Z,.SUB                 ; Call NUM_SUB with the recovered ABI values.
-        LD A,(RT_TAG)             ; Restore the left tag for the numeric ABI.
+        JR Z,.SUB
+        LD A,B
         CALL NUM_MUL              ; Operation two is checked multiplication.
-        JR .RESULT           ; Common carry handling and return.
+        JR .RESULT
 .ADD:
-        LD A,(RT_TAG)             ; Restore the left tag for the numeric ABI.
-        CALL NUM_ADD              ; Checked addition uses A/B and HL/DE.
-        JR .RESULT           ; Common carry handling and return.
+        LD A,B
+        CALL NUM_ADD
+        JR .RESULT
 .SUB:
-        LD A,(RT_TAG)             ; Restore the left tag for the numeric ABI.
-        CALL NUM_SUB              ; Checked subtraction uses A/B and HL/DE.
+        LD A,B
+        CALL NUM_SUB
 .RESULT:
         JP C,ERROR                ; Overflow or an invalid value is terminal.
-        CALL RT_WIDEN
         LD B,2                    ; The two native operands are now consumed.
         CALL ROOT_CUT
         PUSH IX                   ; Restore the generated caller's return address.
-        RET                       ; Return the checked value in A and HL.
+        RET                       ; Return the checked value in A:CHL.
+

@@ -52,6 +52,8 @@ REC_NEXT:
         LD HL,(ST_GETP)           ; Recover the event address after the check.
         LD A,(HL)                 ; Return its structural kind in A.
         INC HL
+        CP 9                      ; Kind 9 is an exact integer with byte 2.
+        JR Z,.WIDE
         LD C,A                    ; Preserve the kind across tag and payload loads.
         LD A,(HL)                 ; Restore the scalar tag used by CMD_EXPR.
         LD (RD_TAG),A
@@ -72,7 +74,22 @@ REC_NEXT:
         POP BC
 .RETURN:
         LD A,C                    ; Restore the event kind after the address swap.
+        LD C,0                    ; Every replayed value but an integer has byte 2 zero.
         OR A                      ; Replay success returns with carry clear.
+        RET
+.WIDE:
+        LD A,3                    ; The record implies the exact-integer tag.
+        LD (RD_TAG),A
+        LD E,(HL)                 ; Payload low byte.
+        INC HL
+        LD D,(HL)                 ; Payload high byte.
+        INC HL
+        LD C,(HL)                 ; Payload byte 2.
+        INC HL
+        LD (ST_GETP),HL           ; Publish the next event cursor.
+        EX DE,HL
+        LD A,7                    ; CMD_EXPR sees an ordinary scalar event.
+        OR A
         RET
 .FAIL:
         SCF                       ; The compiler treats an exhausted replay as bad input.

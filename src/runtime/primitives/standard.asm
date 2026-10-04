@@ -102,18 +102,34 @@ STD_TEXT:
         CP 6
         RET
 
-; Read the four-byte cell at HL: A is its tag nibble, HL its payload.
-; BC and DE are kept.
+; Read the four-byte cell at HL: A is its tag nibble, C its byte 2 and HL
+; its payload.  B and DE are kept.
 STD_GET:
         PUSH DE
         LD E,(HL)
         INC HL
         LD D,(HL)
         INC HL
+        LD C,(HL)
         INC HL
         LD A,(HL)
         AND 0FH
         EX DE,HL
+        POP DE
+        RET
+
+; Copy the value cell at HL into STD_R, the right value of STD_DEEP, with
+; the container's flag bits dropped.  BC and DE are kept; HL advances.
+STD_PUTR:
+        PUSH DE
+        PUSH BC
+        LD DE,STD_R
+        LD BC,3
+        LDIR
+        LD A,(HL)
+        AND 0FH
+        LD (DE),A
+        POP BC
         POP DE
         RET
 
@@ -150,28 +166,33 @@ STD_SET:
 STD_SAME:
         LD A,2
         CALL PKT_NARG
-        CALL PKT_ARG1
-        LD C,A
-        EX DE,HL
-        PUSH BC
-        PUSH DE
+        LD HL,ARG_PKT+4
+        CALL STD_PUTR              ; The second argument is the right value.
         CALL PKT_ARG0
-        POP DE
-        POP BC
         CALL STD_DEEP
         JP C,STD_NO
         JP STD_YES
 
-; Compare A:HL with C:DE.  Carry is clear when they are equal.  The CAR and
-; vector elements recurse on the native stack; CDRs iterate.
+; Compare A:CHL with the value in the cell STD_R.  Carry is clear when they
+; are equal.  CARs and vector elements recurse on the native stack; CDRs
+; iterate.  Each recursion refills STD_R from the saved cell addresses.
 STD_DEEP:
-        CP C
+        LD B,A
+        LD A,(STD_R+3)
+        CP B
+        LD A,B
         JR NZ,.TAGS
+        LD DE,(STD_R)
         PUSH HL
         OR A
         SBC HL,DE
         POP HL
+        JR NZ,.KIND
+        LD A,(STD_R+2)
+        CP C
+        LD A,B
         RET Z                      ; Same tag and payload: equal, carry clear.
+.KIND:
         CP 1
         JR Z,.PAIR
         CP 7
@@ -180,7 +201,7 @@ STD_DEEP:
         CALL STD_TEXT              ; Literal and managed strings compare by
         JR NZ,.NO                  ; content even though their tags differ.
         LD B,A
-        LD A,C
+        LD A,(STD_R+3)
         CALL STD_TEXT
         LD A,B
         JR Z,.STRING
@@ -188,15 +209,11 @@ STD_DEEP:
         SCF
         RET
 .STRING:
-        PUSH BC
-        PUSH DE
         CALL STR_ARG               ; HL is the left string.
-        POP DE
-        POP BC
         JR C,.NO
         PUSH HL
-        EX DE,HL
-        LD A,C
+        LD HL,(STD_R)
+        LD A,(STD_R+3)
         CALL STR_ARG               ; HL is the right string.
         POP DE
         JR C,.NO
@@ -207,24 +224,21 @@ STD_DEEP:
         OR A
         RET
 .PAIR:
-        PUSH DE
         CALL PAIR_CHK              ; Validate the left pair.
-        POP DE
         JR C,.NO
         PUSH HL
-        EX DE,HL
+        LD HL,(STD_R)
         LD A,1
         CALL PAIR_CHK              ; Validate the right pair.
-        EX DE,HL
         POP HL
         JR C,.NO
+        LD DE,(STD_R)
         PUSH HL                    ; Keep both pairs for their CDRs.
         PUSH DE
         EX DE,HL
-        CALL STD_GET               ; A:HL is the right CAR.
-        LD C,A
-        EX DE,HL                   ; C:DE is the right CAR, HL the left pair.
-        CALL STD_GET               ; A:HL is the left CAR.
+        CALL STD_PUTR              ; The right CAR becomes the right value.
+        EX DE,HL
+        CALL STD_GET               ; A:CHL is the left CAR.
         CALL STD_DEEP
         POP DE
         POP HL
@@ -233,25 +247,22 @@ STD_DEEP:
         ADD HL,BC                  ; Left CDR cell.
         EX DE,HL
         ADD HL,BC                  ; Right CDR cell.
-        CALL STD_GET
-        LD C,A
-        EX DE,HL                   ; C:DE is the right CDR, HL the left cell.
+        CALL STD_PUTR
+        EX DE,HL
         CALL STD_GET
         JP STD_DEEP
 .VECTOR:
         PUSH HL
-        PUSH DE
         CALL VEC_CHK               ; Validate the left vector.
-        POP DE
         POP HL
         JR C,.NO
         PUSH HL
-        PUSH DE
-        EX DE,HL
+        LD HL,(STD_R)
+        LD A,7
         CALL VEC_CHK               ; Validate the right vector.
-        POP DE
         POP HL
         JR C,.NO
+        LD DE,(STD_R)
         LD A,(DE)                  ; Equal vectors have equal lengths.
         CP (HL)
         JR NZ,.NO
@@ -266,8 +277,7 @@ STD_DEEP:
         PUSH HL
         PUSH DE
         EX DE,HL
-        CALL STD_GET
-        LD C,A
+        CALL STD_PUTR              ; The right element becomes the right value.
         EX DE,HL
         CALL STD_GET
         CALL STD_DEEP
@@ -474,39 +484,10 @@ STD_NUM:
         CALL PKT_ARG0
         CP 3
         JP NZ,ERROR
-        LD A,H
-        LD (STD_SIGN),A
-        BIT 7,H
-        JR Z,.DIGITS
-        XOR A                      ; Negate; -32768 stays 8000H, read unsigned.
-        SUB L
-        LD L,A
-        SBC A,A
-        SUB H
-        LD H,A
-.DIGITS:
-        LD DE,STD_BUF+7            ; Digits are written backwards.
-.NEXT:
-        CALL .DIV_TEN
-        ADD A,'0'
-        DEC DE
-        LD (DE),A
-        LD A,H
-        OR L
-        JR NZ,.NEXT
-        LD A,(STD_SIGN)
-        BIT 7,A
-        JR Z,.SIZED
-        DEC DE
-        LD A,'-'
-        LD (DE),A
-.SIZED:
-        LD HL,STD_BUF+7
-        OR A
-        SBC HL,DE
-        LD A,L
+        CALL NUM_TEXT              ; HL is the decimal text and B its length.
+        LD A,B
         LD (STR_LEN),A
-        LD (STD_PTR),DE
+        LD (STD_PTR),HL
         CALL STR_NEW               ; May collect; nothing here is a heap value.
         JP C,ERROR
         LD A,(STR_LEN)
@@ -519,48 +500,33 @@ STD_NUM:
         LDIR
         JP STR_RET
 
-; Divide HL by ten, unsigned: HL is the quotient and A the remainder.
-.DIV_TEN:
-        PUSH BC
-        LD B,16
-        XOR A
-.BIT:
-        ADD HL,HL
-        RLA
-        CP 10
-        JR C,.KEEP
-        SUB 10
-        INC L
-.KEEP:
-        DJNZ .BIT
-        POP BC
-        RET
-
 ; ---- Arithmetic -----------------------------------------------------------
 
 ; modulo takes the sign of the divisor; remainder takes the dividend's.
 STD_FMOD:
         LD A,2
         CALL PKT_NARG
-        CALL PKT_ARG1
-        CP 3
-        JP NZ,ERROR
-        LD (STD_DIV),HL
+        LD HL,ARG_PKT+4            ; The divisor is the numeric ABI's right cell.
+        LD DE,NUM_Y
+        LD BC,4
+        LDIR
         CALL PKT_ARG0
-        CP 3
-        JP NZ,ERROR
-        LD DE,(STD_DIV)
-        LD B,3
-        CALL NUM_REM               ; Rejects division by zero.
+        CALL NUM_REM               ; Rejects non-integers and division by zero.
         JP C,ERROR
-        LD A,H
+        LD A,C
+        OR H
         OR L
         JR Z,.DONE
-        LD A,(STD_DIV+1)
-        XOR H
+        LD A,(NUM_Y+2)
+        XOR C
         JP P,.DONE                 ; Same signs need no adjustment.
-        LD DE,(STD_DIV)
+        LD DE,(NUM_Y)
+        LD A,(NUM_Y+2)
+        LD B,A
         ADD HL,DE
+        LD A,C
+        ADC A,B
+        LD C,A
 .DONE:
         LD A,3
         PUSH IX
@@ -573,21 +539,16 @@ STD_ABS:
         CALL PKT_ARG0
         CP 3
         JR NZ,.FLOAT
-        BIT 7,H
+        BIT 7,C
         JR Z,.DONE
-        LD A,H                     ; -32768 has no positive counterpart.
+        LD A,C                     ; -8388608 has no positive counterpart.
         CP 80H
         JR NZ,.NEGATE
-        LD A,L
-        OR A
+        LD A,H
+        OR L
         JP Z,ERROR
 .NEGATE:
-        XOR A
-        SUB L
-        LD L,A
-        SBC A,A
-        SUB H
-        LD H,A
+        CALL NUM_INV
 .DONE:
         LD A,3
         PUSH IX
@@ -621,6 +582,7 @@ STD_LEN:
 .DONE:
         LD H,B
         LD L,C
+        LD C,0
         LD A,3
         PUSH IX
         RET
@@ -867,7 +829,8 @@ STD_DROP:
         CALL PKT_ARG1
         CP 3
         JP NZ,ERROR
-        BIT 7,H
+        LD A,C                     ; A negative or very large count exceeds any list.
+        OR A
         JP NZ,ERROR
         LD B,H
         LD C,L
@@ -902,7 +865,9 @@ STD_FIND:
         CALL PKT_NARG
         CALL PKT_ARG0
         LD (STD_KEY),HL
-        LD (STD_KTAG),A
+        LD (STD_KEY+3),A
+        LD A,C
+        LD (STD_KEY+2),A
         CALL PKT_ARG1
 .LOOP:
         LD (STD_LIST),HL
@@ -936,7 +901,9 @@ STD_LOOK:
         CALL PKT_NARG
         CALL PKT_ARG0
         LD (STD_KEY),HL
-        LD (STD_KTAG),A
+        LD (STD_KEY+3),A
+        LD A,C
+        LD (STD_KEY+2),A
         CALL PKT_ARG1
 .LOOP:
         LD (STD_LIST),HL
@@ -962,19 +929,21 @@ STD_LOOK:
         PUSH IX
         RET
 
-; Compare A:HL with STD_KEY: identity when STD_MODE is zero, equal? otherwise.
+; Compare A:CHL with STD_KEY: identity when STD_MODE is zero, equal? otherwise.
 ; Carry is clear on a match.
 STD_LIKE:
-        PUSH AF
-        LD A,(STD_KTAG)
-        LD C,A
-        LD DE,(STD_KEY)
+        LD B,A
         LD A,(STD_MODE)
         OR A
+        LD A,B
         JR NZ,.DEEP
-        POP AF
+        LD A,(STD_KEY+3)
+        CP B
+        JR NZ,.NO
+        LD A,(STD_KEY+2)
         CP C
         JR NZ,.NO
+        LD DE,(STD_KEY)
         OR A
         SBC HL,DE
         RET Z
@@ -982,7 +951,13 @@ STD_LIKE:
         SCF
         RET
 .DEEP:
-        POP AF
+        PUSH HL
+        PUSH BC
+        LD HL,STD_KEY
+        CALL STD_PUTR
+        POP BC
+        POP HL
+        LD A,B
         JP STD_DEEP
 
 ; ---- Characters -----------------------------------------------------------
@@ -1094,8 +1069,8 @@ STD_SUBS:
 .INDEX:
         CP 3                       ; An index is a byte-sized exact integer.
         JP NZ,ERROR
-        LD A,H
-        OR A
+        LD A,C
+        OR H
         JP NZ,ERROR
         LD A,L
         RET
@@ -1103,17 +1078,20 @@ STD_SUBS:
 ; ---- case -----------------------------------------------------------------
 
 ; Generated case code pushes the key on the operator side stack, then loads
-; each datum into A:HL and calls here.  Z means the datum is eqv? to the key.
+; each datum into A:CHL and calls here.  Z means the datum is eqv? to the key.
 STD_CASE:
-        EX DE,HL                   ; DE is the datum payload.
-        LD C,A
+        EX DE,HL                   ; DE is the datum payload; C its byte 2.
+        LD B,A
         LD HL,(OPS_SP)
         DEC HL                     ; The key record's flags and tag.
         LD A,(HL)
         AND 0FH
+        CP B
+        RET NZ
+        DEC HL                     ; The key's byte 2.
+        LD A,(HL)
         CP C
         RET NZ
-        DEC HL                     ; Skip the extension byte.
         DEC HL
         LD A,(HL)
         CP D
@@ -1127,9 +1105,7 @@ STD_CASE:
 
 STD_REL:  DB 0                     ; Relation index for an ordered comparison.
 STD_PTR:  DW 0                     ; Packet or string cursor.
-STD_SIGN: DB 0                     ; High byte of the number being converted.
-STD_BUF: DS 7                      ; Digits of -32768 and shorter numbers.
-STD_DIV:  DW 0                     ; Divisor for modulo.
+STD_R:    DS 4                     ; Right value cell for STD_DEEP.
 STD_LIST: DW 0                     ; List being walked.
 STD_LTAG: DB 0
 STD_ACC:  DW 0                     ; Reversal accumulator; append's last cell.
@@ -1138,8 +1114,7 @@ STD_CNT:  DB 0                     ; Lists still to append.
 STD_RES: DW 0                      ; Side-stack record holding append's result.
 STD_HEAD: DW 0                     ; Side-stack record holding the copy's head.
 STD_MODE: DB 0                     ; Zero compares identity, one equal?.
-STD_KEY:  DW 0                     ; Key for memq, member, assq and assoc.
-STD_KTAG: DB 0
+STD_KEY:  DS 4                     ; Key cell for memq, member, assq and assoc.
 STD_ENT:  DW 0                     ; Matching association entry.
 STD_ETAG: DB 0
 STD_BEG:  DB 0                     ; substring start.

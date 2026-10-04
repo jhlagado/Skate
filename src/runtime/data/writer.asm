@@ -291,53 +291,13 @@ WR_LIT:
         RET
 
 WR_INT:
-        XOR A
-        LD (WR_SEEN),A
-        BIT 7,H
-        JR Z,.PLACES
-        LD A,'-'
-        CALL OUT_CHAR
-        XOR A
-        SUB L
-        LD L,A
-        LD A,0                    ; Preserve the low-byte borrow for negating H.
-        SBC A,H
-        LD H,A
-.PLACES:
-        LD DE,10000
-        CALL .PLACE
-        LD DE,1000
-        CALL .PLACE
-        LD DE,100
-        CALL .PLACE
-        LD DE,10
-        CALL .PLACE
-        LD A,1
-        LD (WR_SEEN),A
-        LD DE,1
-        JP .PLACE
-.PLACE:
-        LD B,0
-.SUB_LOOP:
-        OR A
-        SBC HL,DE
-        JR C,.COUNTED
-        INC B
-        JR .SUB_LOOP
-.COUNTED:
-        ADD HL,DE
-        LD A,B
-        OR A
-        JR NZ,.DIGIT
-        LD A,(WR_SEEN)
-        OR A
-        RET Z
-.DIGIT:
-        LD A,1
-        LD (WR_SEEN),A
-        LD A,B
-        ADD A,'0'
-        JP OUT_CHAR
+        CALL NUM_TEXT              ; HL is the decimal text and B its length.
+.LOOP:
+        LD A,(HL)
+        CALL OUT_CHAR              ; OUT_CHAR keeps B and HL.
+        INC HL
+        DJNZ .LOOP
+        RET
 
 ; Preserve the caller's numeric remainder and procedure continuation across BDOS.
 OUT_CHAR:

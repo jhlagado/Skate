@@ -46,9 +46,11 @@ EM_CALL:
 ; Runtime helpers reached by RST 08H..30H, in vector order (see RST_SET).
 .VECTORS: DW ARG_PUSH,L_LOAD,PRIM_OP,QT_PUSH,G_OPSH,INV_OP
 
-; Emit a literal exact integer in HL.
+; Emit a literal exact integer in C:HL.
 EM_INT:
         LD (ST_IMMED),HL          ; Preserve the literal while writing opcodes.
+        LD A,C
+        LD (ST_IMMED+2),A
         LD A,21H                  ; LD HL,nn loads the result payload.
         CALL SINK_PUT               ; Append the load opcode.
         RET C                     ; Preserve a staged-output capacity failure.
@@ -61,12 +63,10 @@ EM_INT:
         LD A,3                    ; The generated value is an exact integer.
         CALL SINK_PUT               ; Append the tag.
         RET C
-        LD A,0EH                  ; LD C,n: byte 2 is the sign extension.
+        LD A,0EH                  ; LD C,n: the literal's byte 2.
         CALL SINK_PUT
         RET C
-        LD A,(ST_IMMED+1)
-        RLA
-        SBC A,A
+        LD A,(ST_IMMED+2)
         JP SINK_PUT
 
 ; Emit XOR A and LD C,A: tag zero with byte 2 zero.

@@ -21,5 +21,4 @@ F16_BITS: DW 0                 ; Remaining multiplier bits, consumed from the lo
 F16_PROD: DW 0                 ; Low word of the exact significand product
 F16_PHI: DB 0                ; High byte extending the product to 24 bits
 F16_QUOT: DW 0                 ; Fourteen-bit quotient accumulated by restoring division
-F16_MODE: DB 0                 ; Integer egress mode: 0 unsigned, 1 signed
 F16_LIM:

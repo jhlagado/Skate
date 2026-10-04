@@ -53,6 +53,7 @@ function readDatum(
     carry: cpu.flags.C,
     tag: cpu.a,
     payload: (cpu.h << 8) | cpu.l,
+    ext: cpu.a === 3 ? cpu.c : 0,
   };
 }
 
@@ -95,7 +96,8 @@ function addDigit(
   magnitude: number,
   digit: number,
 ) {
-  writeWord(memory, assembled.address("DR_MAG"), magnitude);
+  writeWord(memory, assembled.address("DR_MAG"), magnitude & 0xffff);
+  memory[assembled.address("DR_MAG") + 2] = magnitude >>> 16;
   cpu.a = digit;
   cpu.pc = assembled.address("DR_DIGIT");
   cpu.sp = 0xdff2;
@@ -108,7 +110,8 @@ function addDigit(
   assert.equal(cpu.sp, 0xdff4);
   return {
     carry: cpu.flags.C,
-    magnitude: readWord(memory, assembled.address("DR_MAG")),
+    magnitude: readWord(memory, assembled.address("DR_MAG")) |
+      memory[assembled.address("DR_MAG") + 2] << 16,
   };
 }
 
@@ -127,7 +130,7 @@ Deno.test("datum reader returns scalar integers, booleans and characters", async
   installBdosReader(
     memory,
     Array.from(new TextEncoder().encode(
-      "-32768 32767 #t #f #\\A ",
+      "-8388608 8388607 #t #f #\\A ",
     )),
   );
   memory[assembled.address("ARG_CNT")] = 0;
@@ -136,11 +139,13 @@ Deno.test("datum reader returns scalar integers, booleans and characters", async
 
   const integers = readDatum(assembled, memory, cpu);
   assert.equal(integers.tag, 3);
-  assert.equal(integers.payload, 0x8000);
+  assert.equal(integers.payload, 0x0000);
+  assert.equal(integers.ext, 0x80);
 
   const positive = readDatum(assembled, memory, cpu);
   assert.equal(positive.tag, 3);
-  assert.equal(positive.payload, 0x7fff);
+  assert.equal(positive.payload, 0xffff);
+  assert.equal(positive.ext, 0x7f);
 
   const truth = readDatum(assembled, memory, cpu);
   assert.equal(truth.tag, 0);
@@ -167,7 +172,7 @@ Deno.test("datum reader preserves port lookahead across read-char", async () => 
 
   assert.deepEqual(
     readDatum(assembled, memory, cpu),
-    { assembled, memory, carry: 0, tag: 3, payload: 42 },
+    { assembled, memory, carry: 0, tag: 3, payload: 42, ext: 0 },
   );
   assert.deepEqual(readChar(assembled, memory, cpu), {
     tag: 0,
@@ -175,7 +180,7 @@ Deno.test("datum reader preserves port lookahead across read-char", async () => 
   });
   assert.deepEqual(
     readDatum(assembled, memory, cpu),
-    { assembled, memory, carry: 0, tag: 0, payload: 0xfe01 },
+    { assembled, memory, carry: 0, tag: 0, payload: 0xfe01, ext: 0 },
   );
 });
 
@@ -196,8 +201,8 @@ Deno.test("datum reader rejects malformed, overflowing and non-ASCII input", asy
       invalidDigit.assembled,
       invalidDigit.memory,
       invalidDigit.cpu,
-      10_000,
-      "0".charCodeAt(0),
+      1_677_721,
+      "6".charCodeAt(0),
     ).carry,
     1,
   );
@@ -206,11 +211,13 @@ Deno.test("datum reader rejects malformed, overflowing and non-ASCII input", asy
       invalidDigit.assembled,
       invalidDigit.memory,
       invalidDigit.cpu,
-      3_276,
-      "7".charCodeAt(0),
+      838_860,
+      "8".charCodeAt(0),
     ),
-    { carry: 0, magnitude: 32_767 },
+    { carry: 0, magnitude: 8_388_608 },
   );
+  await readDatumError(Array.from(new TextEncoder().encode("8388608 ")));
+  await readDatumError(Array.from(new TextEncoder().encode("-8388609 ")));
 
   await readDatumError(Array.from(new TextEncoder().encode("12x\x1a")));
   await readDatumError(Array.from(new TextEncoder().encode("#\\ \x1a")));
@@ -230,6 +237,7 @@ Deno.test("datum reader accepts the 64-byte numeric spelling limit", async () =>
     carry: 0,
     tag: 3,
     payload: 0,
+    ext: 0,
   });
 });
 

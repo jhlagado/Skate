@@ -327,6 +327,7 @@ DR_NUM:
         XOR A                       ; Clear the accumulating magnitude.
         LD (DR_MAG),A
         LD (DR_MAG+1),A
+        LD (DR_MAG+2),A
         LD A,1                      ; Count the first spelling byte.
         LD (DR_LEN),A
         XOR A                       ; Positive sign is the default.
@@ -376,7 +377,7 @@ DR_NUM:
         LD (DR_SEEN),A
         JR .LOOP
 
-; Add the decimal digit in A to the bounded 16-bit magnitude.
+; Add the decimal digit in A to the bounded 24-bit magnitude.
 DR_DIGIT:
         CP '0'                       ; Reject bytes below ASCII zero.
         RET C
@@ -387,70 +388,90 @@ DR_DIGIT:
 .ADD:
         SUB '0'                      ; Convert the digit to an unsigned value.
         LD (DR_BYTE),A               ; Retain it while multiplying the magnitude.
-        LD HL,(DR_MAG)               ; HL is the current accumulated magnitude.
-        LD B,H                       ; BC becomes two times the old magnitude.
-        LD C,L
+        LD HL,(DR_MAG)               ; C:HL is the current accumulated magnitude.
+        LD A,(DR_MAG+2)
+        LD C,A
         ADD HL,HL                    ; Multiply the accumulator by two.
+        RL C
         JR C,.OVERFLOW               ; Reject overflow before widening the product.
-        LD B,H                       ; Keep two times the value for the final add.
-        LD C,L
+        LD E,L                       ; B:DE keeps two times the value for the final add.
+        LD D,H
+        LD B,C
         ADD HL,HL                    ; Multiply by four.
+        RL C
         JR C,.OVERFLOW               ; Reject overflow before the next doubling.
         ADD HL,HL                    ; Multiply by eight.
+        RL C
         JR C,.OVERFLOW               ; Reject overflow before adding the final digit.
-        ADD HL,BC                    ; Eight plus two gives ten times the value.
-        JR C,.OVERFLOW               ; Carry means the 16-bit magnitude overflowed.
-        LD A,(DR_BYTE)               ; Restore the converted decimal digit.
-        LD C,A                       ; Add the digit as a 16-bit value.
-        LD B,0
-        ADD HL,BC                    ; Check carry for the final digit addition.
+        ADD HL,DE                    ; Eight plus two gives ten times the value.
+        LD A,C
+        ADC A,B
+        LD C,A
+        JR C,.OVERFLOW               ; Carry means the 24-bit magnitude overflowed.
+        LD A,(DR_BYTE)               ; Add the converted decimal digit.
+        ADD A,L
+        LD L,A
+        LD A,0
+        ADC A,H
+        LD H,A
+        LD A,0
+        ADC A,C
+        LD C,A
         JR C,.OVERFLOW
         LD (DR_MAG),HL               ; Publish the new magnitude for the next digit.
+        LD A,C
+        LD (DR_MAG+2),A
         OR A                         ; Clear carry for the successful digit.
         RET
 .OVERFLOW:
         SCF                          ; Report an overflowing or malformed digit.
         RET
 
-; Finish the exact-integer token and apply its sign with a signed-16 bound.
+; Finish the exact-integer token and apply its sign with a signed-24 bound.
+; The value returns in A:CHL.
 DR_INT:
         LD A,(DR_SEEN)             ; A sign without a digit is malformed.
         OR A
         JP Z,ERROR
         LD HL,(DR_MAG)               ; Recover the unsigned magnitude.
+        LD A,(DR_MAG+2)
+        LD C,A
         LD A,(DR_NEG)
         OR A
         JR Z,.POSITIVE
-        LD A,H                       ; Negative values may reach magnitude 32768.
+        LD A,C                       ; Negative values may reach magnitude 800000H.
         CP 80H
         JR C,.NEGATE
         JP NZ,ERROR
-        LD A,L
-        OR A
+        LD A,H
+        OR L
         JP NZ,ERROR
 .NEGATE:
-        XOR A                        ; Form the two's-complement signed payload.
-        SUB L
-        LD L,A
-        LD A,0
-        SBC A,H
-        LD H,A
+        CALL NUM_INV                 ; Form the two's-complement signed payload.
         LD A,3                       ; Exact integers use logical tag three.
         OR A                          ; Successful integer parsing clears carry.
         RET
 .POSITIVE:
-        LD A,H                       ; Positive values must remain below 0x8000.
-        CP 80H
-        JP NC,ERROR
+        BIT 7,C                      ; Positive values must remain below 800000H.
+        JP NZ,ERROR
         LD A,3                       ; Exact integers use logical tag three.
         OR A                          ; Successful integer parsing clears carry.
         RET
 
 ; Publish a successful immediate result and preserve shared lookahead state.
+; Only an exact integer owns byte 2; every other value's is zero.
 DR_DONE:
         LD (DR_TAG),A                ; Save the result while clearing reader state.
         LD (DR_VAL),HL
+        CP 3
+        JR Z,.WIDE
+        LD C,0
+.WIDE:
+        LD A,C
+        LD (DR_EXT),A
         CALL .STOP                  ; Keep pending delimiter or sticky EOF intact.
+        LD A,(DR_EXT)
+        LD C,A
         LD A,(DR_TAG)
         LD HL,(DR_VAL)
         PUSH IX                      ; Return through the common packet cleanup.

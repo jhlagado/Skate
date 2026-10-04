@@ -94,6 +94,8 @@ PRIM_ALU:
         CALL PKT_VAL                  ; Recover its payload and logical tag.
         LD (NUM_ACC),HL               ; The first operand starts a left fold.
         LD (NUM_ATAG),A               ; Preserve its exact or inexact representation.
+        LD A,C
+        LD (NUM_AEXT),A
         LD A,(ARG_CNT)                ; The first operand has already been consumed.
         DEC A                         ; Leave the number of divisors to fold.
         LD (NUM_LEFT),A               ; Preserve the remaining operand count.
@@ -104,24 +106,26 @@ PRIM_ALU:
         LD (NUM_LEFT),A               ; Unary division consumes its sole operand below.
         XOR A                         ; Tag zero identifies the binary16 accumulator.
         LD (NUM_ATAG),A              ; Start with an inexact result representation.
+        LD (NUM_AEXT),A
         LD HL,3C00H                  ; Binary16 1.0 is the left-fold identity.
         LD (NUM_ACC),HL              ; Store the initial reciprocal accumulator.
         LD HL,ARG_PKT                ; Begin at the first packed argument.
         LD (NUM_PTR),HL              ; Keep the packet cursor across NUM_DIV.
 .DIV_LOOP:
-        LD HL,(NUM_PTR)              ; Load the next four-byte argument record.
-        CALL PKT_VAL                 ; Recover its payload in HL and tag in A.
-        LD (NUM_VAL),HL              ; Preserve the right payload for the ABI.
-        LD (NUM_TAG),A               ; Preserve the right tag while loading the left.
-        LD HL,(NUM_ACC)              ; Load the current binary16 accumulator.
-        LD DE,(NUM_VAL)              ; Load the next operand payload.
-        LD A,(NUM_TAG)               ; Put the right operand tag in the ABI's B register.
-        LD B,A                       ; Preserve that tag while restoring the left tag.
+        LD HL,(NUM_PTR)              ; The next argument record is the right operand.
+        LD DE,NUM_Y
+        LD BC,4
+        LDIR
+        LD HL,(NUM_ACC)              ; Load the current accumulator.
+        LD A,(NUM_AEXT)
+        LD C,A
         LD A,(NUM_ATAG)              ; Put the accumulator tag in the ABI's A register.
         CALL NUM_DIV                 ; Divide the accumulator by the next operand.
         JP C,ERROR                   ; Reject a bad operand or invalid result.
         LD (NUM_ACC),HL              ; Save the binary16 quotient payload.
         LD (NUM_ATAG),A              ; Save its successful result tag.
+        LD A,C
+        LD (NUM_AEXT),A
         LD HL,(NUM_PTR)              ; Advance one fixed-width argument record.
         LD DE,4                      ; Each packed value occupies four bytes.
         ADD HL,DE                    ; Point at the next value in the packet.
@@ -157,6 +161,8 @@ PRIM_ALU:
         RET
 .FOLD:
         LD (NUM_ACC),HL             ; Keep the current folded payload.
+        XOR A
+        LD (NUM_AEXT),A             ; Both identities have byte 2 zero.
         LD A,(ARG_CNT)
         OR A
         JR Z,.RESULT                ; + and * return their identities at arity zero.
@@ -164,6 +170,8 @@ PRIM_ALU:
         CALL PKT_VAL
         LD (NUM_ACC),HL             ; First argument replaces the identity.
         LD (NUM_ATAG),A
+        LD A,C
+        LD (NUM_AEXT),A
         LD A,(ARG_CNT)
         DEC A
         LD (NUM_LEFT),A
@@ -173,17 +181,14 @@ PRIM_ALU:
         LD A,(NUM_LEFT)
         OR A
         JR Z,.RESULT
-        LD HL,(NUM_PTR)
-        CALL PKT_VAL
-        LD (NUM_VAL),HL
-        LD (NUM_TAG),A
+        LD HL,(NUM_PTR)             ; The next packet record is the right operand.
+        LD DE,NUM_Y
+        LD BC,4
+        LDIR
         LD HL,(NUM_ACC)
-        LD DE,(NUM_VAL)
-        LD A,(NUM_TAG)
-        LD B,A
-        LD A,(PRIM_ID)
+        LD A,(NUM_AEXT)
         LD C,A
-        LD A,C
+        LD A,(PRIM_ID)
         OR A
         JR Z,.OP_ADD
         CP 1
@@ -202,6 +207,8 @@ PRIM_ALU:
         JP C,ERROR
         LD (NUM_ACC),HL
         LD (NUM_ATAG),A
+        LD A,C
+        LD (NUM_AEXT),A
         LD HL,(NUM_PTR)
         LD DE,4
         ADD HL,DE
@@ -211,6 +218,8 @@ PRIM_ALU:
         LD (NUM_LEFT),A
         JR .OP_LOOP
 .RESULT:
+        LD A,(NUM_AEXT)
+        LD C,A
         LD A,(NUM_ATAG)
         LD HL,(NUM_ACC)
         PUSH IX
@@ -225,6 +234,9 @@ PRIM_ALU:
         CALL PKT_VAL
         LD (NUM_VAL),HL              ; Preserve the payload while validating its tag.
         LD (NUM_TAG),A               ; Keep the tag for the exact/inexact zero tests.
+        LD A,C
+        LD (NUM_VEXT),A
+        LD A,(NUM_TAG)
         CALL PRIM_NUM                ; Reject booleans, characters and other sentinels.
         JP C,ERROR                   ; zero? reports a type error for non-numbers.
         LD A,(NUM_TAG)               ; Select the exact integer or binary16 zero test.
@@ -238,9 +250,10 @@ PRIM_ALU:
         JP PKT_NO                    ; Every other finite or special number is nonzero.
 .ZERO_INT:
         LD HL,(NUM_VAL)              ; Restore the exact integer payload.
-        LD A,H
+        LD A,(NUM_VEXT)
+        OR H
         OR L
-        JP Z,PKT_YES                 ; The exact zero payload is 0000H.
+        JP Z,PKT_YES                 ; Exact zero has every payload byte clear.
         JP PKT_NO                    ; Any nonzero exact integer is false.
 
 ; quotient and remainder require exactly two exact-integer arguments.
@@ -248,28 +261,20 @@ PRIM_QR:
         LD A,(ARG_CNT)
         CP 2
         JP NZ,ERROR
+        LD HL,ARG_PKT+4             ; The divisor is the ABI's right cell.
+        LD DE,NUM_Y
+        LD BC,4
+        LDIR
         LD HL,ARG_PKT
-        CALL PKT_VAL
-        LD (NUM_ACC),HL
-        LD (NUM_ATAG),A
-        LD HL,ARG_PKT+4
-        CALL PKT_VAL
-        LD (NUM_VAL),HL
-        LD (NUM_TAG),A
-        LD A,(NUM_TAG)
+        CALL PKT_VAL                ; The dividend is the left value.
         LD B,A
-        LD HL,(NUM_ACC)
-        LD DE,(NUM_VAL)
         LD A,(PRIM_ID)
-        LD C,A
-        LD A,C
         CP 14
+        LD A,B
         JR Z,.QUOTIENT
-        LD A,(NUM_ATAG)
         CALL NUM_REM
         JR .CHECK
 .QUOTIENT:
-        LD A,(NUM_ATAG)
         CALL NUM_QUOT
 .CHECK:
         JP C,ERROR
@@ -286,6 +291,8 @@ PRIM_CMP:
         CALL PKT_VAL
         LD (NUM_ACC),HL
         LD (NUM_ATAG),A
+        LD A,C
+        LD (NUM_AEXT),A
         LD A,(ARG_CNT)
         DEC A
         LD (NUM_LEFT),A
@@ -295,14 +302,13 @@ PRIM_CMP:
         LD A,(NUM_LEFT)
         OR A
         JP Z,PKT_YES
-        LD HL,(NUM_PTR)
-        CALL PKT_VAL
-        LD (NUM_VAL),HL
-        LD (NUM_TAG),A
+        LD HL,(NUM_PTR)             ; The next packet record is the right operand.
+        LD DE,NUM_Y
+        LD BC,4
+        LDIR
         LD HL,(NUM_ACC)
-        LD DE,(NUM_VAL)
-        LD A,(NUM_TAG)
-        LD B,A
+        LD A,(NUM_AEXT)
+        LD C,A
         LD A,(NUM_ATAG)
         CALL NUM_CMP
         JP C,ERROR
@@ -310,9 +316,11 @@ PRIM_CMP:
         CALL .RELATION
         OR A
         JP Z,PKT_NO
-        LD HL,(NUM_VAL)
+        LD HL,(NUM_Y)               ; The right value becomes the next left.
         LD (NUM_ACC),HL
-        LD A,(NUM_TAG)
+        LD A,(NUM_Y+2)
+        LD (NUM_AEXT),A
+        LD A,(NUM_Y+3)
         LD (NUM_ATAG),A
         LD HL,(NUM_PTR)
         LD DE,4

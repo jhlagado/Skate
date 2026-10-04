@@ -8,7 +8,8 @@
 NUM_ZERO:
         CP 3                     ; The predicate is defined only for exact integers.
         JP NZ,ERROR               ; Preserve the runtime type contract.
-        LD A,H                   ; Combine the two payload bytes for the zero test.
+        LD A,C                   ; Combine the three payload bytes for the zero test.
+        OR H
         OR L                     ; Z means the exact integer is zero.
         JR Z,.TRUE                ; Return canonical true for zero.
         XOR A                    ; Tag zero identifies a boolean value.
@@ -30,73 +31,19 @@ OUT_SHOW:
 
 ; Format an exact integer and print it through CP/M function 9.
 .NUMBER:
-        LD (OUT_NUM),HL        ; Retain the result during decimal conversion.
-        LD DE,OUT_BUF         ; Start writing at the message buffer.
-        BIT 7,H                   ; A negative value needs a leading minus sign.
-        JR Z,.PLACES              ; Positive values go directly to place handling.
-        LD A,'-'                  ; Store the sign before taking the magnitude.
-        LD (DE),A                 ; Write the sign byte.
-        INC DE                    ; Advance to the first digit.
-        XOR A                     ; Clear A before the low-byte negation.
-        SUB L                     ; Negate the low payload byte.
-        LD L,A                    ; Retain the low magnitude byte.
-        LD A,0                    ; Preserve the low-byte borrow for negating H.
-        SBC A,H                    ; Negate the high payload byte with borrow.
-        LD H,A                    ; Retain the complete magnitude.
-.PLACES:
-        LD (OUT_DSTP),DE           ; Give the place routine its output cursor.
-        XOR A                     ; No significant digit has been emitted yet.
-        LD (OUT_SEEN),A       ; Suppress leading zeroes until needed.
-        LD DE,10000                ; Select the ten-thousands place.
-        CALL .PLACE                ; Append a digit when this place is used.
-        LD DE,1000                 ; Select the thousands place.
-        CALL .PLACE                ; Append a digit when this place is used.
-        LD DE,100                  ; Select the hundreds place.
-        CALL .PLACE                ; Append a digit when this place is used.
-        LD DE,10                   ; Select the tens place.
-        CALL .PLACE                ; Append a digit when this place is used.
-        LD A,1                     ; Units must always be emitted.
-        LD (OUT_SEEN),A        ; Permit a zero units digit after a prefix.
-        LD DE,1                    ; Select the units place.
-        CALL .PLACE                ; Append the final digit.
-        LD HL,(OUT_DSTP)           ; Locate the first unused message position.
+        CALL NUM_TEXT              ; HL is the decimal text and B its length.
+        LD DE,OUT_BUF              ; Copy it into the message buffer.
+        LD C,B
+        LD B,0
+        LDIR
+        EX DE,HL
         LD (HL),13                 ; CP/M text output uses carriage return first.
         INC HL                     ; Advance to the line-feed position.
         LD (HL),10                 ; Complete the CP/M line ending.
         INC HL                     ; Advance to function 9's terminator byte.
         LD (HL),'$'                ; Function 9 stops at the dollar byte.
-        LD DE,OUT_BUF          ; DE points to the completed message.
+        LD DE,OUT_BUF              ; DE points to the completed message.
         JP OUT_TEXT                ; Send the completed text through byte output.
-
-; Subtract one decimal place until the next subtraction would borrow.
-.PLACE:
-        LD B,0                     ; B counts how often the place value fits.
-.SUB_LOOP:
-        OR A                       ; Clear carry before the signed subtraction.
-        SBC HL,DE                  ; Try one more occurrence of this place.
-        JR C,.COUNTED         ; A borrow means the digit is complete.
-        INC B                      ; Count the place value that fitted.
-        JR .SUB_LOOP         ; Continue until the next one would borrow.
-.COUNTED:
-        ADD HL,DE                  ; Restore the first value that did not fit.
-        LD A,B                     ; Copy the digit count for output decisions.
-        OR A                       ; A nonzero count always becomes a digit.
-        JR NZ,.DIGIT            ; Emit a significant digit.
-        LD A,(OUT_SEEN)        ; Check whether a prior place emitted a digit.
-        OR A                       ; A zero state still suppresses this place.
-        RET Z                      ; Leave a leading zero out of the message.
-.DIGIT:
-        LD A,1                     ; Later zeroes are significant after this one.
-        LD (OUT_SEEN),A        ; Publish the started state.
-        LD A,B                     ; Convert the count to its ASCII digit.
-        ADD A,'0'                  ; Add the ASCII zero offset.
-        PUSH HL                    ; Preserve the remaining numeric value.
-        LD HL,(OUT_DSTP)           ; Load the next output position.
-        LD (HL),A                  ; Store the decimal digit.
-        INC HL                     ; Advance the output cursor.
-        LD (OUT_DSTP),HL           ; Preserve it for the next place.
-        POP HL                     ; Restore the remaining numeric value.
-        RET                        ; Return for the next decimal place.
 
 ; Clear active reader state before the common fatal runtime-error message.
 DR_CLEAR:

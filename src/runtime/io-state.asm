@@ -20,13 +20,14 @@ DR_FOLD:   DB 0                    ; Remaining values while folding one list.
 DR_DOT:  DB 0                      ; Nonzero while DR_BUILD is folding a dotted list.
 DR_EOF: DB 0                     ; Nonzero when the current nested value is EOF.
 DR_LEN:   DB 0                      ; Numeric spelling length, bounded at 64 bytes.
-DR_MAG:    DW 0                      ; Unsigned magnitude for an exact integer.
+DR_MAG:    DS 3                      ; Unsigned magnitude for an exact integer.
 DR_NEG:   DB 0                     ; Nonzero while the token has a minus sign.
 DR_SEEN:   DB 0                    ; Nonzero after at least one digit is read.
 DR_BYTE:    DB 0                     ; Current decimal or character byte.
 DR_AHEAD:    DB 0                    ; Peeked byte used to classify a signed token.
 DR_TAG:    DB 0                      ; Result tag saved across normal cleanup.
 DR_AEXT:   DB 0                      ; Byte 2 of the list accumulator.
+DR_EXT:    DB 0                      ; Result byte 2 saved across normal cleanup.
 DR_VAL:    DW 0                     ; Result payload saved across normal cleanup.
 DR_SIZE: DB 0                        ; Decoded byte count, bounded at 255.
 DR_TMP: DB 0                         ; One-byte scratch for append and escapes.

@@ -38,6 +38,7 @@ STR_PRIM:
         LD A,(HL)                  ; The first byte records the string length.
         LD L,A                     ; Widen the byte count into an exact payload.
         LD H,0
+        LD C,H
         LD A,3                     ; Exact integers use logical tag three.
         PUSH IX                    ; Return through the packet cleanup path.
         RET
@@ -96,6 +97,7 @@ STR_PRIM:
         LD A,L                      ; Keep the byte before replacing the high byte.
         LD H,0
         LD L,A
+        LD C,H
         LD A,3                      ; Return an exact integer value.
         PUSH IX
         RET
@@ -109,8 +111,8 @@ STR_PRIM:
         CALL PKT_VAL
         CP 3
         JP NZ,ERROR                 ; Binary16 values are not exact characters.
-        LD A,H
-        OR A
+        LD A,C
+        OR H
         JP NZ,ERROR                 ; Accept only integers from zero through 255.
         LD H,0FFH
         XOR A                       ; Character values use scalar logical tag zero.

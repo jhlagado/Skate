@@ -1,8 +1,5 @@
 ; Runtime state shared by output, invocation, storage and publication.
 ; These definitions remain after output code to preserve the image layout.
-OUT_NUM:    DW 0                ; Result payload retained by OUT_SHOW.
-OUT_DSTP:       DW 0               ; Current decimal-output cursor.
-OUT_SEEN:   DB 0               ; Nonzero after the first significant digit.
 RT_TAG:  DB 0                 ; Original tag retained by RT_TEST.
 RT_BOOL:      DB 0                 ; Branch decision retained while restoring A.
 RT_OP:        DB 0                 ; Selected checked arithmetic operation.
@@ -28,6 +25,8 @@ GC_MARKS      EQU 09900H          ; 2304 bytes: even marks, odd vector type bits
 BND_MAP       EQU 0A600H          ; 1152 bytes: one bit per four-byte binding cell.
 NUM_LEFT:     DB 0                 ; Remaining values in an arithmetic or compare fold.
 NUM_ATAG:     DB 0                 ; Accumulator tag for a variadic numeric fold.
+NUM_AEXT:     DB 0                 ; Accumulator byte 2 for a variadic numeric fold.
+NUM_VEXT:     DB 0                 ; Current packet value byte 2 during numeric work.
 NUM_TAG:      DB 0                 ; Current packet value tag during numeric work.
 NUM_PTR:      DW 0                 ; Current packet cursor during a numeric fold.
 NUM_ACC:     DW 0                  ; Accumulator payload for a variadic numeric fold.

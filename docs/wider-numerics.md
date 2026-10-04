@@ -1,8 +1,10 @@
 # Wider numeric payloads
 
-> **Status: design note and plan.** Nothing in this document is implemented.
-> Skate's exact integers and binary16 values are still sixteen-bit payloads;
-> the four-byte cell only reserves the extension byte described here.
+> **Status:** the integer half is implemented. Exact integers are
+> twenty-four-bit and travel as `A:CHL` (see
+> [value-contract.md](value-contract.md)); binary16 remains the float format
+> until the twenty-four-bit float replaces it. The sections below on
+> integers describe work that is now done; the float sections are the plan.
 
 The four-byte cell leaves a byte beside the current sixteen-bit payload. That
 byte can hold the high part of a future numeric value, but storage alone does

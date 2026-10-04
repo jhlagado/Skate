@@ -18,12 +18,14 @@
 ;     05 n               the exact integer n, 0..255
 ;     06 lo hi           a symbol literal
 ;     07 lo hi           a string literal
+;     08 lo hi ext       an exact integer with three payload bytes
 
 QUO_LIST  EQU 1
 QUO_END   EQU 2
 QUO_DOT   EQU 3
 QUO_IMM   EQU 4
 QUO_BYTE  EQU 5
+QUO_INT   EQU 8
 
 QT_BUILD:
         POP HL                     ; The cache word follows the CALL.
@@ -44,11 +46,10 @@ QT_BUILD:
         RET NC
         PUSH DE
         CALL .VALUE
-        CALL RT_WIDEN              ; Encoded integers are sixteen-bit for now.
         POP DE
         JP RT_STORE                ; Cache the value; A:HL is returned.
 
-; Decode one value at .PTR into A:HL.
+; Decode one value at .PTR into A:CHL.
 .VALUE:
         LD HL,(.PTR)
         LD A,(HL)
@@ -60,6 +61,8 @@ QT_BUILD:
         JR Z,.BYTE
         CP QUO_IMM
         JR Z,.IMM
+        CP QUO_INT
+        JR Z,.INT
         SUB 2                      ; Codes 6 and 7 are tags 4 and 5.
         LD E,(HL)
         INC HL
@@ -67,10 +70,12 @@ QT_BUILD:
         INC HL
         LD (.PTR),HL
         EX DE,HL
+        LD C,0
         RET
 .BYTE:
         LD L,(HL)
         LD H,0
+        LD C,H
         LD A,3
         LD DE,(.PTR)
         INC DE
@@ -85,6 +90,18 @@ QT_BUILD:
         INC HL
         LD (.PTR),HL
         EX DE,HL
+        LD C,0
+        RET
+.INT:
+        LD E,(HL)
+        INC HL
+        LD D,(HL)
+        INC HL
+        LD C,(HL)
+        INC HL
+        LD (.PTR),HL
+        EX DE,HL
+        LD A,3
         RET
 .LIST:
         LD B,0                     ; Elements pushed so far.
@@ -97,7 +114,6 @@ QT_BUILD:
         JR Z,.CLOSE
         PUSH BC
         CALL .VALUE
-        CALL RT_WIDEN
         CALL QT_PUSH
         POP BC
         INC B

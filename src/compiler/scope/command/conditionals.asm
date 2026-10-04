@@ -106,12 +106,13 @@ IF_LOGIC:
         PUSH HL
         LD A,(RD_TAG)
         PUSH AF
+        PUSH BC                    ; C is the operand's byte 2.
         CALL EM_PLAIN              ; Not final: its tail calls must return.
         JP C,.NEXTFAIL
         LD HL,RT_TEST              ; Z means the value is #f; A:HL is kept.
         CALL EM_CALL
         JP C,.NEXTFAIL
-        LD HL,13                   ; The mode is 13 bytes up.
+        LD HL,15                   ; The mode is 15 bytes up.
         ADD HL,SP
         LD A,(HL)
         OR A
@@ -124,6 +125,7 @@ IF_LOGIC:
         JP C,.NEXTFAIL
         CALL BR_PUSH
         JP C,.NEXTFAIL
+        POP BC
         POP AF
         LD (RD_TAG),A
         POP HL
@@ -163,7 +165,8 @@ IF_LOGIC:
         OR A                       ; Carry clear: the form is complete.
         RET
 .NEXTFAIL:
-        POP AF                     ; Discard the saved next event.
+        POP BC                     ; Discard the saved next event.
+        POP AF
         POP HL
         POP AF
 .FAIL:
@@ -350,6 +353,8 @@ IF_COND:
         JP C,IF_FAIL
         LD (ST_EVENT),A            ; Save the event while checking the else spelling.
         LD (ST_EVVAL),HL
+        LD A,C
+        LD (ST_EVEXT),A
         LD A,(RD_TAG)
         LD (ST_EVTAG),A
         LD A,(ST_EVENT)
@@ -364,6 +369,8 @@ IF_COND:
         LD (ST_TAIL),A
         LD A,(ST_EVTAG)
         LD (RD_TAG),A
+        LD A,(ST_EVEXT)
+        LD C,A
         LD A,(ST_EVENT)
         LD HL,(ST_EVVAL)
         CALL CMD_EXPR              ; Compile the test expression already read.

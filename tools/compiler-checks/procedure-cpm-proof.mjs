@@ -607,13 +607,119 @@ const integerCases = [
     "#t\r\n#f\r\n#f\r\n#t\r\n#f\r\n#f\r\n#t\r\n#f\r\n#t\r\n#f\r\n#t\r\n#f\r\n#t\r\n#t\r\n#f\r\n#t\r\n#f\r\n#f",
   ],
 ];
+// Twenty-four-bit exact integers: both endpoints, products and quotients at
+// the bounds, printing, identity and equality, quoted and vector storage,
+// case dispatch and mixed comparison with binary16 values.
+const int24Case = [
+  "INT24.SK8",
+  `(begin
+    (write 8388607) (newline)
+    (write -8388608) (newline)
+    (write (+ 8388606 1)) (newline)
+    (write (- -8388607 1)) (newline)
+    (write (* 2896 2896)) (newline)
+    (write (* -2048 4096)) (newline)
+    (write (quotient 8388607 -1)) (newline)
+    (write (quotient -8388608 2)) (newline)
+    (write (remainder 8388607 1000)) (newline)
+    (write (modulo -70000 7)) (newline)
+    (write (modulo 100001 -7)) (newline)
+    (write (abs -8388607)) (newline)
+    (write (< 32767 32768)) (newline)
+    (write (= 65536 65536)) (newline)
+    (write (> -32769 -32768)) (newline)
+    (write (eqv? 70000 70000)) (newline)
+    (write (eq? 70000 70001)) (newline)
+    (write (zero? 65536)) (newline)
+    (write (number->string -8388608)) (newline)
+    (write (quote (100000 -70000 255 256))) (newline)
+    (write (vector-ref (vector 1000000 2) 0)) (newline)
+    (write (case 70000 ((70000) 1) (else 2))) (newline)
+    (write (equal? (list 70000) (list 70000))) (newline)
+    (write (member 70000 (quote (1 70000 3)))) (newline)
+    (write (+ 65536 0.5)) (newline)
+    (write (< 40000 50000.0)) (newline)
+    (write (= 32768 32768.0)) (newline)
+    (write (> 65505 65504.0)) (newline))`,
+  [
+    "8388607",
+    "-8388608",
+    "8388607",
+    "-8388608",
+    "8386816",
+    "-8388608",
+    "-8388607",
+    "-4194304",
+    "607",
+    "0",
+    "-1",
+    "8388607",
+    "#t",
+    "#t",
+    "#f",
+    "#t",
+    "#f",
+    "#f",
+    '"-8388608"',
+    "(100000 -70000 255 256)",
+    "1000000",
+    "1",
+    "#t",
+    "(70000 3)",
+    "+inf.0",
+    "#t",
+    "#t",
+    "#t",
+  ].join("\r\n"),
+];
+integerCases.push(int24Case);
+// A wide literal in every syntactic position the compiler reads ahead of:
+// its third byte must survive each compile-time stash.
+integerCases.push([
+  "INT24POS.SK8",
+  `(define g 100001)
+   (define (f x) (+ x 100002))
+   (define v (vector 100003 (if #t 100004 0) (cond (#f 0) (else 100005))))
+   (define (h) 100006)
+   (write (list g (f 1) (vector-ref v 0) (vector-ref v 1) (vector-ref v 2) (h)))
+   (newline)
+   (write (list (let ((a 100007) (b (+ 1 100008))) (list a b))
+                (let* ((a 100009)) a)
+                (letrec ((a (lambda () 100010))) (a))
+                (let loop ((i 100011)) (if (> i 100011) 0 i))))
+   (newline)
+   (write (list (case 3 ((3) 100012) (else 0)) (when #t 100013)
+                (unless #f 100014) (and 1 100015) (or #f 100016)
+                (begin 100017)))
+   (newline)
+   (write (list ((lambda (x) x) 100018) ((lambda () 100019))
+                (apply + (list 100020 1)) (begin (set! g 100021) g)
+                (if #f 0 100022) (cond ((= 1 1) 100023))))
+   (newline)
+   (write (list (quote 100024) '(100025 . 100026) (car '((100027) 100028))
+                (- 100029) (* -1 100030) (vector-ref (vector 100031) 0)))
+   (newline)`,
+  [
+    "(100001 100003 100003 100004 100005 100006)",
+    "((100007 100009) 100009 100010 100011)",
+    "(100012 100013 100014 100015 100016 100017)",
+    "(100018 100019 100021 100021 100022 100023)",
+    "(100024 (100025 . 100026) (100027) -100029 -100030 100031)",
+  ].join("\r\n"),
+]);
 const integerRuntimeErrorCases = [
   ["INTDIV0.SK8", "(quotient 7 0)", "RUNTIME ERROR\r\n"],
   ["INTREM0.SK8", "(remainder 7 0)", "RUNTIME ERROR\r\n"],
   ["INTTYPE.SK8", "(+ 1 #t)", "RUNTIME ERROR\r\n"],
   ["CMPBAD.SK8", "(< 1 #t)", "RUNTIME ERROR\r\n"],
-  ["INTOVF.SK8", "(+ 32767 1)", "RUNTIME ERROR\r\n"],
-  ["INTQOVF.SK8", "(quotient -32768 -1)", "RUNTIME ERROR\r\n"],
+  ["INTOVF.SK8", "(+ 8388607 1)", "RUNTIME ERROR\r\n"],
+  ["INTQOVF.SK8", "(quotient -8388608 -1)", "RUNTIME ERROR\r\n"],
+  ["INTMOVF.SK8", "(* 2897 2897)", "RUNTIME ERROR\r\n"],
+  ["INTNOVF.SK8", "(- -8388608)", "RUNTIME ERROR\r\n"],
+  ["INTAOVF.SK8", "(abs -8388608)", "RUNTIME ERROR\r\n"],
+  ["INTVIDX.SK8", "(vector-ref (vector 1) 65536)", "RUNTIME ERROR\r\n"],
+  ["INTLIDX.SK8", "(list-tail (list 1) 65536)", "RUNTIME ERROR\r\n"],
+  ["INTWCHR.SK8", "(integer->char 65536)", "RUNTIME ERROR\r\n"],
   ["INCHERR.SK8", "(integer->char 256)", "RUNTIME ERROR\r\n"],
   ["NOTARITY.SK8", "(not #t #f)", "RUNTIME ERROR\r\n"],
   ["MINUS0.SK8", "(-)", "RUNTIME ERROR\r\n"],
@@ -879,7 +985,7 @@ function errorCasesFor(mode) {
     case "runtime-errors":
     case "apply":
     case "integers":
-      return [];
+      return [["INTWIDE.SK8", "(write 8388608)", "COMPILE ERROR\r\n"]];
     case "ec":
       return errorCases.filter(([name]) => name.startsWith("EC"));
     case "data":

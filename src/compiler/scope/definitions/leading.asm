@@ -52,6 +52,8 @@ DEF_TOP:
 DEF_PUT:
         LD (ST_EVENT),A
         LD (ST_EVVAL),HL
+        LD A,C
+        LD (ST_EVEXT),A
         LD A,(RD_TAG)
         LD (ST_EVTAG),A
         JP REC_PUT
