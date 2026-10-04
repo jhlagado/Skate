@@ -18,6 +18,7 @@ Deno.test("four-byte bindings descend, load and store with a reserved byte", asy
   cpu.d = first.payload >>> 8;
   cpu.e = first.payload & 255;
   cpu.a = 3;
+  cpu.c = 0;
   cpu.h = 0x12;
   cpu.l = 0x34;
   const stored = call("HEAP_PUT", 0x1234);
@@ -33,6 +34,7 @@ Deno.test("four-byte bindings descend, load and store with a reserved byte", asy
   cpu.d = first.payload >>> 8;
   cpu.e = first.payload & 255;
   cpu.a = 3;
+  cpu.c = 0;
   cpu.h = 0xab;
   cpu.l = 0xcd;
   const changed = call("HEAP_SET", 0xabcd);

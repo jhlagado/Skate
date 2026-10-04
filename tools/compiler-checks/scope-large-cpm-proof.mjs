@@ -72,8 +72,9 @@ const fillArgument = Deno.args.find((argument) =>
   argument.startsWith("--fill-image=")
 );
 if (fillArgument !== undefined) {
-  const FORM_BYTES = 5;
-  const FIXED_BYTES = 8;
+  // LD HL,1 / LD A,3 / LD C,0 per form; the literal's own load adds two.
+  const FORM_BYTES = 7;
+  const FIXED_BYTES = 10;
   const target = Number.parseInt(
     fillArgument.slice("--fill-image=".length),
     10,

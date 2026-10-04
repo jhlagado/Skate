@@ -1,8 +1,8 @@
 # Value contract
 
-> **Status:** step 1 is done: every container uses the target cell, with
-> byte 2 written as zero. Step 2, the three-byte transport, is specified in
-> [Transport](#transport) and is next.
+> **Status:** steps 1 and 2 are done. Every container uses the target cell,
+> and every value travels as `A:CHL` with byte 2 in `C`, as set out in
+> [Transport](#transport). Integers are still sixteen-bit; step 3 is next.
 
 Skate is moving from sixteen-bit to twenty-four-bit payloads. The wider payload
 replaces the sixteen-bit one everywhere: exact integers become twenty-four-bit
@@ -164,15 +164,24 @@ whole.
 
 | Sequence | Now | Step 2 |
 | --- | --- | --- |
-| integer constant | `LD HL,n / LD A,3` | `LD HL,n / LD C,x / LD A,3` (+2 bytes) |
+| integer constant | `LD HL,n / LD A,3` | `LD HL,n / LD A,3 / LD C,x` (+2 bytes) |
 | tag-0 constant | `LD HL,n / XOR A` | `LD HL,n / XOR A / LD C,A` (+1 byte) |
+| symbol or string | `LD HL,lit / LD A,k` | `LD HL,lit / LD A,k / LD C,0` (+2 bytes) |
 | push, pop | `CALL ARG_PUSH`, `ARG_POP` | unchanged |
 | load, store | slot and global helpers | unchanged; the helpers move `C` |
 
-Measured on the six workloads, the constants add about 40 to 170 bytes per
-program before any optimisation. In the runtime, a clear-byte-2 store
-(`XOR A / LD (HL),A`) becomes `LD (HL),C`, one byte smaller, and a skipped
-byte 2 (`INC HL`) becomes `LD C,(HL) / INC HL`.
+Counting constants in the six compiled workloads gives about 40 to 170
+bytes per program. In the runtime, a clear-byte-2 store (`XOR A /
+LD (HL),A`) becomes `LD (HL),C`, one byte smaller, and a skipped byte 2
+(`INC HL`) becomes `LD C,(HL) / INC HL`.
+
+Measured after step 2, the runtime grew from 23,860 to 24,040 bytes (+180),
+and the core alone from 18,379 to 18,509 (+130). The projection of no
+growth was wrong: most of the cost is the byte-2 fields added beside memory
+temporaries (`QT_CEXT`, `QT_DEXT`, `QT_AEXT`, `DR_AEXT`, `VEC_EXT`,
+`EC_EXT`, `REST_EXT`) and the loads and stores around them, plus
+`RT_WIDEN`. The larger core moves the first heap page, so a core-only program
+keeps 2,688 live pairs instead of 2,720.
 
 ### Census
 
@@ -202,25 +211,45 @@ deno task census:registers ARG_PUSH RT_STORE CONS
 
 ### Debug check
 
-Step 2 adds a transport probe to the CP/M proofs. At the entry of every
-consumer (`ARG_PUSH`, `RT_STORE`, `RT_SET`, `HEAP_PUT`, `HEAP_SET`,
-`SLOT_PUT`, `SLOT_SET`, `OPS_PUSH`, `QT_PUSH`, `ROOT_ADD` and the packet
-builder's reads of the stack), the emulator checks that `C` matches rule 4
-for the tag in `A` and the payload in `HL`, and fails the proof with the
-routine name and the caller's address if it does not. It runs over the whole
-CP/M suite, so a producer that forgets `C` is found by the first program that
-uses it. The probe stays in place for step 3, with rule 4 widened to accept
-any byte 2 for an integer.
+`src/runtime/core/probe.asm` is assembled into the runtime only when
+`build/PROBE` exists:
 
-### Order of work in step 2
+```bash
+deno task probe:on
+```
 
-1. Add the probe, initially reporting rather than failing, and the census
-   task.
-2. Convert the consumers: `ARG_PUSH`/`ARG_POP`, the stores, the side stacks,
-   the root records, the packet builders and the memory temporaries.
-3. Convert the producers: loads, constants in the emitter, primitive and
-   arithmetic results, the reader and quoted data, until the probe is silent.
-4. Make the probe fail, run the full suite, and record code-size changes.
+```bash
+deno task probe:off
+```
+
+Each switch regenerates the runtime tables. With the probe on, every value
+consumer calls `PROBE` on entry: `ARG_PUSH`, `ROOT_ADD`, `RT_STORE` (and so
+`G_STORE` and `RT_SET`), `HEAP_PUT`, `HEAP_SET`, `SLOT_PUT`, `SLOT_SET`,
+`OPS_PUSH`, `QT_PUSH`, and `PAIR_NEW` for both constructor inputs. It checks
+`C` against rule 4 for the tag in `A` and payload in `HL`. A mismatch prints
+`PROBE site caller` (the consumer's entry and its return address, in hex) on
+the console, which fails the proof's output check, then continues with the
+corrected byte so one missing producer reports once per site.
+
+Run the CP/M groups with the probe on after any change to how values move.
+In the probe build the runtime is larger, so the pinned pair ceiling and the
+full-image proof fail by design; every other group must pass with no
+`PROBE` line. At the end of step 2 the probe found two producers that did
+not set `C` (the primitive operator push in `PRIM_OP`/`PRIM_TL` and the rest
+list store in `REST_ARG`), and the whole CP/M suite was then silent.
+
+### Sixteen-bit stand-ins for step 3
+
+Step 2 sets byte 2 from the sixteen-bit result in a few places with
+`RT_WIDEN`, which step 3 must replace with real twenty-four-bit results:
+
+* the primitive dispatcher's retire point (`PRIM_RUN`), for every primitive
+  result;
+* the inline arithmetic helpers (`RT_ADD`, `RT_SUB`, `RT_MUL`);
+* quoted-data decoding (`QT_BUILD`) and the datum reader's value stack.
+
+Step 3 also widens rule 4 for integers in the probe, and `STD_CASE` (the
+`case` key comparison) must compare byte 2 once integers use it.
 
 ## Migration steps
 
@@ -230,7 +259,7 @@ Each step keeps every existing proof passing with unchanged results.
    target byte layout: tag nibble in byte 3, byte 2 zero, flags in the high
    nibble. The argument packet's initialized byte becomes its flag nibble.
    No arithmetic changes.
-2. **Three-byte transport.** Carry byte 2 through registers, the native stack,
+2. **Done. Three-byte transport.** Carry byte 2 through registers, the native stack,
    packets, slots and the collector, still always zero or a sign extension,
    as set out in [Transport](#transport), with the debug check.
 3. **Twenty-four-bit exact integers.** Literals, arithmetic, division,
