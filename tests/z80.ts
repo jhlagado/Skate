@@ -85,8 +85,8 @@ export async function assemble(entry: string) {
   (runtime.hardware as typeof runtime.hardware & {
     memWrite: (address: number, value: number) => void;
   }).memWrite = (address, value) => {
-    const scratch = address >= symbols.get("f16work")! &&
-      address < symbols.get("f16wend")!;
+    const scratch = address >= symbols.get("f16_work")! &&
+      address < symbols.get("f16_lim")!;
     const stack = address >= 0xefe0 && address < 0xf000;
     if (!scratch && !stack) {
       throw new Error(`Unexpected write at ${address.toString(16)}`);
