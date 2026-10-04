@@ -14,6 +14,9 @@
 
 ; Save one value on the quoted-data stack.
 QT_PUSH:
+%IF PROBE
+        CALL PROBE
+%ENDIF
         LD (QT_ATAG),A             ; Keep the logical tag across the bound check.
         LD (QT_ACC),HL             ; Keep the payload beside it.
         LD HL,(QT_SP)

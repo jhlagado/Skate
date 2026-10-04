@@ -33,6 +33,9 @@ RST_SET:
 ; recorded as an exact root and pushed as PUSH AF, PUSH HL below the return.
 ; A and HL are kept.
 ARG_PUSH:
+%IF PROBE
+        CALL PROBE
+%ENDIF
         CALL ROOT_ADD
         POP DE                     ; The generated continuation.
         PUSH AF

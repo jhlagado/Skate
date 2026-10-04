@@ -115,6 +115,9 @@ SLOT_GET:
 
 ; Store A:HL through active slot index B.
 SLOT_PUT:
+%IF PROBE
+        CALL PROBE
+%ENDIF
         LD (SLOT_TAG),A             ; Save the value while finding the slot.
         LD (SLOT_VAL),HL
         CALL SLOT_REF
@@ -135,6 +138,9 @@ SLOT_PUT:
 
 ; Store A:HL through active slot index B, requiring prior initialization.
 SLOT_SET:
+%IF PROBE
+        CALL PROBE
+%ENDIF
         LD (SLOT_TAG),A
         LD (SLOT_VAL),HL
         CALL SLOT_REF

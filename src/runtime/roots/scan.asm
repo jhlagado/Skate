@@ -43,6 +43,9 @@ ROOT_ALL:
 ; Record one generated operand in the exact shadow root stack.  A:HL is
 ; returned unchanged so EM_PUSH can continue with the native stack operation.
 ROOT_ADD:
+%IF PROBE
+        CALL PROBE
+%ENDIF
         LD (ROOT_TAG),A
         LD (ROOT_VAL),HL
         LD A,(ROOT_CNT)

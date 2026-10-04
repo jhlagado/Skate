@@ -1,11 +1,13 @@
 /** Generate the checked runtime byte table used by the scope compiler. */
 
 import { assembleAtomProject, materializeAtomGeneration } from "atom-z80";
+import { probeDefinitions } from "../../tests/z80.ts";
 
 const root = new URL("../../", import.meta.url);
 const assembled = await assembleAtomProject({
   root: root.pathname,
   entry: "src/runtime/image.asm",
+  definitions: probeDefinitions(root.pathname),
   assembler: undefined,
   target: undefined,
   maxInstructions: 1_000_000_000,

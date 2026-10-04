@@ -194,6 +194,9 @@ QT_CACHE:
 
 ; Store A:HL into the four-byte slot addressed by DE.
 RT_STORE:
+%IF PROBE
+        CALL PROBE
+%ENDIF
         LD (RT_TAG),A             ; Preserve the value tag while writing payload bytes.
         LD A,L                    ; Copy the payload low byte to the slot.
         LD (DE),A                 ; Publish the low byte first.

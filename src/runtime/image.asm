@@ -35,6 +35,9 @@
 %INCLUDE "apply.asm"
 %INCLUDE "escape.asm"
 %INCLUDE "quoted.asm"
+%IF PROBE
+%INCLUDE "core/probe.asm"
+%ENDIF
 ; Optional modules, in load order: a program loads the core alone, the core
 ; and the standard procedures, or everything.  Nothing in the core may read
 ; their state or reach their code except through a primitive the compiler's

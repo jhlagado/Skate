@@ -15,6 +15,7 @@ for (
     const r = await assembleAtomProject({
       root,
       entry,
+      definitions: { PROBE: 0 },
       assembler: undefined,
       target: undefined,
       maxInstructions: 1_000_000_000,

@@ -17,6 +17,17 @@ type AssembledEntry = {
 // isolated from one another.
 const assemblyCache = new Map<string, Promise<AssembledEntry>>();
 
+// The transport probe (docs/value-contract.md) is assembled into the runtime
+// when build/PROBE exists; `deno task probe:on` and `probe:off` manage it.
+export function probeDefinitions(root: string): { PROBE: number } {
+  try {
+    Deno.statSync(`${root}/build/PROBE`);
+    return { PROBE: 1 };
+  } catch {
+    return { PROBE: 0 };
+  }
+}
+
 async function assembleEntry(
   entry: string,
   limits: AssemblyLimits,
@@ -25,6 +36,7 @@ async function assembleEntry(
   const result = await assembleAtomProject({
     root,
     entry,
+    definitions: probeDefinitions(root),
     assembler: undefined,
     target: undefined,
     // The native compiler includes the macro phase and lowerer handoff.  Its

@@ -54,6 +54,9 @@ PKT_PACK:
 ; Save A:HL on the fixed side stack used for operator values. The area between
 ; the heap ceiling and native-stack guard does not consume either resource.
 OPS_PUSH:
+%IF PROBE
+        CALL PROBE
+%ENDIF
         LD (ARG_TAG),A           ; Preserve the value tag while finding the top.
         LD (ARG_VAL),HL          ; Preserve the payload across the bounds check.
         LD HL,(OPS_SP)           ; The side cursor grows upward in four-byte steps.

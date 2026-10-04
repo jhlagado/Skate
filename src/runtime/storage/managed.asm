@@ -25,6 +25,9 @@ HEAP_GET:
 
 ; Store a value in a four-byte heap binding and retain its capture and mark bits.
 HEAP_PUT:
+%IF PROBE
+        CALL PROBE
+%ENDIF
         LD (RT_TAG),A
         LD (ARG_VAL),HL
         LD A,L
@@ -49,6 +52,9 @@ HEAP_PUT:
 
 ; Store through a four-byte heap binding only after its initialized bit is set.
 HEAP_SET:
+%IF PROBE
+        CALL PROBE
+%ENDIF
         LD (ARG_TAG),A
         LD (ARG_VAL),HL
         LD (HEAP_OBJ),DE
