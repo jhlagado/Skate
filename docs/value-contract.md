@@ -182,6 +182,12 @@ temporaries (`QT_CEXT`, `QT_DEXT`, `QT_AEXT`, `DR_AEXT`, `VEC_EXT`,
 `RT_WIDEN`. The larger core moves the first heap page, so a core-only program
 keeps 2,688 live pairs instead of 2,720.
 
+Measured after step 3, the runtime is 24,206 bytes (+166) and the core 18,639
+(+130). Twenty-four-bit arithmetic, division and the shared decimal routine
+`NUM_TEXT` cost about that much, after `RT_WIDEN`, the second integer printer
+and `number->string`'s own division were removed. The heap's first page did
+not move again, so the ceiling stays at 2,688.
+
 ### Census
 
 `tools/compiler-checks/register-census.ts` follows the runtime call graph and
