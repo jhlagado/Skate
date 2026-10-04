@@ -69,6 +69,7 @@ VEC_PRIM:
         JR Z,.FILL_ARG             ; Read and retain the optional fill value.
         XOR A                      ; The default fill is the canonical false value.
         LD (VEC_TAG),A
+        LD (VEC_EXT),A
         LD HL,0FE00H               ; Store #f as the default payload.
         LD (VEC_VAL),HL
         JR .ALLOC                  ; Allocate and initialise every element.
@@ -77,6 +78,8 @@ VEC_PRIM:
         CALL PKT_VAL               ; Recover its complete tagged representation.
         LD (VEC_VAL),HL            ; Keep the payload across class allocation.
         LD (VEC_TAG),A             ; Keep the logical tag beside the payload.
+        LD A,C
+        LD (VEC_EXT),A
 .ALLOC:
         CALL VEC_NEW                ; The packet remains an exact root during GC.
         JP C,ERROR                 ; Report exhaustion after one collection retry.
@@ -127,7 +130,8 @@ VEC_PRIM:
         INC HL
         LD D,(HL)                  ; Recover the element payload high byte.
         INC HL
-        INC HL                     ; Skip the reserved extension byte.
+        LD C,(HL)                  ; Byte 2.
+        INC HL
         LD A,(HL)                  ; Recover the element's logical tag.
         EX DE,HL                   ; Return the payload in the standard ABI.
         PUSH IX                    ; Retire the packet through the common cleanup.
@@ -147,6 +151,8 @@ VEC_PRIM:
         CALL PKT_VAL               ; Recover its complete tagged representation.
         LD (VEC_VAL),HL            ; Reuse fill scratch for the replacement payload.
         LD (VEC_TAG),A             ; Reuse fill scratch for the replacement tag.
+        LD A,C
+        LD (VEC_EXT),A
         CALL VEC_ADDR              ; Compute the selected element address.
         LD HL,(VEC_CELL)           ; Recover the selected element address.
         LD DE,(VEC_VAL)            ; Load the replacement payload.
@@ -154,8 +160,8 @@ VEC_PRIM:
         INC HL
         LD (HL),D                  ; Publish the payload high byte.
         INC HL
-        XOR A                      ; Keep the future payload extension clear.
-        LD (HL),A
+        LD A,(VEC_EXT)
+        LD (HL),A                  ; Byte 2.
         INC HL
         LD A,(VEC_TAG)             ; Publish the logical element tag.
         LD (HL),A
@@ -226,8 +232,8 @@ VEC_FILL:
         INC HL
         LD (HL),D                  ; Store the payload high byte.
         INC HL
-        XOR A                      ; Keep the future payload extension clear.
-        LD (HL),A
+        LD A,(VEC_EXT)
+        LD (HL),A                  ; Byte 2.
         INC HL
         LD A,(VEC_TAG)             ; Store the fill tag in cell metadata.
         LD (HL),A
@@ -257,10 +263,11 @@ VEC_COPY:
         INC HL
         LD D,(HL)                  ; Read its payload high byte.
         INC HL
-        INC HL                     ; Skip the extension byte.
+        LD C,(HL)                  ; Byte 2.
+        INC HL
         LD A,(HL)
         AND 0FH                    ; Its logical tag.
-        LD (VEC_TAG),A             ; Preserve it while clearing the extension.
+        LD (VEC_TAG),A
         INC HL
         LD (VEC_PKTP),HL           ; Advance the source cursor by four bytes.
         LD HL,(VEC_PTR)            ; Recover the destination element address.
@@ -268,8 +275,7 @@ VEC_COPY:
         INC HL
         LD (HL),D                  ; Store the payload high byte.
         INC HL
-        XOR A                      ; Keep the future payload extension clear.
-        LD (HL),A
+        LD (HL),C                  ; Byte 2.
         INC HL
         LD A,(VEC_TAG)             ; Store the logical tag in cell metadata.
         LD (HL),A

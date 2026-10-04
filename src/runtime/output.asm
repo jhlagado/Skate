@@ -11,11 +11,13 @@ NUM_ZERO:
         LD A,H                   ; Combine the two payload bytes for the zero test.
         OR L                     ; Z means the exact integer is zero.
         JR Z,.TRUE                ; Return canonical true for zero.
-        LD A,0                   ; Tag zero identifies a boolean value.
+        XOR A                    ; Tag zero identifies a boolean value.
+        LD C,A
         LD HL,0FE00H             ; #f has the reserved false payload.
         RET                      ; Return the false predicate result.
 .TRUE:
-        LD A,0                   ; Tag zero identifies a boolean value.
+        XOR A                    ; Tag zero identifies a boolean value.
+        LD C,A
         LD HL,0FE01H             ; #t has the reserved true payload.
         RET                      ; Return the true predicate result.
 

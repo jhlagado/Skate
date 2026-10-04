@@ -209,6 +209,12 @@ LIT_ADD:
         CALL SINK_PUT
         RET C
         LD A,(LIT_KIND)
+        CALL SINK_PUT
+        RET C
+        LD A,0EH                   ; LD C,0: a literal's byte 2.
+        CALL SINK_PUT
+        RET C
+        XOR A
         JP SINK_PUT
 
 ; Append copied literals after generated code, slots and procedure records.

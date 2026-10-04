@@ -53,6 +53,8 @@ APPLY:
         JP C,ERROR
         LD (QT_CTAG),A              ; Preserve the CAR while computing its slot.
         LD (QT_CAR),HL
+        LD A,C
+        LD (QT_CEXT),A
         LD A,(PKT_LEFT)
         LD L,A
         LD H,0
@@ -68,8 +70,8 @@ APPLY:
         LD A,H
         LD (DE),A
         INC DE
-        XOR A
-        LD (DE),A                   ; The extension byte stays clear.
+        LD A,(QT_CEXT)
+        LD (DE),A                   ; Byte 2.
         INC DE
         LD A,(QT_CTAG)
         OR CELL_VAL

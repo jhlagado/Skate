@@ -194,7 +194,8 @@ WR_VEC:
         INC HL
         LD D,(HL)                  ; Read the element payload high byte.
         INC HL
-        INC HL                     ; Skip the reserved extension byte.
+        LD C,(HL)                  ; Byte 2.
+        INC HL
         LD A,(HL)                  ; Read the element's logical tag.
         EX DE,HL                   ; A:HL is now the element value.
         CALL WR_VALUE              ; Print the element in the current mode.

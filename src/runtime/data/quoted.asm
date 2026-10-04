@@ -33,8 +33,7 @@ QT_PUSH:
         INC HL
         LD (HL),D
         INC HL
-        XOR A
-        LD (HL),A                  ; The extension byte stays clear.
+        LD (HL),C                  ; Byte 2.
         INC HL
         LD A,(QT_ATAG)
         LD (HL),A
@@ -60,6 +59,7 @@ QT_POP:
         INC HL
         LD D,(HL)
         INC HL
+        LD C,(HL)                  ; Byte 2.
         INC HL
         LD A,(HL)
         AND 0FH
@@ -78,6 +78,8 @@ QT_FOLD:
         CALL QT_POP                 ; The dotted tail is the initial accumulator.
         LD (QT_ATAG),A
         LD (QT_ACC),HL
+        LD A,C
+        LD (QT_AEXT),A
         LD A,(QT_CNT)
         DEC A
         LD (QT_CNT),A
@@ -85,6 +87,7 @@ QT_FOLD:
 .NIL:
         XOR A
         LD (QT_ATAG),A
+        LD (QT_AEXT),A
         LD HL,0FE02H               ; Canonical empty-list value.
         LD (QT_ACC),HL
 .LOOP:
@@ -94,6 +97,10 @@ QT_FOLD:
         CALL QT_POP                 ; The preceding element becomes the new CAR.
         LD (QT_CTAG),A
         LD (QT_CAR),HL
+        LD A,C
+        LD (QT_CEXT),A
+        LD A,(QT_AEXT)
+        LD (QT_DEXT),A
         LD A,(QT_ATAG)
         LD (QT_DTAG),A
         LD HL,(QT_ACC)
@@ -101,14 +108,17 @@ QT_FOLD:
         CALL PAIR_NEW
         LD (QT_ATAG),A
         LD (QT_ACC),HL
+        XOR A
+        LD (QT_AEXT),A
         LD A,(QT_CNT)
         DEC A
         LD (QT_CNT),A
         JR .LOOP
 .DONE:
-        LD A,(QT_ATAG)
-        LD HL,(QT_ACC)
         XOR A
         LD (QT_HELD),A             ; The returned value is now held by its caller.
+        LD A,(QT_AEXT)
+        LD C,A
         LD A,(QT_ATAG)
+        LD HL,(QT_ACC)
         RET

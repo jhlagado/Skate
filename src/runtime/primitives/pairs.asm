@@ -19,10 +19,14 @@ PKT_CONS:
         CALL PKT_VAL
         LD (QT_CAR),HL
         LD (QT_CTAG),A
+        LD A,C
+        LD (QT_CEXT),A
         LD HL,ARG_PKT+4
         CALL PKT_VAL
         LD (QT_CDR),HL
         LD (QT_DTAG),A
+        LD A,C
+        LD (QT_DEXT),A
         CALL PAIR_NEW
         PUSH IX
         RET

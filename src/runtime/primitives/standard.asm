@@ -671,6 +671,10 @@ STD_REV:
         JP C,ERROR                 ; Only a proper list can be reversed.
         LD (QT_CAR),HL
         LD (QT_CTAG),A
+        LD A,C
+        LD (QT_CEXT),A
+        XOR A
+        LD (QT_DEXT),A             ; The accumulator is a pair or the empty list.
         LD A,(STD_LTAG)
         LD HL,(STD_LIST)
         CALL PAIR_CDR
@@ -713,6 +717,7 @@ STD_JOIN:
         LD (STD_RES),HL
         LD HL,0FE02H
         XOR A
+        LD C,A
         CALL OPS_PUSH              ; Root the head of the copy.
         CALL OPS_TOP
         LD (STD_HEAD),HL
@@ -740,6 +745,10 @@ STD_JOIN:
         JP C,ERROR                 ; Only proper lists can be copied.
         LD (QT_CAR),HL
         LD (QT_CTAG),A
+        LD A,C
+        LD (QT_CEXT),A
+        XOR A
+        LD (QT_DEXT),A             ; Each copy ends in the empty list.
         LD A,(STD_LTAG)
         LD HL,(STD_LIST)
         CALL PAIR_CDR
@@ -757,12 +766,14 @@ STD_JOIN:
         JR NZ,.CHAIN
         LD HL,(STD_HEAD)           ; The first cell is the rooted head.
         LD A,1
+        LD C,0                     ; A pair's byte 2 is zero.
         CALL OPS_PUT
         JR .LAST
 .CHAIN:
         LD BC,CDR_LO               ; Point the previous cell's CDR here.
         ADD HL,BC
         LD A,1
+        LD C,0                     ; A pair's byte 2 is zero.
         CALL STD_PUT
 .LAST:
         LD (STD_ACC),DE            ; This cell is now the last one.
@@ -792,19 +803,19 @@ STD_JOIN:
         PUSH IX
         RET
 
-; Store A:DE in the pair cell at HL, keeping its metadata flag bits.
+; Store A:CDE in the pair cell at HL, keeping its metadata flag bits.
 ; set-car! uses it for the CAR cell too.
 STD_PUT:
         LD (HL),E
         INC HL
         LD (HL),D
         INC HL
-        LD (HL),0
+        LD (HL),C                  ; Byte 2.
         INC HL
-        LD C,A
+        LD B,A
         LD A,(HL)
         AND 0F0H
-        OR C
+        OR B
         LD (HL),A
         RET
 
@@ -815,13 +826,13 @@ OPS_TOP:
         ADD HL,DE
         RET
 
-; Store A:DE in the side-stack record at HL, or load it as A:HL.
+; Store A:CDE in the side-stack record at HL, or load it as A:CHL.
 OPS_PUT:
         LD (HL),E
         INC HL
         LD (HL),D
         INC HL
-        LD (HL),0                  ; The extension byte stays clear.
+        LD (HL),C                  ; Byte 2.
         INC HL
         LD (HL),A
         RET
@@ -830,6 +841,7 @@ OPS_GET:
         INC HL
         LD D,(HL)
         INC HL
+        LD C,(HL)                  ; Byte 2.
         INC HL
         LD A,(HL)
         AND 0FH

@@ -59,7 +59,23 @@ EM_INT:
         CALL SINK_PUT               ; Append the tag-load opcode.
         RET C                     ; Preserve a staged-output capacity failure.
         LD A,3                    ; The generated value is an exact integer.
-        JP SINK_PUT                 ; Append the tag and return.
+        CALL SINK_PUT               ; Append the tag.
+        RET C
+        LD A,0EH                  ; LD C,n: byte 2 is the sign extension.
+        CALL SINK_PUT
+        RET C
+        LD A,(ST_IMMED+1)
+        RLA
+        SBC A,A
+        JP SINK_PUT
+
+; Emit XOR A and LD C,A: tag zero with byte 2 zero.
+EM_ZERO:
+        LD A,0AFH                 ; XOR A: the tag is zero.
+        CALL SINK_PUT
+        RET C
+        LD A,4FH                  ; LD C,A: so is byte 2.
+        JP SINK_PUT
 
 ; Emit a binary16 literal whose payload is already in HL.
 EM_FLOAT:
@@ -70,8 +86,7 @@ EM_FLOAT:
         LD HL,(ST_IMMED)          ; Recover the binary16 payload.
         CALL EM_WORD               ; Append the payload in little-endian order.
         RET C                     ; Preserve a staged-output capacity failure.
-        LD A,0AFH                 ; XOR A: the tag is zero.
-        JP SINK_PUT
+        JP EM_ZERO
 
 ; Emit an unbound predefined procedure as a reserved immediate value.
 ; A contains its one-based primitive kind; the runtime subtracts $20 from the
@@ -89,8 +104,7 @@ EM_PRIM:
         LD A,0FEH
         CALL SINK_PUT                 ; All primitive payloads use the reserved high byte.
         RET C
-        LD A,0AFH                 ; XOR A: the tag is zero.
-        JP SINK_PUT
+        JP EM_ZERO
 
 ; Emit and save a predefined procedure on the runtime operator side stack.
 .SAVE:
@@ -111,8 +125,7 @@ EM_BOOL:
         LD L,A                    ; FE00H and FE01H distinguish the booleans.
         CALL EM_WORD              ; Append the payload word.
         RET C                     ; Preserve a staged-output capacity failure.
-        LD A,0AFH                 ; XOR A: the tag is zero.
-        JP SINK_PUT
+        JP EM_ZERO
 
 ; Emit a byte character.  Characters share the scalar tag with booleans, but
 ; keep the FFxx payload so predicates can distinguish them from numbers.
@@ -124,13 +137,12 @@ EM_CHAR:
         LD HL,(ST_IMMED)          ; Recover the character payload.
         CALL EM_WORD              ; Append both payload bytes unchanged.
         RET C                     ; Preserve a staged-output capacity failure.
-        LD A,0AFH                 ; XOR A: the tag is zero.
-        JP SINK_PUT
+        JP EM_ZERO
 
 ; Emit the canonical unspecified value (tag zero, payload FE04H).
 EM_VOID:
         LD HL,0FE04H              ; FE04H is the language's UNSPECIFIED value.
-; Emit LD HL,nn and LD A,0 for the tag-zero immediate in HL.
+; Emit LD HL,nn, XOR A and LD C,A for the tag-zero immediate in HL.
 EM_IMM:
         PUSH HL
         LD A,21H                  ; Load the reserved immediate payload.
@@ -139,18 +151,17 @@ EM_IMM:
         RET C                     ; Preserve a staged-output capacity failure.
         CALL EM_WORD               ; Append the payload in little-endian order.
         RET C                     ; Preserve a staged-output capacity failure.
-        LD A,0AFH                 ; XOR A: the tag is zero.
-        JP SINK_PUT
+        JP EM_ZERO
 
-; Record the value before emitting PUSH AF/PUSH HL.  The runtime collector
+; Root the value in A:CHL and push it as a cell image.  The runtime collector
 ; uses the parallel records while a nested allocation is in progress.
 EM_PUSH:
-        LD HL,ARG_PUSH             ; Root the operand, then PUSH AF and PUSH HL.
+        LD HL,ARG_PUSH             ; Root the operand, then push BC and HL.
         JP EM_CALL
 
 ; Recover a value saved by EM_PUSH.  The payload was pushed after its tag.
 EM_POP:
-        LD HL,ARG_POP             ; POP HL, POP AF and retire the root record.
+        LD HL,ARG_POP             ; Pop A:CHL and retire the root record.
         JP EM_CALL
 
 ; Emit a clear of a recursive cell before its first initializer runs.

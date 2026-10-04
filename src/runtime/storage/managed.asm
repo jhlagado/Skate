@@ -13,6 +13,7 @@ HEAP_GET:
         INC HL
         LD D,(HL)
         INC HL
+        LD C,(HL)                  ; Byte 2.
         INC HL
         LD A,(HL)
         AND BND_INIT
@@ -36,8 +37,8 @@ HEAP_PUT:
         LD A,H
         LD (DE),A
         INC DE
-        XOR A
-        LD (DE),A                  ; The extension byte stays clear.
+        LD A,C
+        LD (DE),A                  ; Byte 2.
         INC DE
         LD A,(DE)
         AND BND_ESC+BND_USED+BND_MARK
@@ -148,6 +149,7 @@ HEAP_LAM:
 .DONE:
         LD HL,(FRM_CLOS)           ; Return the closure object as the payload.
         LD A,2                     ; Tag two denotes a callable closure object.
+        LD C,0
         RET                        ; The generated prefix jumps over its body.
 
 ; Calculate the current closure's four-byte class and rounded allocation size.

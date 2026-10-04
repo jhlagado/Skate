@@ -18,25 +18,21 @@ PKT_PACK:
         JP Z,.OPERATOR           ; A nullary call skips directly to the side pop.
         DEC C
 .LOOP:
-        POP HL                   ; Recover one reverse-pushed argument payload.
-        POP AF                   ; Recover its tag word.
-        LD (ARG_TAG),A           ; Preserve the tag while addressing the packet.
-        LD (ARG_VAL),HL          ; Preserve the payload while multiplying the index.
-        LD L,C
+        LD L,C                   ; Address packet entry C.
         LD H,0
         ADD HL,HL
         ADD HL,HL
         LD DE,ARG_PKT
         ADD HL,DE
-        LD DE,(ARG_VAL)
+        POP DE                   ; One reverse-pushed argument's payload.
         LD (HL),E
         INC HL
         LD (HL),D
         INC HL
-        XOR A
-        LD (HL),A                ; The extension byte stays clear.
+        POP DE                   ; Its byte 2 in E and tag in D.
+        LD (HL),E
         INC HL
-        LD A,(ARG_TAG)
+        LD A,D
         OR CELL_VAL              ; A live record and its tag.
         LD (HL),A
         DEC C
@@ -51,7 +47,7 @@ PKT_PACK:
         PUSH IX                  ; Restore the PKT_PACK helper return address.
         RET
 
-; Save A:HL on the fixed side stack used for operator values. The area between
+; Save A:CHL on the fixed side stack used for operator values. The area between
 ; the heap ceiling and native-stack guard does not consume either resource.
 OPS_PUSH:
 %IF PROBE
@@ -73,8 +69,7 @@ OPS_PUSH:
         INC HL
         LD (HL),D
         INC HL
-        XOR A
-        LD (HL),A                 ; The extension byte stays clear.
+        LD (HL),C                 ; Byte 2.
         INC HL
         LD A,(ARG_TAG)
         LD (HL),A                 ; The tag; the cursor, not a flag, marks it live.
@@ -98,6 +93,7 @@ OPS_POP:
         INC HL
         LD D,(HL)
         INC HL
+        LD C,(HL)                 ; Byte 2.
         INC HL
         LD A,(HL)
         AND 0FH
@@ -144,6 +140,7 @@ PRIM_RUN:
 ; Primitive paths use PUSH IX/RET, so one common continuation can retire the
 ; packet after the operation has finished and any constructor GC has returned.
 .RETIRE:
+        CALL RT_WIDEN              ; Byte 2 for every sixteen-bit result.
         LD (ARG_TAG),A
         LD (ARG_VAL),HL
         XOR A

@@ -20,6 +20,9 @@ QT_DTAG: DB 0
 QT_FLAGS:  DB 0                 ; Packed pair flags retained while tracing or printing.
 .CAR_TAG:  DB 0                 ; Temporary packed CAR tag during pair construction.
 QT_ATAG: DB 0
+QT_CEXT: DB 0                   ; Byte 2 of the constructor's CAR input.
+QT_DEXT: DB 0                   ; Byte 2 of the constructor's CDR input.
+QT_AEXT: DB 0                   ; Byte 2 of the list accumulator.
 QT_CNT:   DB 0
 QT_TAIL: DB 0
 QT_HELD: DB 0                 ; Nonzero while the list accumulator is a root.

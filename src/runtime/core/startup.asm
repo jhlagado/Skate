@@ -157,7 +157,8 @@ RT_LOAD:
         LD E,(HL)                 ; Read the value's low byte.
         INC HL                    ; Advance to the high value byte.
         LD D,(HL)                 ; Read the value's high byte.
-        INC HL                    ; Skip the clear extension byte.
+        INC HL
+        LD C,(HL)                 ; Byte 2 travels in C.
         INC HL                    ; Advance to the flags and tag.
         LD A,(HL)                 ; Bit four records whether the binding is ready.
         AND CELL_VAL              ; Ignore the high escape mark kept for closures.
@@ -183,6 +184,7 @@ QT_CACHE:
         INC HL
         LD D,(HL)                 ; Recover the cached payload high byte.
         INC HL
+        LD C,(HL)                 ; Byte 2.
         INC HL
         LD A,(HL)
         AND 0FH                   ; The cached value tag; carry is clear.
@@ -203,9 +205,9 @@ RT_STORE:
         INC DE                    ; Advance to the high payload byte.
         LD A,H                    ; Copy the payload high byte.
         LD (DE),A                 ; Publish the complete payload.
-        INC DE                    ; Advance to the extension byte.
-        XOR A
-        LD (DE),A                 ; It stays clear.
+        INC DE
+        LD A,C
+        LD (DE),A                 ; Byte 2 from C.
         INC DE                    ; Advance to the flags and tag.
         PUSH BC
         LD A,(RT_TAG)
@@ -235,7 +237,24 @@ RT_SET:
         CALL RT_STORE               ; Publish the new value and any escape mark.
         LD HL,0FE04H               ; Mutation expressions return UNSPECIFIED.
         XOR A                      ; Tag zero identifies the reserved immediate.
+        LD C,A
         RET                        ; The caller receives the language result value.
+
+; Set C, byte 2 of the value in A:HL, from its sixteen-bit form: the sign
+; extension of H for an exact integer and zero for every other tag.  Every
+; register but C and every flag is kept.  Producers of sixteen-bit results
+; use it until arithmetic is twenty-four bits wide.
+RT_WIDEN:
+        PUSH AF
+        LD C,0
+        CP 3
+        JR NZ,.DONE
+        BIT 7,H
+        JR Z,.DONE
+        DEC C
+.DONE:
+        POP AF
+        RET
 
 ; Return Z exactly when the value is #f, preserving A and HL for short-circuit
 ; forms.  Other tag-zero scalars, including numeric zero, are true.
@@ -295,6 +314,7 @@ RT_BINOP:
         CALL NUM_SUB              ; Checked subtraction uses A/B and HL/DE.
 .RESULT:
         JP C,ERROR                ; Overflow or an invalid value is terminal.
+        CALL RT_WIDEN
         LD B,2                    ; The two native operands are now consumed.
         CALL ROOT_CUT
         PUSH IX                   ; Restore the generated caller's return address.

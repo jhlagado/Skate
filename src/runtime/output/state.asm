@@ -67,6 +67,7 @@ DESC_OLD:      DW 0                ; Descriptor active before a tail transfer.
 SLOT_CUR:      DW 0                ; Active four-byte slot address.
 SLOT_VAL:      DW 0                ; Value payload held by a slot helper.
 SLOT_TAG:     DB 0                 ; Value tag held by a slot helper.
+REST_EXT:     DB 0                 ; Byte 2 of a rest-binding argument.
 SLOT_REP:      DB 0                ; Active-slot flags held by a slot helper.
 SLOT_NUM:      DB 0                ; Slot number held across promotion.
 DESC_PTR:      DW 0                ; Descriptor cursor during argument transfer.

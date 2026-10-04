@@ -33,13 +33,16 @@ EC_CALL:
         LD (EC_SP),HL              ; The caller frame remains below this boundary.
         CALL EC_OPEN               ; Reserve one dynamic record and make a token.
         LD A,(EC_PTAG)             ; Restore the target value for INV_CALL.
+        LD B,A
+        LD C,0                     ; A procedure's byte 2 is zero.
         LD HL,(EC_PROC)
-        PUSH AF                    ; The target is the callee record.
+        PUSH BC                    ; The target is the callee record.
         PUSH HL
         LD A,8                     ; Escape tokens use the private tag-eight type.
         LD HL,(EC_TOKEN)           ; The active record's generation is its payload.
         CALL ROOT_ADD              ; Keep the token visible during call setup.
-        PUSH AF                    ; The token is the one argument to the target.
+        LD B,A
+        PUSH BC                    ; The token is the one argument to the target.
         PUSH HL
         LD HL,EC_DONE              ; A normal target return completes call/ec.
         PUSH HL
@@ -178,6 +181,8 @@ EC_OPEN:
 EC_DONE:
         LD (EC_VAL),HL             ; Preserve the result while retiring the record.
         LD (EC_TAG),A
+        LD A,C
+        LD (EC_EXT),A
         LD A,(EC_DEPTH)
         OR A
         JP Z,ERROR                 ; An unmatched return indicates damaged control state.
@@ -201,6 +206,8 @@ EC_DONE:
         INC HL
         LD D,(HL)
         LD (OPS_SP),DE             ; Restore side-stack state before returning.
+        LD A,(EC_EXT)
+        LD C,A
         LD A,(EC_TAG)              ; Restore the target result after the record scan.
         LD HL,(EC_VAL)
         LD IX,(EC_GOTO)
@@ -236,6 +243,8 @@ EC_ESC:
         CALL PKT_ONE               ; Read and retain the value supplied to the escape.
         LD (EC_TAG),A
         LD (EC_VAL),HL
+        LD A,C
+        LD (EC_EXT),A
         LD HL,(EC_REC)
         LD DE,2
         ADD HL,DE
@@ -307,6 +316,8 @@ EC_ESC:
         LD (APPLY_IN),A
         LD HL,(EC_SP)
         LD SP,HL                   ; Discard the target and every nested call frame.
+        LD A,(EC_EXT)
+        LD C,A
         LD A,(EC_TAG)
         LD HL,(EC_VAL)
         LD IX,(EC_GOTO)
@@ -369,6 +380,7 @@ EC_MATCH:  DB 0                    ; Matched record index during an escape.
 EC_KEY:  DW 0                      ; Token being sought by EC_ESC.
 EC_VAL:    DW 0                    ; Escape or normal-result payload.
 EC_TAG:   DB 0                     ; Escape or normal-result tag.
+EC_EXT:   DB 0                     ; Escape or normal-result byte 2.
 EC_GOTO:  DW 0                     ; Continuation retained across state restore.
 EC_MAP:  DW 0                      ; Saved map pointer during collector root scans.
 EC_TABLE:   DS 168                 ; Eight records, twenty-one bytes each.

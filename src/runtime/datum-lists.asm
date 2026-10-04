@@ -28,8 +28,12 @@ DR_PUSH:
         INC HL
         LD (HL),D
         INC HL
-        XOR A
-        LD (HL),A                   ; The extension byte stays clear.
+        PUSH HL
+        LD A,(DR_TAG)
+        EX DE,HL
+        CALL RT_WIDEN               ; Reader values are sixteen-bit for now.
+        POP HL
+        LD (HL),C                   ; Byte 2.
         INC HL
         LD A,(DR_TAG)
         LD (HL),A
@@ -59,6 +63,7 @@ DR_POP:
         INC HL
         LD D,(HL)
         INC HL
+        LD C,(HL)                  ; Byte 2.
         INC HL
         LD A,(HL)
         AND 0FH                    ; Clears carry: a successful pop.
@@ -79,6 +84,8 @@ DR_BUILD:
         CALL DR_POP                 ; A dotted tail is the initial CDR value.
         JP C,ERROR
         LD (DR_ATAG),A
+        LD A,C
+        LD (DR_AEXT),A
         LD (DR_ACC),HL
         LD A,(DR_FOLD)
         DEC A
@@ -87,6 +94,7 @@ DR_BUILD:
 .PROPER:
         XOR A
         LD (DR_ATAG),A
+        LD (DR_AEXT),A
         LD HL,0FE02H                ; The empty list is the initial proper CDR.
         LD (DR_ACC),HL
 .LOOP:
@@ -96,6 +104,10 @@ DR_BUILD:
         CALL DR_POP                 ; The preceding value becomes the new CAR.
         LD (QT_CTAG),A              ; Pair construction already owns these fields.
         LD (QT_CAR),HL
+        LD A,C
+        LD (QT_CEXT),A
+        LD A,(DR_AEXT)
+        LD (QT_DEXT),A
         LD A,(DR_ATAG)
         LD (QT_DTAG),A
         LD HL,(DR_ACC)
@@ -104,6 +116,8 @@ DR_BUILD:
         JP C,ERROR                  ; Propagate allocation failure to the reader.
         LD (DR_ATAG),A             ; The new pair becomes the next accumulator.
         LD (DR_ACC),HL
+        XOR A
+        LD (DR_AEXT),A
         LD A,(DR_FOLD)
         DEC A
         LD (DR_FOLD),A

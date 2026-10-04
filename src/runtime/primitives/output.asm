@@ -37,7 +37,8 @@ PKT_VAL:
         INC HL
         LD D,(HL)                  ; Read payload high.
         INC HL
-        INC HL                     ; Skip the extension byte.
+        LD C,(HL)                  ; Byte 2.
+        INC HL
         LD A,(HL)
         AND 0FH                    ; The logical value tag.
         EX DE,HL                   ; Return the payload while discarding the cursor.

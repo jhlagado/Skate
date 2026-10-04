@@ -73,7 +73,9 @@ REST_ARG:
         LD E,(HL)                ; Read payload low.
         INC HL                   ; Advance to payload high.
         LD D,(HL)                ; DE now contains the payload value.
-        INC HL                   ; Skip the extension byte.
+        INC HL
+        LD A,(HL)
+        LD (REST_EXT),A          ; Byte 2, while C is the packet index.
         INC HL                   ; Advance to the flags and tag.
         LD A,(HL)
         AND 0FH                  ; A contains the logical value tag.
@@ -82,6 +84,8 @@ REST_ARG:
         PUSH BC                   ; Preserve the formal and packet cursors.
         LD A,(SLOT_NUM)
         LD B,A                   ; The active slot helper receives its index in B.
+        LD A,(REST_EXT)
+        LD C,A
         LD A,(SLOT_TAG)
         CALL SLOT_PUT             ; Publish the value in the active four-byte slot.
         POP BC                    ; Continue with the remaining formal slots.
@@ -132,6 +136,7 @@ REST_ARG:
         LD B,A                    ; Active slot helpers take the index in B.
         LD HL,(ARG_VAL)
         LD A,(ARG_TAG)
+        LD C,0                    ; A list's byte 2 is zero.
         JP SLOT_PUT                ; Publish the list as an ordinary local value.
 
 ; Read the packet record selected by REST_IDX.
@@ -147,6 +152,7 @@ REST_ARG:
         INC HL
         LD D,(HL)
         INC HL
+        LD C,(HL)                 ; Byte 2.
         INC HL
         LD A,(HL)
         AND 0FH

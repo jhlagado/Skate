@@ -40,7 +40,7 @@ ROOT_ALL:
         LD HL,(QT_ACC)
         JP GC_VALUE
 
-; Record one generated operand in the exact shadow root stack.  A:HL is
+; Record one generated operand in the exact shadow root stack.  A:CHL is
 ; returned unchanged so EM_PUSH can continue with the native stack operation.
 ROOT_ADD:
 %IF PROBE
@@ -62,8 +62,7 @@ ROOT_ADD:
         INC HL
         LD (HL),D
         INC HL
-        XOR A
-        LD (HL),A                  ; The extension byte stays clear.
+        LD (HL),C                  ; Byte 2.
         INC HL
         LD A,(ROOT_TAG)
         OR CELL_VAL                ; A live record and its tag.
@@ -75,7 +74,7 @@ ROOT_ADD:
         LD HL,(ROOT_VAL)
         RET
 
-; Remove B most-recent generated operand records while preserving A:HL.
+; Remove B most-recent generated operand records while preserving A:CHL.
 ROOT_CUT:
         PUSH AF
         PUSH HL
@@ -91,7 +90,7 @@ ROOT_CUT:
 .BAD:
         JP ERROR
 
-; Remove one generated operand record while preserving A:HL.
+; Remove one generated operand record while preserving A:CHL.
 ROOT_POP:
         LD B,1
         JP ROOT_CUT

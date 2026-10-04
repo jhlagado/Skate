@@ -3,7 +3,7 @@
 ; Included in runtime order by ../core.asm.
 
 ; Move the reverse-pushed argument values into ARG_PKT.  The callee remains
-; below the packet and is returned in A:HL for REST_CHK.
+; below the packet and is returned in A:CHL for REST_CHK.
 FRM_PACK:
         POP IX                   ; Save the FRM_PACK call return above the values.
         LD B,A                   ; B counts values still on the native stack.
@@ -13,33 +13,31 @@ FRM_PACK:
         JR Z,.CALLEE              ; Skip the packet loop for a nullary call.
         DEC C                     ; The first reverse-pushed value is count minus one.
 .LOOP:
-        POP HL                   ; Recover the argument payload word.
-        POP AF                   ; Recover the argument tag word.
-        LD (ARG_TAG),A            ; Preserve the tag while addressing the packet.
-        LD (ARG_VAL),HL           ; Preserve the payload while multiplying the index.
         LD L,C                    ; Widen the reverse packet index.
         LD H,0                    ; Each packet value occupies four bytes.
         ADD HL,HL                 ; Two-byte offset.
         ADD HL,HL                 ; Four-byte offset.
         LD DE,ARG_PKT             ; Add the packet base.
         ADD HL,DE                 ; HL points at the packet value.
-        LD DE,(ARG_VAL)            ; Restore the payload.
+        POP DE                    ; The argument's payload.
         LD (HL),E                 ; Store payload low.
         INC HL                    ; Advance to payload high.
         LD (HL),D                 ; Store payload high.
-        INC HL                    ; Advance to the extension byte.
-        XOR A
-        LD (HL),A                 ; It stays clear.
+        INC HL
+        POP DE                    ; Its byte 2 in E and tag in D.
+        LD (HL),E
         INC HL                    ; Advance to the flags and tag.
-        LD A,(ARG_TAG)            ; Packet values are always live.
+        LD A,D                    ; Packet values are always live.
         OR CELL_VAL
         LD (HL),A                 ; Publish the complete argument record.
         DEC C                     ; The preceding source argument has a lower index.
         DJNZ .LOOP                ; Consume every staged argument.
 .CALLEE:
         POP HL                   ; Recover the callee payload.
-        POP AF                   ; Recover the callee tag.
+        POP DE                   ; Its byte 2 in E and tag in D.
+        LD A,D
         LD (ARG_TAG),A
+        LD C,E
         LD A,(ARG_CNT)           ; The callee and every argument leave the shadow stack.
         INC A
         LD B,A

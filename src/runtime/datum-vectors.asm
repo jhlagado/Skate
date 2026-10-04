@@ -105,7 +105,8 @@ DR_VEC:
         INC HL
         LD D,(HL)
         INC HL
-        INC HL                      ; Skip the extension byte.
+        LD C,(HL)                   ; Byte 2.
+        INC HL
         LD A,(HL)
         AND 0FH
         LD (VEC_TAG),A
@@ -116,8 +117,7 @@ DR_VEC:
         INC HL
         LD (HL),D
         INC HL
-        XOR A
-        LD (HL),A
+        LD (HL),C
         INC HL
         LD A,(VEC_TAG)
         LD (HL),A

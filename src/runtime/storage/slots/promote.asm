@@ -31,6 +31,10 @@ SLOT_BOX:
         LD (SLOT_REP),A
         AND CELL_VAL
         JR Z,.PUBLISH               ; An uninitialized cell is already cleared.
+        LD HL,(SLOT_CUR)
+        INC HL
+        INC HL
+        LD C,(HL)                   ; The inline value's byte 2.
         LD DE,(HEAP_OBJ)
         LD HL,(SLOT_VAL)
         LD A,(SLOT_TAG)

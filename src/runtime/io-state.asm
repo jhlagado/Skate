@@ -26,6 +26,7 @@ DR_SEEN:   DB 0                    ; Nonzero after at least one digit is read.
 DR_BYTE:    DB 0                     ; Current decimal or character byte.
 DR_AHEAD:    DB 0                    ; Peeked byte used to classify a signed token.
 DR_TAG:    DB 0                      ; Result tag saved across normal cleanup.
+DR_AEXT:   DB 0                      ; Byte 2 of the list accumulator.
 DR_VAL:    DW 0                     ; Result payload saved across normal cleanup.
 DR_SIZE: DB 0                        ; Decoded byte count, bounded at 255.
 DR_TMP: DB 0                         ; One-byte scratch for append and escapes.

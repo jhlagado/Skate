@@ -29,27 +29,29 @@ RST_SET:
 .TABLE:
         DW ARG_PUSH,L_LOAD,PRIM_OP,QT_PUSH,G_OPSH,INV_OP
 
-; Generated code pushes each argument with CALL ARG_PUSH: the value in A:HL is
-; recorded as an exact root and pushed as PUSH AF, PUSH HL below the return.
-; A and HL are kept.
+; Generated code pushes each argument with CALL ARG_PUSH: the value in A:CHL
+; is recorded as an exact root and pushed as a cell image, BC (B = tag beside
+; C = byte 2) then HL, below the return.  A, C and HL are kept.
 ARG_PUSH:
 %IF PROBE
         CALL PROBE
 %ENDIF
         CALL ROOT_ADD
         POP DE                     ; The generated continuation.
-        PUSH AF
+        LD B,A
+        PUSH BC
         PUSH HL
         PUSH DE
         RET
 
-; Recover a value pushed by ARG_PUSH into A:HL and retire its root record.
+; Recover a value pushed by ARG_PUSH into A:CHL and retire its root record.
 ARG_POP:
         POP DE                     ; The generated continuation.
         POP HL
-        POP AF
+        POP BC
+        LD A,B
         PUSH DE
-        JP ROOT_POP                ; Keeps A:HL.
+        JP ROOT_POP                ; Keeps A:CHL.
 
 ; Call a predefined primitive whose kind is known when the program is
 ; compiled.  Generated code is CALL PRIM_OP, DB payload, DB count, where the
@@ -67,6 +69,7 @@ PRIM_OP:
         LD L,E
         LD H,0FEH
         XOR A
+        LD C,A
         CALL OPS_PUSH
         LD A,(PRIM_CNT)
         JP INV_OP
@@ -81,6 +84,7 @@ PRIM_TL:
         LD L,E
         LD H,0FEH
         XOR A
+        LD C,A
         CALL OPS_PUSH
         LD A,(PRIM_CNT)
         JP INV_OPTL

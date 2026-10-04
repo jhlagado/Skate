@@ -7,14 +7,19 @@
 CONS:
         POP IX                     ; Preserve the generated continuation.
         POP DE                     ; Recover the CDR payload.
-        POP BC                     ; Recover the CDR tag in B.
-        POP HL                     ; Recover the CAR payload.
-        POP AF                     ; Recover the CAR tag in A.
+        POP BC                     ; Recover the CDR tag in B, byte 2 in C.
         LD (QT_CDR),DE
-        LD (QT_CTAG),A
         LD A,B
         LD (QT_DTAG),A
+        LD A,C
+        LD (QT_DEXT),A
+        POP HL                     ; Recover the CAR payload.
+        POP BC                     ; Recover the CAR tag and byte 2.
         LD (QT_CAR),HL
+        LD A,B
+        LD (QT_CTAG),A
+        LD A,C
+        LD (QT_CEXT),A
         CALL PAIR_NEW
         PUSH IX
         RET
@@ -78,6 +83,18 @@ PAIR_INI:
 
 ; Allocate, initialise and return one eight-byte pair record.
 PAIR_NEW:
+%IF PROBE
+        LD HL,(QT_CAR)              ; Check both constructor inputs.
+        LD A,(QT_CEXT)
+        LD C,A
+        LD A,(QT_CTAG)
+        CALL PROBE
+        LD HL,(QT_CDR)
+        LD A,(QT_DEXT)
+        LD C,A
+        LD A,(QT_DTAG)
+        CALL PROBE
+%ENDIF
         LD HL,(QT_CAR)              ; Copy constructor inputs into dedicated roots.
         LD (GC_CAR),HL
         LD HL,(QT_CDR)
@@ -113,9 +130,9 @@ PAIR_NEW:
         LD (HL),E                   ; Publish the low CAR byte.
         INC HL                      ; Advance to the high CAR byte.
         LD (HL),D                   ; Publish the high CAR byte.
-        INC HL                      ; Advance to the reserved CAR extension byte.
-        XOR A
-        LD (HL),A                   ; Keep the future payload extension canonical.
+        INC HL
+        LD A,(QT_CEXT)
+        LD (HL),A                   ; CAR byte 2.
         INC HL                      ; Advance to the CAR metadata byte.
         LD A,(QT_CTAG)
         AND 0FH
@@ -126,15 +143,16 @@ PAIR_NEW:
         LD (HL),E                   ; Publish the low CDR byte.
         INC HL                      ; Advance to the high CDR byte.
         LD (HL),D                   ; Publish the high CDR byte.
-        INC HL                      ; Advance to the reserved CDR extension byte.
-        XOR A
-        LD (HL),A                   ; Keep the future payload extension canonical.
+        INC HL
+        LD A,(QT_DEXT)
+        LD (HL),A                   ; CDR byte 2.
         INC HL                      ; Advance to the CDR metadata byte.
         LD A,(QT_DTAG)
         AND 0FH
         LD (HL),A                   ; The CDR tag occupies its own cell metadata.
         LD HL,(QT_PAIR)             ; Return the logical pair address.
         LD A,1                      ; Tag one identifies a pair to generated code.
+        LD C,0
         RET
 
 ; Find and reserve a free record in the available-slab/free-record chains,
@@ -364,6 +382,7 @@ PAIR_CAR:
         INC HL
         LD D,(HL)
         INC HL
+        LD C,(HL)                  ; CAR byte 2.
         INC HL                     ; Reach the CAR metadata byte.
         LD A,(HL)
         AND 0FH                     ; The CAR tag occupies its cell metadata nibble.
@@ -392,8 +411,8 @@ PAIR_CDR:
         INC HL
         LD D,(HL)
         INC HL
-        INC HL
-        ; Reach the CDR metadata byte.
+        LD C,(HL)                  ; CDR byte 2.
+        INC HL                     ; Reach the CDR metadata byte.
         LD A,(HL)
         AND 0FH                      ; The CDR tag occupies its cell metadata nibble.
 .OK:
@@ -409,11 +428,13 @@ PAIR_IS:
         CALL PAIR_CHK
         JR C,PAIR_NO
         XOR A
+        LD C,A
         LD HL,0FE01H
         PUSH IX
         RET
 PAIR_NO:
         XOR A
+        LD C,A
         LD HL,0FE00H
         PUSH IX
         RET
@@ -428,6 +449,7 @@ PAIR_NIL:
         SBC HL,DE
         JR NZ,PAIR_NO
         XOR A
+        LD C,A
         LD HL,0FE01H
         PUSH IX
         RET

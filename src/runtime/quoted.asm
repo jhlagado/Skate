@@ -7,7 +7,7 @@
 ;     encoding      one value, as below
 ;
 ; The first evaluation decodes the value, stores it in the cache and returns
-; it in A:HL; later evaluations return the cached value.  Elements are pushed
+; it in A:CHL; later evaluations return the cached value.  Elements are pushed
 ; on the quoted-data stack, which is a collector root, and folded into pairs
 ; by QT_FOLD, exactly as the code the compiler used to emit did.
 ;
@@ -44,6 +44,7 @@ QT_BUILD:
         RET NC
         PUSH DE
         CALL .VALUE
+        CALL RT_WIDEN              ; Encoded integers are sixteen-bit for now.
         POP DE
         JP RT_STORE                ; Cache the value; A:HL is returned.
 
@@ -96,6 +97,7 @@ QT_BUILD:
         JR Z,.CLOSE
         PUSH BC
         CALL .VALUE
+        CALL RT_WIDEN
         CALL QT_PUSH
         POP BC
         INC B

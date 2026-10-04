@@ -44,7 +44,8 @@ SLOT_RD:
         INC HL
         LD D,(HL)                   ; Recover the payload high byte.
         INC HL
-        INC HL                      ; Skip the extension byte.
+        LD C,(HL)                   ; Byte 2.
+        INC HL
         LD A,(HL)                   ; CELL_VAL records inline initialization.
         AND CELL_VAL
         JP Z,RT_UNDEF               ; Preserve the established unbound error.
@@ -54,7 +55,7 @@ SLOT_RD:
         EX DE,HL                    ; Return the payload in HL.
         RET
 
-; Store A:HL in the inline slot addressed by DE and publish initialization last.
+; Store A:CHL in the inline slot addressed by DE and publish initialization last.
 SLOT_WR:
         LD (SLOT_TAG),A             ; Save the tag while writing both payload bytes.
         LD (SLOT_VAL),HL            ; Save the payload for the final return.
@@ -64,8 +65,8 @@ SLOT_WR:
         LD A,H
         LD (DE),A                   ; Publish the complete payload.
         INC DE
-        XOR A
-        LD (DE),A                   ; The extension byte stays clear.
+        LD A,C
+        LD (DE),A                   ; Byte 2.
         INC DE
         LD A,(DE)                   ; Preserve the promotion and reserved flags.
         AND 0E0H
