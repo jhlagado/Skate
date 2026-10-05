@@ -6,16 +6,37 @@ Skate compiles `.sk8` source into runnable `.COM` programs and a checked
 publication stream. It is an ongoing implementation aimed at useful Scheme programs on
 a 64K machine, with a native compiler, a compact runtime and CP/M disk tools.
 
-The current source supports exact signed integers, binary16
+The current source supports exact signed 24-bit integers, 24-bit floats
 numbers, booleans, byte characters, symbols, strings, quoted data, pairs,
-lists and vectors. It provides `cons`, `car`, `cdr`, mutation, lexical `let`,
-`let*`, `letrec` and named `let`, `if`, `begin`, `cond`, `and`, `or`, numeric
-arithmetic and comparisons, type predicates, fixed-arity procedures, dotted
-rest parameters, bounded `apply`, closures, internal definitions, proper tail
-calls and one-shot `call/ec`. Standard input, output and error ports support character and datum I/O.
-Sequential text and binary file ports use CP/M files, with one input and one
-output file open at a time. Text input treats Control-Z as EOF. Decimal points and exponents select
-binary16 values, and mixed arithmetic retains fractional results.
+lists and vectors. It provides lexical `let`, `let*`, `letrec` and named
+`let`, `do`, `if`, `begin`, `cond`, `case`, `when`, `unless`, `and`, `or`, `set!`,
+fixed-arity procedures, dotted rest parameters, bounded `apply`, closures,
+internal definitions, proper tail calls and one-shot `call/ec`. Standard input,
+output and error ports support character and datum I/O. Sequential text and
+binary file ports use CP/M files, with one input and one output file open at a
+time. Text input treats Control-Z as EOF. Decimal points and exponents select
+24-bit floats (17 significant bits, about 5 decimal digits, range ±1.8E19;
+see [docs/float24.md](docs/float24.md)), and mixed arithmetic retains
+fractional results.
+
+The built-in procedures are:
+
+| Group | Procedures |
+| --- | --- |
+| Pairs and lists | `cons` `car` `cdr` `caar` … `cdddr` (two and three levels) `set-car!` `set-cdr!` `list` `length` `append` `reverse` `list-tail` `list-ref` `memq` `memv` `member` `assq` `assv` `assoc` `list?` `pair?` `null?` |
+| Equivalence | `eq?` `eqv?` `equal?` |
+| Numbers | `+` `-` `*` `/` `quotient` `remainder` `modulo` `abs` `=` `<` `>` `<=` `>=` `zero?` `number?` `number->string` `min` `max` `gcd` `lcm` `expt` `sqrt` `floor` `ceiling` `truncate` `round` `exact->inexact` `inexact->exact` `exact` `inexact` `even?` `odd?` `positive?` `negative?` `exact?` `inexact?` `integer?` |
+| Characters | `char=?` `char<?` `char>?` `char<=?` `char>=?` `char-upcase` `char-downcase` `char-alphabetic?` `char-numeric?` `char-whitespace?` `char->integer` `integer->char` `char?` |
+| Strings and symbols | `string` `string-length` `string-ref` `string-copy` `string-append` `substring` `string=?` `string<?` `string>?` `string<=?` `string>=?` `symbol->string` `string->symbol` `string?` `symbol?` |
+| Vectors | `vector` `make-vector` `vector-length` `vector-ref` `vector-set!` `vector?` |
+| Control and other | `apply` `not` `boolean?` `procedure?` `eof-object?` |
+| Input and output | `read` `read-char` `write` `display` `newline` `write-char`, the port procedures and the file openers |
+
+[`libraries/STDLIB.SK8`](libraries/STDLIB.SK8) adds `map`, `for-each`,
+`filter`, `fold-left`, `fold-right`, `reduce`, `list-copy`, `last-pair`,
+`iota`, `list->vector`, `vector->list`, `vector-fill!`, `string->list` and
+`list->string` in Skate itself. Including it adds about 7 KB of code, so a
+program that needs only a few of them may be better off copying those.
 
 The compiler and runtime are written in Z80 assembly using the ATOM assembler.
 The repository contains the Deno build commands and CP/M checks needed to assemble the compiler, publish a checked program and run
@@ -68,6 +89,7 @@ The main tasks are:
 | `deno task test:cpm:stress` | Capacity, large-source and full 65,280-byte image proofs |
 | `deno task test:all` | `test`, `test:cpm` and `test:cpm:stress` |
 | `deno task measure` | Compiler and runtime size budget report |
+| `deno task census` | Compiler and runtime bytes by directory and file |
 
 `test:cpm` and `test:cpm:stress` take tens of minutes; each `test:cpm:*` task
 can be run on its own. The [codebase guide](docs/codebase.md#tests-and-verification)
@@ -77,10 +99,44 @@ The compiler writes a checked `.COM` program for use from a CP/M prompt. Any
 intermediate publication data is an implementation detail of the build.
 
 Skate deliberately leaves general macros and quasiquote, reusable
-continuations and `eval` outside this small core. File names currently use
+continuations and `eval` outside this small core. Vector literals
+(`#(1 2 3)`) are self-evaluating constants. File names currently use
 current-drive CP/M 8.3 spelling; append, seeking and multiple handles per
 direction are not implemented. `libraries/io.sk8` provides line input, line
 output, prompting and stream copying with explicit ports.
+
+### Program limits
+
+The compiler works in fixed tables, so a program must stay within these
+bounds. Exceeding one stops compilation with `CAP` (a few report
+`COMPILE ERROR`).
+
+| Limit | Value |
+| --- | --- |
+| Exact integers | -8,388,608 to 8,388,607; overflow is a runtime error |
+| Procedures (`lambda`, procedure `define`, named `let`) | 128 per program, 13 nested |
+| Fixed parameters per procedure | 4, plus an optional rest parameter |
+| Arguments in one call | 8 |
+| Global names | 256 |
+| Simultaneous local bindings | 128 |
+| Address fixups (literals in code and quoted data, top-level `let` locals) | 320 |
+| Distinct string and symbol literals | 64 |
+| Pending elements while building one quoted datum | 64 |
+| Distinct symbols | 320 |
+
+The runtime is loaded in one of four sizes: the core alone, the core and the
+standard procedures, those and the numeric procedures (`sqrt`, `expt`,
+`round` and the rest added with the 24-bit float), or everything with the
+datum reader and file ports. The
+compiler reads the source once before compiling it and loads the smallest
+runtime that covers the procedures it names, so a program that uses neither
+`read` nor files is about 3.6 KB smaller and one that also uses no standard
+procedure or `case` about 5.4 KB smaller.
+
+Globals occupy a fixed 1 KB area straight after the runtime, so a reference
+to a global needs no fixup. Every symbol inside quoted data still takes one.
+The programs in `examples/workloads` are measured against these limits by
+`deno task test:cpm:workloads`.
 
 The [0.5.11 release notes](release/v0.5.11/README.md) describe the checked image
 and measurements of that published release. Their limitations apply to 0.5.11

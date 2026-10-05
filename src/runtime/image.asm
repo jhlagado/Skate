@@ -1,5 +1,15 @@
 ; Scope-control runtime image assembled at the CP/M load origin.
 %INCLUDE "storage/cell-contract.asm"
+%INCLUDE "core/entry.asm"
+; State follows the entry so that code refers back to it; see entry.asm.
+%INCLUDE "output/state.asm"
+%INCLUDE "data/state.asm"
+%INCLUDE "strings/state.asm"
+%INCLUDE "vectors/state.asm"
+%INCLUDE "numeric/state.asm"
+%INCLUDE "float24/state.asm"
+%INCLUDE "storage/page/state.asm"
+%INCLUDE "io-state.asm"
 %INCLUDE "core.asm"
 %INCLUDE "storage/stack-slots.asm"
 %INCLUDE "storage/managed.asm"
@@ -7,13 +17,7 @@
 %INCLUDE "primitives.asm"
 %INCLUDE "ports.asm"
 %INCLUDE "cpm-ports.asm"
-%INCLUDE "../compiler/cpm-transport.asm"
-%INCLUDE "file-ports.asm"
-%INCLUDE "datum-reader.asm"
-%INCLUDE "datum-strings.asm"
 %INCLUDE "datum-symbols.asm"
-%INCLUDE "datum-lists.asm"
-%INCLUDE "datum-vectors.asm"
 %INCLUDE "storage/pair-management.asm"
 %INCLUDE "storage/pairs.asm"
 %INCLUDE "output.asm"
@@ -22,7 +26,7 @@
 %INCLUDE "data.asm"
 %INCLUDE "float.asm"
 %INCLUDE "storage/slabs.asm"
-%INCLUDE "binary16.asm"
+%INCLUDE "float24.asm"
 %INCLUDE "numeric.asm"
 %INCLUDE "strings.asm"
 %INCLUDE "managed-strings.asm"
@@ -30,3 +34,21 @@
 %INCLUDE "rest.asm"
 %INCLUDE "apply.asm"
 %INCLUDE "escape.asm"
+%INCLUDE "quoted.asm"
+%IF PROBE
+%INCLUDE "core/probe.asm"
+%ENDIF
+; Optional modules, in load order: a program loads the core alone, the core
+; and the standard procedures, or everything.  Nothing in the core may read
+; their state or reach their code except through a primitive the compiler's
+; pre-scan detects.
+%INCLUDE "primitives/standard.asm"
+%INCLUDE "primitives/numbers.asm"
+%INCLUDE "io-start.asm"
+%INCLUDE "../compiler/cpm-transport.asm"
+%INCLUDE "file-ports.asm"
+%INCLUDE "datum-reader.asm"
+%INCLUDE "datum-strings.asm"
+%INCLUDE "datum-symbol-tokens.asm"
+%INCLUDE "datum-lists.asm"
+%INCLUDE "datum-vectors.asm"

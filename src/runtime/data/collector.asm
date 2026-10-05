@@ -1,130 +1,130 @@
 ; Pair marking, root scanning and collector passes.
-; Entry points: SRTGC, SRTROOTS, SRTMARK and SRTDRAIN.
+; Entry points: GC, ROOT_ALL, GC_MARK and GC_DRAIN.
 ; Included in runtime order by ../data.asm.
 
 ; Stop-the-world mark-and-sweep for every eight-byte pair slab.  Root discovery
 ; is exact: compiler-patched static records, active value stacks, frames and
 ; construction scratch are visited by type rather than by byte pattern.
-SRTGC:
-        LD HL,(SRTGCNT)            ; Count a complete stop-the-world cycle.
+GC:
+        LD HL,(CNT_GC)             ; Count a complete stop-the-world cycle.
         INC HL
-        LD (SRTGCNT),HL
-        CALL SRTPCLE                ; Clear only mark bits from the last cycle.
-        CALL SRTCLCLR               ; Start this collection with an empty mark map.
-        LD HL,SRTMKBS               ; Restart the bounded pair worklist.
-        LD (SRTMSTK),HL             ; The next mark is written at its base.
+        LD (CNT_GC),HL
+        CALL GC_CLEAR               ; Clear only mark bits from the last cycle.
+        CALL GC_RESET               ; Start this collection with an empty mark map.
+        LD HL,RT_GCLO               ; Restart the bounded pair worklist.
+        LD (GC_QTOP),HL             ; The next mark is written at its base.
         XOR A
-        LD (SRTMOVER),A             ; No queue overflow has occurred yet.
-        LD (SRTMNEW),A              ; Clear the fallback pass indicator.
-        CALL SRTROOTS               ; Visit only declared live value locations.
-        CALL SRTDRAIN               ; Process every queued object before overflow checks.
-        LD A,(SRTMOVER)
+        LD (GC_OVER),A              ; No queue overflow has occurred yet.
+        LD (GC_FOUND),A             ; Clear the fallback pass indicator.
+        CALL ROOT_ALL               ; Visit only declared live value locations.
+        CALL GC_DRAIN               ; Process every queued object before overflow checks.
+        LD A,(GC_OVER)
         OR A
-        JR Z,SRTSWEEP               ; A complete queue has visited every reachable edge.
-SRTGFIX:
+        JR Z,.SWEEP                 ; A complete queue has visited every reachable edge.
+.FALLBACK:
         XOR A
-        LD (SRTMNEW),A              ; Report only marks created by this fallback pass.
-        CALL SRTFSCRN               ; Visit every marked pair to recover missed edges.
-        CALL SRTCLSCR               ; Visit every marked closure without recursion.
-        CALL SRTDRAIN               ; Process entries found by the fallback scan.
-        LD A,(SRTMNEW)
+        LD (GC_FOUND),A             ; Report only marks created by this fallback pass.
+        CALL GC_PAIRS               ; Visit every marked pair to recover missed edges.
+        CALL GC_OBJS                ; Visit every marked closure without recursion.
+        CALL GC_DRAIN               ; Process entries found by the fallback scan.
+        LD A,(GC_FOUND)
         OR A
-        JR NZ,SRTGFIX               ; Continue until a fixed point is reached.
-SRTSWEEP:
-        CALL SRTBSW                 ; Reclaim dead four-byte bindings.
-        CALL SRTCLSW                ; Reclaim dead rounded closure blocks.
-        CALL SRTPSW                ; Rebuild free records and clear surviving marks.
+        JR NZ,.FALLBACK             ; Continue until a fixed point is reached.
+.SWEEP:
+        CALL GC_CELLS               ; Reclaim dead four-byte bindings.
+        CALL SLAB_GC                ; Reclaim dead rounded closure blocks.
+        CALL GC_SWEEP              ; Rebuild free records and clear surviving marks.
         RET
 
 ; Mark the two typed inputs held across an allocation retry.  These roots use
 ; their own storage because the ordinary pair tracing scratch is overwritten
 ; while a queued pair is being inspected.
-SRTCRMK:
-        LD A,(SRTCRON)
+GC_CONS:
+        LD A,(GC_HOLD)
         OR A
         RET Z
-        LD A,(SRTCRCTA)
-        LD HL,(SRTCRCAR)
-        CALL SRTMVALU
-SRTCRCD:
-        LD A,(SRTCRDTA)
-        LD HL,(SRTCRCDR)
-        JP SRTMVALU
+        LD A,(GC_CTAG)
+        LD HL,(GC_CAR)
+        CALL GC_VALUE
+.CDR:
+        LD A,(GC_DTAG)
+        LD HL,(GC_CDR)
+        JP GC_VALUE
 
 ; Clear mark bits in every allocated or free record before tracing.
-SRTPCLE:
-        LD A,(SRTPSLBN)
+GC_CLEAR:
+        LD A,(PS_COUNT)
         OR A
         RET Z
         LD B,A                      ; B counts the pair slabs.
-        LD HL,SRTPSLT
-SRTPCLAB:
+        LD HL,PS_TABLE
+.SLAB:
         LD A,(HL)                  ; A zero page byte denotes a released descriptor.
         OR A
-        JR Z,SRTPCLSK               ; Skip holes without scanning address zero.
+        JR Z,.SKIP                  ; Skip holes without scanning address zero.
         LD D,A                     ; Read the page number; its low address byte is zero.
         LD E,0
         INC HL
         INC HL                      ; Skip the next-list and free-head fields.
         INC HL
-        LD (SRTPSST),HL
-        LD (SRTPSBA),DE
-        LD (SRTPSCAN),DE
-        LD C,SRPPCAP                ; Each page contains 32 eight-byte records.
-SRTPCLP:
-        LD HL,(SRTPSCAN)
-        LD DE,SRPCCARM
+        LD (PS_SAVE),HL
+        LD (PS_BASE),DE
+        LD (PS_RECP),DE
+        LD C,PAIR_CAP               ; Each page contains 32 eight-byte records.
+.RECORD:
+        LD HL,(PS_RECP)
+        LD DE,CAR_TAG
         ADD HL,DE
         LD A,(HL)
         AND 7FH                     ; Preserve tags and allocation, clear marking.
         LD (HL),A
-        LD HL,(SRTPSCAN)
-        LD DE,SRTPW
+        LD HL,(PS_RECP)
+        LD DE,PAIR_SZ
         ADD HL,DE
-        LD (SRTPSCAN),HL
+        LD (PS_RECP),HL
         DEC C
-        JR NZ,SRTPCLP
-        LD HL,(SRTPSST)
-        DJNZ SRTPCLAB
+        JR NZ,.RECORD
+        LD HL,(PS_SAVE)
+        DJNZ .SLAB
         RET
-SRTPCLSK:
+.SKIP:
         LD DE,3                     ; Advance over a released descriptor slot.
         ADD HL,DE
-        DJNZ SRTPCLAB
+        DJNZ .SLAB
         RET
 
 ; Sweep all pair slabs.  Dead records become zero-state cells; live records
 ; retain their tags and allocation bit but lose the mark bit.
-SRTPSW:
-        LD A,(SRTPSLBN)
+GC_SWEEP:
+        LD A,(PS_COUNT)
         OR A
         RET Z
         LD B,A
-        LD HL,SRTPSLT
-SRTPSWL:
+        LD HL,PS_TABLE
+.SLAB:
         LD A,(HL)                  ; A zero page byte denotes a released descriptor.
         OR A
-        JR Z,SRTPSWSK               ; Skip holes without sweeping address zero.
+        JR Z,.SKIP                  ; Skip holes without sweeping address zero.
         LD D,A                     ; Read the page number; its low address byte is zero.
         LD E,0
         INC HL
         INC HL                      ; Skip the next-list and free-head fields.
         INC HL
-        LD (SRTPSST),HL
-        LD (SRTPSBA),DE
-        LD (SRTPSCAN),DE
-        LD C,SRPPCAP
-SRTPSWLP:
-        LD HL,(SRTPSCAN)
-        LD DE,SRPCCARM
+        LD (PS_SAVE),HL
+        LD (PS_BASE),DE
+        LD (PS_RECP),DE
+        LD C,PAIR_CAP
+.RECORD:
+        LD HL,(PS_RECP)
+        LD DE,CAR_TAG
         ADD HL,DE
         LD A,(HL)
         AND 40H                     ; An unallocated record is already dead.
-        JR Z,SRTPSWF
+        JR Z,.DEAD
         LD A,(HL)
         AND 80H                     ; A marked allocation remains reachable.
-        JR NZ,SRTPSWV
-SRTPSWF:
+        JR NZ,.LIVE
+.DEAD:
         XOR A                       ; Clear the CAR tag and both ownership bits.
         LD (HL),A
         INC HL
@@ -132,161 +132,129 @@ SRTPSWF:
         INC HL
         INC HL                       ; Reach the CDR metadata byte.
         LD (HL),A                   ; A dead pair carries no CDR tag.
-        JR SRTPSWN
-SRTPSWV:
+        JR .NEXT
+.LIVE:
         LD A,(HL)
         AND 7FH                     ; Keep the live record allocated for reuse.
         LD (HL),A
-SRTPSWN:
-        LD HL,(SRTPSCAN)
-        LD DE,SRTPW
+.NEXT:
+        LD HL,(PS_RECP)
+        LD DE,PAIR_SZ
         ADD HL,DE
-        LD (SRTPSCAN),HL
+        LD (PS_RECP),HL
         DEC C
-        JR NZ,SRTPSWLP
-        LD HL,(SRTPSST)
-        DJNZ SRTPSWL
-        CALL SRTPSRB                ; Rebuild links after dead records were cleared.
+        JR NZ,.RECORD
+        LD HL,(PS_SAVE)
+        DJNZ .SLAB
+        CALL PAIR_GC                ; Rebuild links after dead records were cleared.
         RET
-SRTPSWSK:
+.SKIP:
         LD DE,3                     ; Advance over a released descriptor slot.
         ADD HL,DE
-        DJNZ SRTPSWL
-        CALL SRTPSRB
+        DJNZ .SLAB
+        CALL PAIR_GC
         RET
 
 ; Drain the bounded worklist.  A full queue is handled by the fallback scan.
-SRTDRAIN:
-        LD HL,(SRTMSTK)
-        LD DE,SRTMKBS
+GC_DRAIN:
+        LD HL,(GC_QTOP)
+        LD DE,RT_GCLO
         OR A
         SBC HL,DE
         RET Z
-        LD HL,(SRTMSTK)
+        LD HL,(GC_QTOP)
         LD DE,2
         OR A
         SBC HL,DE
-        LD (SRTMSTK),HL
+        LD (GC_QTOP),HL
         LD E,(HL)
         INC HL
         LD D,(HL)
         EX DE,HL
         ; The shared pool no longer assigns closures a fixed address band.
         ; Consult the exact closure-start map instead of guessing from H.
-        LD (SRTCLOBJ),HL
+        LD (CL_OBJ),HL
         PUSH HL
-        CALL SRTCLSTA
+        CALL GC_ISOBJ
         POP HL
-        JR Z,SRTDPAIR
+        JR Z,.PAIR
         XOR A
-        CALL SRTVHOOK
-        JR SRTDRAIN
-SRTDPAIR:
+        CALL VEC_HOOK
+        JR GC_DRAIN
+.PAIR:
         LD A,1
-        CALL SRTMARKV
-        JR SRTDRAIN
+        CALL GC_EDGES
+        JR GC_DRAIN
 
 ; Scan every marked pair after the bounded queue has overflowed.  Repeated
 ; passes compute the same fixed point as an unbounded worklist.
-SRTFSCRN:
-        LD A,(SRTPSLBN)
+GC_PAIRS:
+        LD A,(PS_COUNT)
         OR A
         RET Z
         LD B,A
-        LD HL,SRTPSLT
-SRTGFS:
+        LD HL,PS_TABLE
+.SLAB:
         LD A,(HL)                  ; A zero page byte denotes a released descriptor.
         OR A
-        JR Z,SRTGFSK               ; Skip holes without scanning address zero.
+        JR Z,.SKIP                 ; Skip holes without scanning address zero.
         LD D,A                     ; Read the page number; its low address byte is zero.
         LD E,0
         INC HL
         INC HL                      ; Skip the next-list and free-head fields.
         INC HL
-        LD (SRTPSST),HL
-        LD (SRTPSBA),DE
-        LD (SRTPSCAN),DE
-        LD C,SRPPCAP
-SRTGFSLP:
-        LD HL,(SRTPSCAN)
-        LD DE,SRPCCARM
+        LD (PS_SAVE),HL
+        LD (PS_BASE),DE
+        LD (PS_RECP),DE
+        LD C,PAIR_CAP
+.RECORD:
+        LD HL,(PS_RECP)
+        LD DE,CAR_TAG
         ADD HL,DE
         LD A,(HL)
         AND 80H                     ; Only marked records need another visit.
-        JR Z,SRTGFSN
-        LD DE,(SRTPSST)             ; Preserve the fallback cursor across validation.
-        LD (SRTFSST),DE
-        LD DE,(SRTPSBA)
-        LD (SRTFSBA),DE
-        LD DE,(SRTPSCAN)
-        LD (SRTFSCAN),DE
+        JR Z,.NEXT
+        LD DE,(PS_SAVE)             ; Preserve the fallback cursor across validation.
+        LD (GC_FDESC),DE
+        LD DE,(PS_BASE)
+        LD (GC_FBASE),DE
+        LD DE,(PS_RECP)
+        LD (GC_FREC),DE
         PUSH BC                     ; Preserve both slab and record counters.
         PUSH HL                     ; Preserve the record address across tracing.
-        LD HL,(SRTPSCAN)
-        CALL SRTMARKV               ; The queued value is the record start.
+        LD HL,(PS_RECP)
+        CALL GC_EDGES               ; The queued value is the record start.
         POP HL
         POP BC
-        LD DE,(SRTFSST)             ; Restore the slab cursor changed by SRTPCHK.
-        LD (SRTPSST),DE
-        LD DE,(SRTFSBA)
-        LD (SRTPSBA),DE
-        LD DE,(SRTFSCAN)
-        LD (SRTPSCAN),DE
-SRTGFSN:
-        LD HL,(SRTPSCAN)
-        LD DE,SRTPW
+        LD DE,(GC_FDESC)            ; Restore the slab cursor changed by PAIR_CHK.
+        LD (PS_SAVE),DE
+        LD DE,(GC_FBASE)
+        LD (PS_BASE),DE
+        LD DE,(GC_FREC)
+        LD (PS_RECP),DE
+.NEXT:
+        LD HL,(PS_RECP)
+        LD DE,PAIR_SZ
         ADD HL,DE
-        LD (SRTPSCAN),HL
+        LD (PS_RECP),HL
         DEC C
-        JR NZ,SRTGFSLP
-        LD HL,(SRTPSST)
-        DJNZ SRTGFS
+        JR NZ,.RECORD
+        LD HL,(PS_SAVE)
+        DJNZ .SLAB
         RET
-SRTGFSK:
+.SKIP:
         LD DE,3                     ; Advance over a released descriptor slot.
         ADD HL,DE
-        DJNZ SRTGFS
-        RET
-
-; Scan a half-open byte range for the three-byte pattern payload,tag-one.
-; The cursor may stop at end-3, but never at either of the two positions
-; whose payload or tag byte would lie beyond the declared range.
-SRTSCAN:
-        LD (SRTSCP),HL
-        LD (SRTSCE),DE
-SRTSCLP:
-        LD HL,(SRTSCP)
-        LD DE,(SRTSCE)
-        LD BC,2
-        ADD HL,BC
-        OR A
-        SBC HL,DE
-        JR NC,SRTSCEND
-        LD HL,(SRTSCP)
-        LD E,(HL)
-        INC HL
-        LD D,(HL)
-        INC HL
-        LD A,(HL)
-        CP 1
-        JR NZ,SRTSCNX
-        EX DE,HL
-        CALL SRTMARK
-SRTSCNX:
-        LD HL,(SRTSCP)
-        INC HL
-        LD (SRTSCP),HL
-        JR SRTSCLP
-SRTSCEND:
+        DJNZ .SLAB
         RET
 
 ; Mark one pair and queue it for child scanning.
-SRTMARK:
+GC_MARK:
         LD A,1                      ; Validate the candidate as a pair value.
-        CALL SRTPCHK
+        CALL PAIR_CHK
         RET C
-        LD HL,(SRTPSAD)             ; Recover the validated record address.
-        LD DE,SRPCCARM
+        LD HL,(PS_PAIR)             ; Recover the validated record address.
+        LD DE,CAR_TAG
         ADD HL,DE
         LD A,(HL)
         AND 40H                     ; A swept or never-published record is ignored.
@@ -298,63 +266,63 @@ SRTMARK:
         OR 80H                      ; Set the mark bit without changing tags/allocation.
         LD (HL),A
         LD A,1
-        LD (SRTMNEW),A             ; This object must be visited by the trace.
-        LD HL,(SRTPSAD)             ; Queue the record address, not its state byte.
-        LD DE,(SRTMSTK)
+        LD (GC_FOUND),A            ; This object must be visited by the trace.
+        LD HL,(PS_PAIR)             ; Queue the record address, not its state byte.
+        LD DE,(GC_QTOP)
         LD A,D
         CP 0D4H
-        JR NC,SRTMQOV              ; Preserve the mark and defer its children.
+        JR NC,.FULL                ; Preserve the mark and defer its children.
         LD A,L
         LD (DE),A
         INC DE
         LD A,H
         LD (DE),A
         INC DE
-        LD (SRTMSTK),DE
+        LD (GC_QTOP),DE
         RET
-SRTMQOV:
+.FULL:
         LD A,1
-        LD (SRTMOVER),A            ; The fallback scanner will revisit marked pairs.
+        LD (GC_OVER),A             ; The fallback scanner will revisit marked pairs.
         RET
 
 ; Trace the CAR and CDR pair edges of one queued record.
-SRTMARKV:
-        LD (SRTMVAL),HL
+GC_EDGES:
+        LD (GC_QPAIR),HL
         LD A,1
-        CALL SRTPCHK
+        CALL PAIR_CHK
         RET C
-        ; Copy both payloads before marking either edge; SRTMARK may use HL/DE.
-        LD HL,(SRTMVAL)
+        ; Copy both payloads before marking either edge; GC_MARK may use HL/DE.
+        LD HL,(GC_QPAIR)
         LD E,(HL)
         INC HL
         LD D,(HL)
-        LD (SRTQCAR),DE
-        LD HL,(SRTMVAL)
-        LD DE,SRPCDDR0
+        LD (QT_CAR),DE
+        LD HL,(GC_QPAIR)
+        LD DE,CDR_LO
         ADD HL,DE
         LD E,(HL)
         INC HL
         LD D,(HL)
-        LD (SRTQCDR),DE
-        LD HL,(SRTMVAL)
-        LD DE,SRPCCARM
+        LD (QT_CDR),DE
+        LD HL,(GC_QPAIR)
+        LD DE,CAR_TAG
         ADD HL,DE
         LD A,(HL)
-        LD (SRTQFLG),A
+        LD (QT_FLAGS),A
         AND 0FH                     ; The CAR tag occupies its cell metadata nibble.
-        LD (SRTQCTAG),A
-        LD HL,(SRTMVAL)
-        LD DE,SRPCDDRM
+        LD (QT_CTAG),A
+        LD HL,(GC_QPAIR)
+        LD DE,CDR_TAG
         ADD HL,DE
         LD A,(HL)
         AND 0FH                     ; The CDR tag occupies its cell metadata nibble.
-        LD (SRTQDTAG),A
-        LD A,(SRTQCTAG)
-        LD HL,(SRTQCAR)
-        CALL SRTMVALU                ; Trace pair or closure CAR values.
-SRTMVC:
-        LD A,(SRTQDTAG)
-        LD HL,(SRTQCDR)
-        JP SRTMVALU
+        LD (QT_DTAG),A
+        LD A,(QT_CTAG)
+        LD HL,(QT_CAR)
+        CALL GC_VALUE                ; Trace pair or closure CAR values.
+.CDR:
+        LD A,(QT_DTAG)
+        LD HL,(QT_CDR)
+        JP GC_VALUE
 
 ; Write a value using CP/M function two, including nested pair structure.

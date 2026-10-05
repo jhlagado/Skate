@@ -267,7 +267,7 @@ const provider = await loadAssembly(
 const compilerBytes = compiler.image.bytes.slice(0x0100);
 const runtimeImage = provider.image.bytes.slice(0x0100);
 const runtimeLength = runtimeImage.length;
-assert.equal(runtimeLength, compiler.address("SRTLEN"));
+assert.equal(runtimeLength, compiler.address("RT_SIZE"));
 assert.ok(
   compilerBytes.length < 0x10000,
   "compiler does not fit the CP/M address space",
@@ -292,8 +292,8 @@ const sourceBytes = await Promise.all(
 const sourceTotal = sourceBytes.reduce((sum, bytes) => sum + bytes.length, 0);
 assert.ok(sourceTotal >= 8192, `release source is only ${sourceTotal} bytes`);
 
-const heapPointerAddress = provider.address("SRTHEAPP");
-const lowStackAddress = provider.address("SRTLOWSP");
+const heapPointerAddress = provider.address("HEAP_LIM");
+const lowStackAddress = provider.address("RT_LOWSP");
 const records = {};
 let stableImage = disk;
 let releaseImage = null;

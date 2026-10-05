@@ -1,111 +1,111 @@
 ; Scope compiler named-let construction and temporary bindings.
-; Entry points: SCNAMED, SCNMAKE, SCNAMGO and SCNAMDUP.
+; Entry points: LET_NAME, .MAKE, .CALL and .DUP_CHK.
 ; the call skips over the body on the ordinary path and enters it through the
 ; descriptor when the generated invocation runs.
-SCNAMED:
-        LD A,(SCNAMOP)             ; Nested named forms must restore this scratch word.
+LET_NAME:
+        LD A,(ST_NLOWN)            ; Nested named forms must restore this scratch word.
         PUSH AF
-        LD A,(SCNAMNP)             ; Preserve the previous named descriptor marker.
+        LD A,(ST_NLNEW)            ; Preserve the previous named descriptor marker.
         PUSH AF
-        LD A,(SCTMPPR)             ; Named forms may be nested in a procedure body.
+        LD A,(ST_DESC)             ; Named forms may be nested in a procedure body.
         PUSH AF                    ; Restore the enclosing descriptor on every exit.
-        LD A,(SCARGN)              ; The enclosing application owns its own count.
+        LD A,(ST_ARGS)             ; The enclosing application owns its own count.
         PUSH AF                    ; Named binding arguments must not leak outward.
-        LD A,(SCDEFSL)             ; The enclosing definition may be using this scratch slot.
+        LD A,(ST_DSLOT)            ; The enclosing definition may be using this scratch slot.
         PUSH AF                    ; Restore it after this named form has emitted its call.
-        LD A,(SCTMPPR)
-        LD (SCNAMOP),A             ; SCLOPEN must save this enclosing descriptor.
-        LD A,(SCBNDTOP)
-        LD (SCNAMBS),A             ; Temporary records hold binding names.
-        CALL SCNEXT                ; The named form still requires a binding list.
-        JR NC,SCNOK1
-        JP SCNAMERR
-SCNOK1:
+        LD A,(ST_DESC)
+        LD (ST_NLOWN),A            ; LAM_OPEN must save this enclosing descriptor.
+        LD A,(ST_BINDS)
+        LD (ST_NLREC),A            ; Temporary records hold binding names.
+        CALL REC_NEXT              ; The named form still requires a binding list.
+        JR NC,.LIST
+        JP .FAIL
+.LIST:
         CP 1
-        JP NZ,SCNAMERR
-        CALL SCPNEW                ; Reserve the descriptor before emitting its value.
-        JP C,SCNAMERR
-        LD A,(SCTMPPR)
-        LD (SCNAMNP),A             ; Keep this descriptor while nested forms run.
-        CALL SCNSLOT               ; Reserve the recursive procedure's outer cell.
-        JP C,SCNAMERR
-        LD (SCDEFSL),A
-        LD A,(SCNAMNP)             ; SCNSLOT records the outer owner for this cell.
-        LD (SCTMPPR),A             ; Restore the new descriptor before SCMAKE.
-        CALL SCNMAKE                ; The closure is stored before initializers run.
-        JP C,SCNAMERR
-        LD A,(SCDEFSL)
+        JP NZ,.FAIL
+        CALL PROC_NEW              ; Reserve the descriptor before emitting its value.
+        JP C,.FAIL
+        LD A,(ST_DESC)
+        LD (ST_NLNEW),A            ; Keep this descriptor while nested forms run.
+        CALL BIND_NEW              ; Reserve the recursive procedure's outer cell.
+        JP C,.FAIL
+        LD (ST_DSLOT),A
+        LD A,(ST_NLNEW)            ; BIND_NEW records the outer owner for this cell.
+        LD (ST_DESC),A             ; Restore the new descriptor before LAM_MAKE.
+        CALL .MAKE                  ; The closure is stored before initializers run.
+        JP C,.FAIL
+        LD A,(ST_DSLOT)
         LD L,A
         LD A,1
-        CALL SCSTORE
-        JP C,SCNAMERR
+        CALL EM_STORE
+        JP C,.FAIL
         XOR A
-        LD (SCARGN),A
-SCNAMB:
-        CALL SCNEXT                ; Read a binding or the binding-list close.
-        JP C,SCNAMERR
+        LD (ST_ARGS),A
+.BINDING:
+        CALL REC_NEXT              ; Read a binding or the binding-list close.
+        JP C,.FAIL
         CP 2
-        JP Z,SCNAMGO
+        JP Z,.CALL
         CP 1
-        JP NZ,SCNAMERR
-        CALL SCNEXT                ; Every binding starts with a formal name.
-        JP C,SCNAMERR
+        JP NZ,.FAIL
+        CALL REC_NEXT              ; Every binding starts with a formal name.
+        JP C,.FAIL
         CP 5
-        JP NZ,SCNAMERR
-        LD (SCID),HL
-        CALL SCNAMDUP              ; Reject duplicate formal names early.
-        JR NC,SCNAMNEW
-        LD HL,SCDUPTXT
-        LD (SCERRPTR),HL
-        JP SCNAMERR
-SCNAMNEW:
-        XOR A                      ; SCPEND needs a slot byte; formal slots come later.
-        LD (SCSLOT),A
-        CALL SCPEND                ; Keep this name while its initializer is emitted.
-        JP C,SCNAMERR
-        LD A,(SCNAMBS)             ; Nested named forms use the same scratch words.
+        JP NZ,.FAIL
+        LD (ST_SYMID),HL
+        CALL .DUP_CHK              ; Reject duplicate formal names early.
+        JR NC,.INIT
+        LD HL,M_DUP
+        LD (ST_ERROR),HL
+        JP .FAIL
+.INIT:
+        XOR A                      ; LET_PUSH needs a slot byte; formal slots come later.
+        LD (ST_SLOT),A
+        CALL LET_PUSH              ; Keep this name while its initializer is emitted.
+        JP C,.FAIL
+        LD A,(ST_NLREC)            ; Nested named forms use the same scratch words.
         PUSH AF                    ; Preserve this form's pending-name marker.
-        LD HL,(SCNAMID)            ; Preserve the enclosing named procedure name.
+        LD HL,(ST_NLID)            ; Preserve the enclosing named procedure name.
         PUSH HL
-        LD A,(SCDEFSL)             ; Preserve its closure slot while parsing inside.
+        LD A,(ST_DSLOT)            ; Preserve its closure slot while parsing inside.
         PUSH AF
-        LD A,(SCTMPPR)             ; Preserve the enclosing descriptor index.
+        LD A,(ST_DESC)             ; Preserve the enclosing descriptor index.
         PUSH AF
-        LD A,(SCNAMOP)             ; Preserve the enclosing named descriptor owner.
+        LD A,(ST_NLOWN)            ; Preserve the enclosing named descriptor owner.
         PUSH AF
-        LD A,(SCNAMNP)             ; Preserve the current named descriptor marker.
+        LD A,(ST_NLNEW)            ; Preserve the current named descriptor marker.
         PUSH AF
-        LD A,(SCLETMOD)            ; Preserve the enclosing let spelling mode.
+        LD A,(ST_NLOK)             ; Preserve the enclosing let spelling mode.
         PUSH AF
-        LD A,(SCARGN)              ; Nested expressions may use the same count byte.
+        LD A,(ST_ARGS)             ; Nested expressions may use the same count byte.
         PUSH AF                    ; Preserve the named call's argument count.
-        CALL SCINIT                ; Initializers use only the enclosing environment.
-        JR C,SCNMINI
+        CALL LET_INIT              ; Initializers use only the enclosing environment.
+        JR C,.INIT_BAD
         POP AF                     ; Restore the count after the initializer returns.
-        LD (SCARGN),A
+        LD (ST_ARGS),A
         POP AF                     ; Restore the enclosing let spelling mode.
-        LD (SCLETMOD),A
+        LD (ST_NLOK),A
         POP AF                     ; Restore the current named descriptor marker.
-        LD (SCNAMNP),A
+        LD (ST_NLNEW),A
         POP AF                     ; Restore the enclosing named descriptor owner.
-        LD (SCNAMOP),A
+        LD (ST_NLOWN),A
         POP AF                     ; Restore the enclosing descriptor index.
-        LD (SCTMPPR),A
+        LD (ST_DESC),A
         POP AF                     ; Restore the enclosing closure slot.
-        LD (SCDEFSL),A
+        LD (ST_DSLOT),A
         POP HL                     ; Restore the enclosing named procedure name.
-        LD (SCNAMID),HL
+        LD (ST_NLID),HL
         POP AF                     ; Restore the enclosing pending-name marker.
-        LD (SCNAMBS),A
-        CALL SCPUSH                ; Preserve source order in the generated packet.
-        JP C,SCNAMERR
-        LD A,(SCARGN)
+        LD (ST_NLREC),A
+        CALL EM_PUSH               ; Preserve source order in the generated packet.
+        JP C,.FAIL
+        LD A,(ST_ARGS)
         INC A
-        LD (SCARGN),A
-        CALL SCEXPECT              ; Close this binding pair before the next one.
-        JP C,SCNAMERR
-        JP SCNAMB
-SCNMINI:
+        LD (ST_ARGS),A
+        CALL CMD_END               ; Close this binding pair before the next one.
+        JP C,.FAIL
+        JP .BINDING
+.INIT_BAD:
         POP AF                     ; Discard the saved argument count.
         POP AF                     ; Discard the saved let spelling mode.
         POP AF                     ; Discard the saved current named descriptor.
@@ -114,111 +114,111 @@ SCNMINI:
         POP AF                     ; Discard the saved closure slot.
         POP HL                     ; Discard the saved enclosing procedure name.
         POP AF                     ; Discard the saved pending-name marker.
-        JP SCNAMERR
+        JP .FAIL
 
-; Keep the named descriptor selected while SCMAKE records its fixup.
-SCNMAKE:
-        LD A,(SCNAMNP)
-        LD (SCTMPPR),A
-        JP SCMAKE
+; Keep the named descriptor selected while LAM_MAKE records its fixup.
+.MAKE:
+        LD A,(ST_NLNEW)
+        LD (ST_DESC),A
+        JP LAM_MAKE
 
 ; Finish initializers, invoke the named procedure, then compile its body.
-SCNAMGO:
-        LD DE,(SCNAMID)
-        LD (SCID),DE
-        LD A,(SCDEFSL)
-        LD (SCSLOT),A
-        CALL SCADDLOC              ; The name is absent from initializers, present in body.
-        JP C,SCNAMERR
-        LD A,(SCDEFSL)
+.CALL:
+        LD DE,(ST_NLID)
+        LD (ST_SYMID),DE
+        LD A,(ST_DSLOT)
+        LD (ST_SLOT),A
+        CALL BIND_ADD              ; The name is absent from initializers, present in body.
+        JP C,.FAIL
+        LD A,(ST_DSLOT)
         LD L,A
         LD A,1
-        CALL SCLOAD                ; Load the closure as the compact call operator.
-        JP C,SCNAMERR
-        LD HL,SRTOPUSH
-        CALL SCCALL                ; Save it beside the staged argument packet.
-        JP C,SCNAMERR
-        LD A,(SCTCTX)
-        LD (SCTLSAV),A             ; The named call inherits the enclosing tail context.
+        CALL EM_LOAD               ; Load the closure as the compact call operator.
+        JP C,.FAIL
+        LD HL,OPS_PUSH
+        CALL EM_CALL               ; Save it beside the staged argument packet.
+        JP C,.FAIL
+        LD A,(ST_TAIL)
+        LD (ST_ATAIL),A            ; The named call inherits the enclosing tail context.
         LD A,1
-        LD (SCAPMODE),A
-        CALL SCAPDONE              ; Emit ordinary or tail invocation from the packet.
-        JP C,SCNAMERR
-        LD HL,(SCSKIP)             ; Preserve the enclosing jump-over patch.
-        LD (SCNAMID),HL            ; The name is no longer needed after the call.
-        CALL SCJP                  ; The ordinary path jumps over the procedure body.
-        JP C,SCNAMERR
-        LD (SCSKIP),HL
-        LD A,(SCNAMOP)             ; Let SCLOPEN save the actual enclosing owner.
-        LD (SCTMPPR),A
-        CALL SCLOPEN               ; Formal slots and the body use a new owner.
-        JP C,SCNAMERR
-        LD A,(SCNAMNP)             ; Restore the named descriptor for its formals.
-        LD (SCTMPPR),A
-        LD (SCCURPR),A
-        LD HL,(SCPC)               ; The named body starts after its skip prefix.
-        LD (SCPBODY),HL
-        CALL SCNAMSKP              ; Restore the enclosing skip when this body closes.
-        JP C,SCNAMERR
-        CALL SCNAMFRM              ; Add saved names as fixed procedure formals.
-        JP C,SCNAMUNW
+        LD (ST_ROUTE),A
+        CALL CALL_END              ; Emit ordinary or tail invocation from the packet.
+        JP C,.FAIL
+        LD HL,(ST_SKIP)            ; Preserve the enclosing jump-over patch.
+        LD (ST_NLID),HL            ; The name is no longer needed after the call.
+        CALL EM_JP                 ; The ordinary path jumps over the procedure body.
+        JP C,.FAIL
+        LD (ST_SKIP),HL
+        LD A,(ST_NLOWN)            ; Let LAM_OPEN save the actual enclosing owner.
+        LD (ST_DESC),A
+        CALL LAM_OPEN              ; Formal slots and the body use a new owner.
+        JP C,.FAIL
+        LD A,(ST_NLNEW)            ; Restore the named descriptor for its formals.
+        LD (ST_DESC),A
+        LD (ST_PROC),A
+        LD HL,(ST_PC)              ; The named body starts after its skip prefix.
+        LD (ST_PBODY),HL
+        CALL .SKIP_FIX             ; Restore the enclosing skip when this body closes.
+        JP C,.FAIL
+        CALL .FORMALS              ; Add saved names as fixed procedure formals.
+        JP C,.UNWIND
         LD A,1
-        LD (SCTCTX),A
-        LD A,(SCBISOL)
+        LD (ST_TAIL),A
+        LD A,(ST_ALONE)
         PUSH AF
         LD A,1
-        LD (SCBISOL),A
-        CALL SCBODY
-        JR C,SCNMBERR
+        LD (ST_ALONE),A
+        CALL CMD_BODY
+        JR C,.BODY_BAD
         POP AF
-        LD (SCBISOL),A
-        CALL SCRET
-        JP C,SCNAMUNW
-        CALL SCPFIN               ; Patch the descriptor body and skip target.
-        JP C,SCNAMUNW
-        CALL SCUNWIND
-        JP C,SCNAMERR
-        JP SCNAMEND
+        LD (ST_ALONE),A
+        CALL EM_RET
+        JP C,.UNWIND
+        CALL PROC_END             ; Patch the descriptor body and skip target.
+        JP C,.UNWIND
+        CALL CAP_POP
+        JP C,.FAIL
+        JP .DONE
 
-SCNMBERR:
+.BODY_BAD:
         POP AF
-        LD (SCBISOL),A
-SCNAMUNW:
-        CALL SCUNWIND
+        LD (ST_ALONE),A
+.UNWIND:
+        CALL CAP_POP
 
-; Named dispatch bypasses SCLETSET's normal return, so remove that return
+; Named dispatch bypasses LET_OPEN's normal return, so remove that return
 ; before using the ordinary saved-scope cleanup paths.
-SCNAMERR:
+.FAIL:
         POP AF                     ; Restore the enclosing definition's slot scratch.
-        LD (SCDEFSL),A
+        LD (ST_DSLOT),A
         POP AF                     ; Restore the enclosing application argument count.
-        LD (SCARGN),A
+        LD (ST_ARGS),A
         POP AF                     ; Restore the enclosing descriptor index.
-        LD (SCTMPPR),A
+        LD (ST_DESC),A
         POP AF                     ; Restore the previous named descriptor marker.
-        LD (SCNAMNP),A
+        LD (ST_NLNEW),A
         POP AF                     ; Restore the enclosing named descriptor owner.
-        LD (SCNAMOP),A
-        POP DE                     ; Remove the return still owned by SCLETSET.
-        JP SCLETERR
-SCNAMEND:
+        LD (ST_NLOWN),A
+        POP DE                     ; Remove the return still owned by LET_OPEN.
+        JP LET_FAIL
+.DONE:
         POP AF                     ; Restore the enclosing definition's slot scratch.
-        LD (SCDEFSL),A
+        LD (ST_DSLOT),A
         POP AF                     ; Restore the enclosing application argument count.
-        LD (SCARGN),A
+        LD (ST_ARGS),A
         POP AF                     ; Restore the enclosing descriptor index.
-        LD (SCTMPPR),A
+        LD (ST_DESC),A
         POP AF                     ; Restore the previous named descriptor marker.
-        LD (SCNAMNP),A
+        LD (ST_NLNEW),A
         POP AF                     ; Restore the enclosing named descriptor owner.
-        LD (SCNAMOP),A
-        POP DE                     ; Remove the return still owned by SCLETSET.
-        JP SCLETEND
+        LD (ST_NLOWN),A
+        POP DE                     ; Remove the return still owned by LET_OPEN.
+        JP LET_DONE
 
-; SCLOPEN follows the named call prefix, so replace its saved skip with the
+; LAM_OPEN follows the named call prefix, so replace its saved skip with the
 ; value that preceded the prefix.  Nested named forms then restore correctly.
-SCNAMSKP:
-        LD A,(SCBDEP)
+.SKIP_FIX:
+        LD A,(ST_BNEST)
         DEC A
         LD L,A
         LD H,0
@@ -228,11 +228,11 @@ SCNAMSKP:
         ADD HL,HL
         ADD HL,HL
         ADD HL,DE
-        LD DE,SCBFRAME
+        LD DE,W_BODY
         ADD HL,DE
         LD DE,5
         ADD HL,DE
-        LD DE,(SCNAMID)
+        LD DE,(ST_NLID)
         LD (HL),E
         INC HL
         LD (HL),D
@@ -240,72 +240,72 @@ SCNAMSKP:
         RET
 
 ; Add the temporary named-let records to the procedure descriptor and scope.
-SCNAMFRM:
-        LD A,(SCNAMBS)
-        LD (SCNAMCUR),A
-SCNAMP:
-        LD A,(SCNAMCUR)
+.FORMALS:
+        LD A,(ST_NLREC)
+        LD (ST_NLPOS),A
+.FORMAL:
+        LD A,(ST_NLPOS)
         LD B,A
-        LD A,(SCBNDTOP)
+        LD A,(ST_BINDS)
         CP B
         RET Z
         LD A,B
         LD L,A
         LD H,0
         ADD HL,HL
-        LD DE,SCBINDID
+        LD DE,W_BKEYS
         ADD HL,DE
         LD E,(HL)
         INC HL
         LD D,(HL)
-        LD (SCID),DE
-        CALL SCPDUP
-        JP C,SCNMDUPF
-        CALL SCNSLOT
+        LD (ST_SYMID),DE
+        CALL CAP_DUP
+        JP C,.FORM_DUP
+        CALL BIND_NEW
         RET C
-        LD (SCSLOT),A
-        CALL SCADDLOC
+        LD (ST_SLOT),A
+        CALL BIND_ADD
         RET C
-        LD A,(SCSLOT)
-        CALL SCPARAM
+        LD A,(ST_SLOT)
+        CALL PROC_ARG
         RET C
-        LD A,(SCNAMCUR)
+        LD A,(ST_NLPOS)
         INC A
-        LD (SCNAMCUR),A
-        JR SCNAMP
-SCNMDUPF:
-        LD HL,SCDUPTXT
-        LD (SCERRPTR),HL
+        LD (ST_NLPOS),A
+        JR .FORMAL
+.FORM_DUP:
+        LD HL,M_DUP
+        LD (ST_ERROR),HL
         SCF
         RET
 
 ; Check the temporary name records owned by this named-let form.
-SCNAMDUP:
-        LD A,(SCNAMBS)
+.DUP_CHK:
+        LD A,(ST_NLREC)
         LD C,A
-        LD A,(SCBNDTOP)
+        LD A,(ST_BINDS)
         SUB C
-        JR Z,SCNAMDN
+        JR Z,.UNIQUE
         LD B,A
-SCNADLP:
+.DUP_LOOP:
         LD A,C
         LD L,A
         LD H,0
         ADD HL,HL
-        LD DE,SCBINDID
+        LD DE,W_BKEYS
         ADD HL,DE
         LD E,(HL)
         INC HL
         LD D,(HL)
-        LD HL,(SCID)
+        LD HL,(ST_SYMID)
         OR A
         SBC HL,DE
-        JR Z,SCNADUP
+        JR Z,.DUP_YES
         INC C
-        DJNZ SCNADLP
-SCNAMDN:
+        DJNZ .DUP_LOOP
+.UNIQUE:
         XOR A
         RET
-SCNADUP:
+.DUP_YES:
         SCF
         RET

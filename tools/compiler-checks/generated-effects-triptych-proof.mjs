@@ -35,7 +35,7 @@ const providerImage = await loadAssembly(
 assert.equal(compiler.image.base, 0);
 assert.equal(
   providerImage.image.bytes.length - 0x100,
-  compiler.address("SRTLEN"),
+  compiler.address("RT_SIZE"),
 );
 let disk = installCpm22File(backing, {
   name: "SKATE.COM",
@@ -149,8 +149,8 @@ try {
 
   const effects = createTriptychEffectClient();
   const bareOutput = runBareProgram(generated, effects, {
-    output: providerImage.address("SRTIOPUT"),
-    input: providerImage.address("SRTIOGET"),
+    output: providerImage.address("CON_PUT"),
+    input: providerImage.address("CON_GET"),
   }, ["Q".charCodeAt(0)]);
   assert.deepEqual(
     new TextEncoder().encode(cpmOutput),
@@ -174,7 +174,7 @@ try {
       generatedBytes: generated.length,
       trace: [...bareOutput],
       limitation:
-        "The image includes a CP/M default adapter; native/WASM hosts patch SRTIOPUT and SRTIOGET to their byte gateway before running.",
+        "The image includes a CP/M default adapter; native/WASM hosts patch CON_PUT and CON_GET to their byte gateway before running.",
     },
     null,
     2,

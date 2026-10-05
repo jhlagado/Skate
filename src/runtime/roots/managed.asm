@@ -1,155 +1,163 @@
 ; Managed value tracing, closure maps and capture scanning.
-; Entry points: SRTBMARK, SRTMVALU, SRTCLENQ and SRTMCLOS.
+; Entry points: GC_VAR, GC_VALUE, GC_QUEUE and GC_CAPS.
 ; Included in runtime order by ../roots.asm.
 
 ; Trace a binding cell reached from an active environment or closure.  Its
 ; explicit mark bit prevents closure/binding cycles from recursing forever.
-SRTBMARK:
+GC_VAR:
         LD A,H
         OR L
         RET Z
-        LD (SRTBADDR),HL
-        LD DE,SRTHEAP
+        LD (BND_CELL),HL
+        LD DE,RT_HEAP
         OR A
         SBC HL,DE
-        JR C,SRTBFAIL
-        LD HL,(SRTBADDR)
-        LD DE,SRTCELW
+        JR C,.BAD
+        LD HL,(BND_CELL)
+        LD DE,CELL_SZ
         ADD HL,DE
-        JR C,SRTBFAIL              ; A wrapped binding extent is invalid.
-        LD DE,(SRTHEAPP)
+        JR C,.BAD                  ; A wrapped binding extent is invalid.
+        LD DE,(HEAP_LIM)
         OR A
         SBC HL,DE
-        JR C,SRTBOK
-        JR Z,SRTBOK
-        JR SRTBFAIL
-SRTBOK:
-        CALL SRTBSTA
-        JR Z,SRTBFAIL
-        LD HL,(SRTBADDR)
+        JR C,.IN_HEAP
+        JR Z,.IN_HEAP
+        JR .BAD
+.IN_HEAP:
+        CALL GC_ISVAR
+        JR Z,.BAD
+        LD HL,(BND_CELL)
         LD DE,3
         ADD HL,DE
         LD A,(HL)
-        LD (SRTBFLG),A
-        AND 20H
+        LD (BND_FLAG),A
+        AND BND_USED
         RET Z
-        LD A,(SRTBFLG)
-        AND 40H
-        JR NZ,SRTBMDON
-        LD A,(SRTBFLG)
-        OR 40H
+        LD A,(BND_FLAG)
+        AND BND_MARK
+        JR NZ,.MARKED
+        LD A,(BND_FLAG)
+        OR BND_MARK
         LD (HL),A
-        LD A,(SRTBFLG)
-        AND 8
+        LD A,(BND_FLAG)
+        AND BND_INIT
         RET Z
-        LD HL,(SRTBADDR)
+        LD HL,(BND_CELL)
         LD E,(HL)
         INC HL
         LD D,(HL)
         INC HL
         INC HL
         LD A,(HL)
-        AND 7
+        AND 0FH
         EX DE,HL
-        JP SRTMVALU
-SRTBMDON:
+        JP GC_VALUE
+.MARKED:
         RET
-SRTBFAIL:
+.BAD:
         RET
 
 ; Trace a tagged managed value.  Pair validation and closure validation remain
 ; separate so a binding's full value is never decoded as a pair record.
-SRTMVALU:
+GC_VALUE:
         CP 1
-        JP Z,SRTMARK
+        JP Z,GC_MARK
         CP 2
-        JP Z,SRTCLENQ
+        JP Z,GC_QUEUE
         CP 6
-        JP Z,SRTSMARK
+        JP Z,STR_MARK
         CP 7
-        JP NZ,SRTMVR
+        JP NZ,.LEAF
         LD A,H                       ; Pair-stored escape tokens are scalar leaves.
-        CP SRTETOH
-        JR NC,SRTMVR
+        CP RT_EPAGE
+        JR NC,.LEAF
         LD A,1
-        JP SRTVHOOK
-SRTMVR:
+        JP VEC_HOOK
+.LEAF:
         RET
 
 ; Return carry clear only for an allocated closure start with a complete
 ; descriptor and environment extent.  The start bitmap rejects pointers into
 ; an object's payload or into a binding cell that happens to look similar.
-SRTCLVLD:
-        LD HL,(SRTCLOBJ)
-        LD DE,SRTHEAP
+GC_OBJOK:
+        LD HL,(CL_OBJ)
+        LD DE,RT_HEAP
         OR A
         SBC HL,DE
-        JR C,SRTCLBAD
-        LD HL,(SRTCLOBJ)
+        JR C,.BAD
+        LD HL,(CL_OBJ)
         LD A,L                     ; Closure starts occupy even map units only.
         AND 3                      ; An address 2 mod 4 names a string-marker bit.
-        JR NZ,SRTCLBAD             ; Require four-byte alignment before the map test.
+        JR NZ,.BAD                 ; Require four-byte alignment before the map test.
         LD DE,2
         ADD HL,DE
-        LD DE,(SRTHEAPP)
+        LD DE,(HEAP_LIM)
         OR A
         SBC HL,DE
-        JR C,SRTCLHDR
-        JR Z,SRTCLHDR
-        JR SRTCLBAD
-SRTCLHDR:
-        LD HL,(SRTCLOBJ)
+        JR C,.HEADER
+        JR Z,.HEADER
+        JR .BAD
+.HEADER:
+        LD HL,(CL_OBJ)
         LD E,(HL)
         INC HL
         LD D,(HL)
-        LD (SRTCLDSC),DE
-        LD HL,(SRTCLDSC)
+        LD (CL_DESC),DE
+        LD HL,(CL_DESC)
         LD DE,0100H
         OR A
         SBC HL,DE
-        JR C,SRTCLBAD
-        LD HL,(SRTCLDSC)
-        LD DE,SRTCAPOF+SRTMASKB
+        JR C,.BAD
+        LD HL,(CL_DESC)
+        LD DE,DESC_MAP
         ADD HL,DE
-        JR C,SRTCLBAD              ; The descriptor extent must fit in 16 bits.
-        LD DE,(SRTIMGE)
+        JR C,.BAD                  ; The descriptor extent must fit in 16 bits.
+        DEC HL
+        LD E,(HL)                  ; The mask width.
+        INC HL
+        LD D,0
+        ADD HL,DE
+        JR C,.BAD
+        ADD HL,DE                  ; The end of both masks.
+        JR C,.BAD
+        LD DE,(RT_LIMIT)
         OR A
         SBC HL,DE
-        JR C,SRTCLDM
-        JR Z,SRTCLDM
-        JR SRTCLBAD
-SRTCLDM:
-        LD HL,(SRTCLDSC)
+        JR C,.EXTENT
+        JR Z,.EXTENT
+        JR .BAD
+.EXTENT:
+        LD HL,(CL_DESC)
         LD DE,3
         ADD HL,DE
         LD A,(HL)
-        LD (SRTCLN),A
+        LD (CL_COUNT),A
         LD L,A
         LD H,0
         ADD HL,HL
         LD DE,2
         ADD HL,DE
-        LD DE,(SRTCLOBJ)
+        LD DE,(CL_OBJ)
         ADD HL,DE
-        JR C,SRTCLBAD              ; A wrapped closure extent is invalid.
-        LD DE,(SRTHEAPP)
+        JR C,.BAD                  ; A wrapped closure extent is invalid.
+        LD DE,(HEAP_LIM)
         OR A
         SBC HL,DE
-        JR C,SRTCLGOD
-        JR Z,SRTCLGOD
-SRTCLBAD:
+        JR C,.GOOD
+        JR Z,.GOOD
+.BAD:
         SCF
         RET
-SRTCLGOD:
-        CALL SRTCLSTA
-        JR Z,SRTCLBAD
+.GOOD:
+        CALL GC_ISOBJ
+        JR Z,.BAD
         OR A
         RET
 
 ; Compute the byte index and single-bit mask for an even closure address.
-; The address is measured in two-byte units from SRTHEAP.
-SRTCLPOS:
-        LD DE,SRTHEAP
+; The address is measured in two-byte units from RT_HEAP.
+GC_OBJAT:
+        LD DE,RT_HEAP
         OR A
         SBC HL,DE
         SRL H
@@ -165,59 +173,59 @@ SRTCLPOS:
         RR L
         LD A,C
         OR A
-        JR Z,SRTCLPZ
+        JR Z,.ZERO
         LD A,1
-SRTCLPS:
+.SHIFT:
         ADD A,A
         DEC C
         RET Z
-        JR SRTCLPS
-SRTCLPZ:
+        JR .SHIFT
+.ZERO:
         LD A,1
         RET
 
-; Test whether SRTCLOBJ is a recorded closure allocation start.
-SRTCLSTA:
-        LD HL,(SRTCLOBJ)
-        CALL SRTCLPOS
+; Test whether CL_OBJ is a recorded closure allocation start.
+GC_ISOBJ:
+        LD HL,(CL_OBJ)
+        CALL GC_OBJAT
         LD C,A
-        LD DE,SRTCLBM
+        LD DE,CL_MAP
         ADD HL,DE
         LD A,(HL)
         AND C
         RET
 
-; Test whether SRTCLOBJ has already entered this collection's worklist.
-SRTCLSEE:
-        LD HL,(SRTCLOBJ)
-        CALL SRTCLPOS
+; Test whether CL_OBJ has already entered this collection's worklist.
+GC_SEEN:
+        LD HL,(CL_OBJ)
+        CALL GC_OBJAT
         LD C,A
-        LD DE,SRTCLMK
+        LD DE,GC_MARKS
         ADD HL,DE
         LD A,(HL)
         AND C
         RET
 
 ; Set the current collection's closure mark bit.
-SRTCLSET:
-        LD HL,(SRTCLOBJ)
-        CALL SRTCLPOS
+GC_VISIT:
+        LD HL,(CL_OBJ)
+        CALL GC_OBJAT
         LD C,A
-        LD DE,SRTCLMK
+        LD DE,GC_MARKS
         ADD HL,DE
         LD A,(HL)
         OR C
         LD (HL),A
         LD A,1
-        LD (SRTMNEW),A             ; Fallback passes must revisit new closures.
+        LD (GC_FOUND),A            ; Fallback passes must revisit new closures.
         RET
 
 ; Publish a newly allocated closure start for later exact validation.
-SRTCLNEW:
-        LD HL,(SRTOBJ)
-        CALL SRTCLPOS
+GC_OBJON:
+        LD HL,(FRM_CLOS)
+        CALL GC_OBJAT
         LD C,A
-        LD DE,SRTCLBM
+        LD DE,CL_MAP
         ADD HL,DE
         LD A,(HL)
         OR C
@@ -225,10 +233,10 @@ SRTCLNEW:
         RET
 
 ; Clear all closure marks at the beginning of a collection.
-SRTCLCLR:
-        LD HL,SRTCLMK
+GC_RESET:
+        LD HL,GC_MARKS
         LD BC,0900H
-SRTCLCLP:
+.LOOP:
         LD A,(HL)
         AND 0AAH                   ; Preserve odd vector-type marker bits.
         LD (HL),A
@@ -236,154 +244,155 @@ SRTCLCLP:
         DEC BC
         LD A,B
         OR C
-        JR NZ,SRTCLCLP
+        JR NZ,.LOOP
         XOR A
-        LD (SRTCLER),A
+        LD (CL_FULL),A
         RET
 
 ; Queue a validated closure without entering its capture graph recursively.
-SRTCLENQ:
-        LD (SRTCLOBJ),HL
-        CALL SRTCLVLD
+GC_QUEUE:
+        LD (CL_OBJ),HL
+        CALL GC_OBJOK
         RET C
-        CALL SRTCLSEE
+        CALL GC_SEEN
         RET NZ
-        CALL SRTCLSET
-        LD DE,(SRTMSTK)
+        CALL GC_VISIT
+        LD DE,(GC_QTOP)
         LD A,D
         CP 0D4H
-        JR NC,SRTCLFUL
-        LD HL,(SRTCLOBJ)
+        JR NC,.FULL
+        LD HL,(CL_OBJ)
         LD A,L
         LD (DE),A
         INC DE
         LD A,H
         LD (DE),A
         INC DE
-        LD (SRTMSTK),DE
+        LD (GC_QTOP),DE
         RET
-SRTCLFUL:
+.FULL:
         LD A,1
-        LD (SRTMOVER),A            ; The closure scan will trace this marked object.
-        LD (SRTCLER),A             ; Retain the diagnostic overflow indication.
+        LD (GC_OVER),A             ; The closure scan will trace this marked object.
+        LD (CL_FULL),A             ; Retain the diagnostic overflow indication.
         RET
 
 ; Trace one queued closure through the descriptor capture mask.  Every
 ; capture is only read after the descriptor has bounded the declared slots.
-SRTMCLOS:
-        CALL SRTCLVLD
+GC_CAPS:
+        CALL GC_OBJOK
         RET C
-        LD HL,(SRTCLDSC)
-        LD DE,SRTCAPOF
-        ADD HL,DE
-        LD (SRTCLMP),HL
+        LD HL,(CL_DESC)
+        CALL DESC_CAP
+        LD (CL_MASKP),HL
+        OR A
+        RET Z                      ; Nothing is captured.
+        LD B,A
         XOR A
-        LD (SRTCLSLT),A
-        LD B,SRTMASKB
-SRTCLMSK:
-        LD HL,(SRTCLMP)
+        LD (CL_SLOT),A
+.BYTE:
+        LD HL,(CL_MASKP)
         LD A,(HL)
         INC HL
-        LD (SRTCLMP),HL
-        LD (SRTCLMV),A
+        LD (CL_MASKP),HL
+        LD (CL_MASK),A
         LD C,8
-SRTCLBIT:
-        LD A,(SRTCLMV)
+.BIT:
+        LD A,(CL_MASK)
         AND 1
-        JR Z,SRTCLNX
-        LD A,(SRTCLN)
+        JR Z,.NEXT
+        LD A,(CL_COUNT)
         LD E,A
-        LD A,(SRTCLSLT)
+        LD A,(CL_SLOT)
         CP E
-        JR NC,SRTCLNX
+        JR NC,.NEXT
         LD L,A
         LD H,0
         ADD HL,HL
         LD DE,2
         ADD HL,DE
-        LD DE,(SRTCLOBJ)
+        LD DE,(CL_OBJ)
         ADD HL,DE
         LD E,(HL)
         INC HL
         LD D,(HL)
         EX DE,HL
-        LD (SRTCLPTR),HL
+        LD (GC_BIND),HL
         PUSH BC
-        LD HL,(SRTCLMP)
+        LD HL,(CL_MASKP)
         PUSH HL
-        LD HL,(SRTCLOBJ)
+        LD HL,(CL_OBJ)
         PUSH HL
-        LD HL,(SRTCLDSC)
+        LD HL,(CL_DESC)
         PUSH HL
-        LD A,(SRTCLN)
+        LD A,(CL_COUNT)
         PUSH AF
-        LD A,(SRTCLSLT)
+        LD A,(CL_SLOT)
         PUSH AF
-        LD A,(SRTCLMV)
+        LD A,(CL_MASK)
         PUSH AF
-        LD HL,(SRTCLPTR)
-        CALL SRTBMARK
+        LD HL,(GC_BIND)
+        CALL GC_VAR
         POP AF
-        LD (SRTCLMV),A
+        LD (CL_MASK),A
         POP AF
-        LD (SRTCLSLT),A
+        LD (CL_SLOT),A
         POP AF
-        LD (SRTCLN),A
+        LD (CL_COUNT),A
         POP HL
-        LD (SRTCLDSC),HL
+        LD (CL_DESC),HL
         POP HL
-        LD (SRTCLOBJ),HL
+        LD (CL_OBJ),HL
         POP HL
-        LD (SRTCLMP),HL
+        LD (CL_MASKP),HL
         POP BC
-SRTCLNX:
-        LD A,(SRTCLMV)
+.NEXT:
+        LD A,(CL_MASK)
         SRL A
-        LD (SRTCLMV),A
-        LD A,(SRTCLSLT)
+        LD (CL_MASK),A
+        LD A,(CL_SLOT)
         INC A
-        LD (SRTCLSLT),A
+        LD (CL_SLOT),A
         DEC C
-        JR NZ,SRTCLBIT
-        DJNZ SRTCLMSK
+        JR NZ,.BIT
+        DJNZ .BYTE
         RET
 
 ; Trace every marked closure after a bounded queue overflow.  The start and
 ; mark maps make this a finite pass over the two-byte address units in the
 ; closure extent.  Repeating the pass reaches captures discovered later in
 ; the scan without recursing through the native stack.
-SRTCLSCR:
-        LD HL,(SRTHEAPP)           ; Scan only the configured managed address span.
-        LD DE,SRTHEAP
+GC_OBJS:
+        LD HL,(HEAP_LIM)           ; Scan only the configured managed address span.
+        LD DE,RT_HEAP
         OR A
         SBC HL,DE
         SRL H
         RR L
         LD B,H                     ; Each visit tests one even closure address.
         LD C,L
-        LD HL,SRTHEAP
-        LD (SRTCLSCN),HL
-SRTCSLP:
-        LD HL,(SRTCLSCN)
-        LD (SRTCLOBJ),HL
+        LD HL,RT_HEAP
+        LD (CL_SCANP),HL
+.LOOP:
+        LD HL,(CL_SCANP)
+        LD (CL_OBJ),HL
         PUSH BC
-        CALL SRTCLSTA
-        JR Z,SRTCPOP
-        CALL SRTCLSEE
-        JR Z,SRTCPOP
-        CALL SRTSSTA
-        JR NZ,SRTCPOP
-        LD HL,(SRTCLOBJ)           ; Restore the scanned object after string classification.
+        CALL GC_ISOBJ
+        JR Z,.NEXT
+        CALL GC_SEEN
+        JR Z,.NEXT
+        CALL STR_TEST
+        JR NZ,.NEXT
+        LD HL,(CL_OBJ)             ; Restore the scanned object after string classification.
         XOR A
-        CALL SRTVHOOK
-SRTCPOP:
+        CALL VEC_HOOK
+.NEXT:
         POP BC
-        LD HL,(SRTCLSCN)
+        LD HL,(CL_SCANP)
         INC HL
         INC HL
-        LD (SRTCLSCN),HL
+        LD (CL_SCANP),HL
         DEC BC
         LD A,B
         OR C
-        JP NZ,SRTCSLP
+        JP NZ,.LOOP
         RET

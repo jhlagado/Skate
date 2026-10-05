@@ -30,7 +30,7 @@ unchanged, so live-object ceilings fall in proportion to records per page:
 
 | Object | Before | Now | Effect |
 | --- | --- | --- | --- |
-| Pair | 5 bytes, 51 per page | 8 bytes, 32 per page | live pair ceiling falls from about 2,900 to 1,856 (58 pages; pinned by the PAIR1856 proof case) |
+| Pair | 5 bytes, 51 per page | 8 bytes, 32 per page | live pair ceiling fell from about 2,900 to 1,856 (58 pages) at the change; the ceiling moves with runtime and program size, and the live-pair proof case pins its current value |
 | Heap binding | 3 bytes, 85 per page | 4 bytes, 64 per page | about 25% fewer bindings per page |
 | Vector element | 4 bytes | 4 bytes | unchanged |
 
@@ -113,7 +113,7 @@ tag values, 0 through 8. They are not nine entirely separate language types:
 
 | Tag | Current meaning |
 | ---: | --- |
-| 0 | Scalar values: binary16 numbers, booleans, characters, sentinels and primitive values |
+| 0 | Scalar values: booleans, characters, sentinels and primitive values (floats are tag 9 since the float24 change) |
 | 1 | Pair |
 | 2 | Closure |
 | 3 | Exact integer |
@@ -175,7 +175,7 @@ metadata into the cell at once.
   keep their current formats unless a proof shows that they are value cells.
 * The source-level primitives, generated calling convention, rest and `apply`
   packet format, ports and `call/ec` behaviour remain unchanged. In
-  particular, `SRTARGPK` is not silently reinterpreted as a cell: it keeps its
+  particular, `ARG_PKT` is not silently reinterpreted as a cell: it keeps its
   existing tag and publication-byte positions until a separately reviewed ABI
   migration provides adapters.
 
@@ -241,9 +241,8 @@ experiment.
 
 With four tag bits, the reserved extension byte gives a clean future
 twenty-four-bit payload while preserving the current nine tag values. That is
-the first widening path to evaluate. Binary16 values can remain sixteen-bit
-values in the low payload; wider exact integers or another numeric format
-would be separate representation work and are outside this experiment.
+the first widening path to evaluate. It has since been taken: see
+[value-contract.md](value-contract.md) and [float24.md](float24.md).
 
 A twenty-six-bit payload would require four tag bits and two cell-resident flag
 bits (26 + 4 + 2 = 32). A twenty-seven-bit payload would require four tag bits

@@ -1,46 +1,47 @@
 ; Runtime transfer and cleanup of captured slot maps.
-; Entry points: SRTCOPYM, SRTCLSC and SRTCLNSE.
-SRTCOPYM:
-        LD HL,(SRTDESC)
-        LD DE,SRTCAPOF
-        ADD HL,DE
-        LD (SRTMASKP),HL
-        LD HL,(SRTOBJ)
+; Entry points: MAP_COPY, MAP_ENV and MAP_TRIM.
+MAP_COPY:
+        LD HL,(DESC_CUR)
+        CALL DESC_CAP
+        LD (MASK_PTR),HL
+        LD (MASK_CNT),A
+        LD HL,(FRM_CLOS)
         LD DE,2
         ADD HL,DE
-        LD (SRTSRC),HL
+        LD (FRM_SRC),HL
         XOR A
-        LD (SRTSLOTI),A
-        LD A,SRTMASKB
-        LD (SRTMASKN),A
-SRTCPMB:
-        LD HL,(SRTMASKP)
+        LD (MASK_IDX),A
+        LD A,(MASK_CNT)
+        OR A
+        RET Z                      ; Nothing is captured.
+.BYTE:
+        LD HL,(MASK_PTR)
         LD A,(HL)
         INC HL
-        LD (SRTMASKP),HL
-        LD (SRTMASKV),A
+        LD (MASK_PTR),HL
+        LD (MASK_VAL),A
         LD A,8
-        LD (SRTBITN),A
-SRTCPMBT:
-        LD A,(SRTMASKV)
+        LD (MASK_BIT),A
+.BIT:
+        LD A,(MASK_VAL)
         AND 1
-        JR Z,SRTCPMN
-        LD A,(SRTSLOTI)
-        CALL SRTSADDR
-        LD (SRTSADR),HL
-        LD A,(SRTSLOTI)
+        JR Z,.NEXT
+        LD A,(MASK_IDX)
+        CALL SLOT_AT
+        LD (SLOT_CUR),HL
+        LD A,(MASK_IDX)
         LD L,A
         LD H,0
         ADD HL,HL
-        LD DE,(SRTSRC)
+        LD DE,(FRM_SRC)
         ADD HL,DE
         LD E,(HL)
         INC HL
         LD D,(HL)
         LD A,D
         OR E
-        JR Z,SRTCPMZ
-        LD HL,(SRTSADR)
+        JR Z,.ZERO
+        LD HL,(SLOT_CUR)
         LD A,E
         LD (HL),A
         INC HL
@@ -50,11 +51,11 @@ SRTCPMBT:
         XOR A
         LD (HL),A
         INC HL
-        LD A,SRTSPROM
+        LD A,SLOT_PTR
         LD (HL),A
-        JR SRTCPMN
-SRTCPMZ:
-        LD HL,(SRTSADR)
+        JR .NEXT
+.ZERO:
+        LD HL,(SLOT_CUR)
         XOR A
         LD (HL),A
         INC HL
@@ -63,130 +64,141 @@ SRTCPMZ:
         LD (HL),A
         INC HL
         LD (HL),A
-SRTCPMN:
-        LD A,(SRTMASKV)
+.NEXT:
+        LD A,(MASK_VAL)
         SRL A
-        LD (SRTMASKV),A
-        LD A,(SRTSLOTI)
+        LD (MASK_VAL),A
+        LD A,(MASK_IDX)
         INC A
-        LD (SRTSLOTI),A
-        LD A,(SRTBITN)
+        LD (MASK_IDX),A
+        LD A,(MASK_BIT)
         DEC A
-        LD (SRTBITN),A
-        JR NZ,SRTCPMBT
-        LD A,(SRTMASKN)
+        LD (MASK_BIT),A
+        JR NZ,.BIT
+        LD A,(MASK_CNT)
         DEC A
-        LD (SRTMASKN),A
-        JR NZ,SRTCPMB
+        LD (MASK_CNT),A
+        JR NZ,.BYTE
         RET
 
 ; Copy promoted active pointers into the new closure's two-byte environment.
 ; The closure block is cleared before this pass, so uncaptured entries stay zero.
-SRTCLSC:
-        LD HL,(SRTNEWD)
-        LD DE,SRTCAPOF
-        ADD HL,DE
-        LD (SRTMASKP),HL
-        LD HL,(SRTENV)
-        LD (SRTSRC),HL
-        LD HL,(SRTNENV)
-        LD (SRTSVAL),HL
+MAP_ENV:
+        LD HL,(DESC_NEW)
+        CALL DESC_CAP
+        LD (MASK_PTR),HL
+        LD (MASK_CNT),A
+        LD HL,(ENV_CUR)
+        LD (FRM_SRC),HL
+        LD HL,(ENV_DST)
+        LD (SLOT_VAL),HL
         XOR A
-        LD (SRTSLOTI),A
-        LD A,SRTMASKB
-        LD (SRTMASKN),A
-SRTCLSB:
-        LD HL,(SRTMASKP)
+        LD (MASK_IDX),A
+        LD A,(MASK_CNT)
+        OR A
+        RET Z                      ; Nothing is captured.
+.BYTE:
+        LD HL,(MASK_PTR)
         LD A,(HL)
         INC HL
-        LD (SRTMASKP),HL
-        LD (SRTMASKV),A
+        LD (MASK_PTR),HL
+        LD (MASK_VAL),A
         LD A,8
-        LD (SRTBITN),A
-SRTCLST:
-        LD A,(SRTMASKV)
+        LD (MASK_BIT),A
+.BIT:
+        LD A,(MASK_VAL)
         AND 1
-        JR Z,SRTCLSN
-        LD A,(SRTSLOTI)
-        CALL SRTSADDR
-        LD (SRTSADR),HL
-        LD HL,(SRTSADR)            ; Active maps use four-byte slots, not closure stride.
+        JR Z,.NEXT
+        LD A,(MASK_IDX)
+        CALL SLOT_AT
+        LD (SLOT_CUR),HL
+        LD HL,(SLOT_CUR)           ; Active maps use four-byte slots, not closure stride.
         LD E,(HL)
         INC HL
         LD D,(HL)
-        LD (SRTCELLP),DE
-        LD A,(SRTSLOTI)
+        LD (HEAP_OBJ),DE
+        LD A,(MASK_IDX)
         LD L,A
         LD H,0
         ADD HL,HL
-        LD DE,(SRTSVAL)
+        LD DE,(SLOT_VAL)
         ADD HL,DE
-        LD DE,(SRTCELLP)
+        LD DE,(HEAP_OBJ)
         LD A,E
         LD (HL),A
         INC HL
         LD A,D
         LD (HL),A
-SRTCLSN:
-        LD A,(SRTMASKV)
+.NEXT:
+        LD A,(MASK_VAL)
         SRL A
-        LD (SRTMASKV),A
-        LD A,(SRTSLOTI)
+        LD (MASK_VAL),A
+        LD A,(MASK_IDX)
         INC A
-        LD (SRTSLOTI),A
-        LD A,(SRTBITN)
+        LD (MASK_IDX),A
+        LD A,(MASK_BIT)
         DEC A
-        LD (SRTBITN),A
-        JR NZ,SRTCLST
-        LD A,(SRTMASKN)
+        LD (MASK_BIT),A
+        JR NZ,.BIT
+        LD A,(MASK_CNT)
         DEC A
-        LD (SRTMASKN),A
-        JR NZ,SRTCLSB
+        LD (MASK_CNT),A
+        JR NZ,.BYTE
         RET
 
 ; Clear active slots that are neither owned by nor captured into the target.
 ; This prevents an old tail frame from retaining roots outside its shape.
-SRTCLNSE:
-        LD HL,(SRTDESC)
-        LD DE,SRTOWNOF
+MAP_TRIM:
+        LD HL,(DESC_CUR)
+        CALL DESC_OWN
+        LD (MASK_PTR),HL
+        LD (MASK_FIT),A            ; Mask bytes beyond the width read as zero.
+        LD E,A
+        LD D,0
         ADD HL,DE
-        LD (SRTMASKP),HL
-        LD HL,(SRTDESC)
-        LD DE,SRTCAPOF
-        ADD HL,DE
-        LD (SRTSRC),HL
+        LD (FRM_SRC),HL
         XOR A
-        LD (SRTSLOTI),A
-        LD A,SRTMASKB
-        LD (SRTMASKN),A
-SRTCLNB:
-        LD HL,(SRTMASKP)
+        LD (MASK_IDX),A
+        LD A,DESC_MAX              ; Every slot below SLOT_CNT is examined.
+        LD (MASK_CNT),A
+.BYTE:
+        LD A,(MASK_FIT)
+        OR A
+        JR Z,.NONE                 ; Neither owned nor captured.
+        DEC A
+        LD (MASK_FIT),A
+        LD HL,(MASK_PTR)
         LD A,(HL)
         INC HL
-        LD (SRTMASKP),HL
-        LD (SRTMASKV),A
-        LD HL,(SRTSRC)
+        LD (MASK_PTR),HL
+        LD (MASK_VAL),A
+        LD HL,(FRM_SRC)
         LD A,(HL)
         INC HL
-        LD (SRTSRC),HL
-        LD (SRTSVTAG),A
+        LD (FRM_SRC),HL
+        LD (SLOT_TAG),A
+        JR .BITS
+.NONE:
+        LD (MASK_VAL),A
+        LD (SLOT_TAG),A
+.BITS:
         LD A,8
-        LD (SRTBITN),A
-SRTCLNT:
-        LD A,(SRTSLOTI)
+        LD (MASK_BIT),A
+.BIT:
+        LD A,(MASK_IDX)
         LD C,A
-        LD A,(SRTSLOTS)
+        LD A,(SLOT_CNT)
         CP C
-        JR C,SRTCLND
-        JR Z,SRTCLND
-        LD A,(SRTMASKV)
+        JR C,.BYTE_END
+        JR Z,.BYTE_END
+        LD A,(MASK_VAL)
         AND 1
-        JR NZ,SRTCLNN
-        LD A,(SRTSVTAG)
+        JR NZ,.NEXT
+        LD A,(SLOT_TAG)
         AND 1
-        JR NZ,SRTCLNN
+        JR NZ,.NEXT
         LD A,C
-        CALL SRTSADDR
+        CALL SLOT_AT
         XOR A
         LD (HL),A
         INC HL
@@ -195,25 +207,25 @@ SRTCLNT:
         LD (HL),A
         INC HL
         LD (HL),A
-SRTCLNN:
-        LD A,(SRTMASKV)
+.NEXT:
+        LD A,(MASK_VAL)
         SRL A
-        LD (SRTMASKV),A
-        LD A,(SRTSVTAG)
+        LD (MASK_VAL),A
+        LD A,(SLOT_TAG)
         SRL A
-        LD (SRTSVTAG),A
-        LD A,(SRTSLOTI)
+        LD (SLOT_TAG),A
+        LD A,(MASK_IDX)
         INC A
-        LD (SRTSLOTI),A
-        LD A,(SRTBITN)
+        LD (MASK_IDX),A
+        LD A,(MASK_BIT)
         DEC A
-        LD (SRTBITN),A
-        JR NZ,SRTCLNT
-SRTCLND:
-        LD A,(SRTMASKN)
+        LD (MASK_BIT),A
+        JR NZ,.BIT
+.BYTE_END:
+        LD A,(MASK_CNT)
         DEC A
-        LD (SRTMASKN),A
-        JR NZ,SRTCLNB
+        LD (MASK_CNT),A
+        JR NZ,.BYTE
         RET
 
 ; Trace one active four-byte slot during root discovery.

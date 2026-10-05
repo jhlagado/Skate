@@ -27,12 +27,12 @@ function runWithProvider(
   const putHook = 0xf100;
   const getHook = 0xf110;
   const stopAddress = expectError ? 0xef10 : 0xef00;
-  const errorAddress = assembled.address("SRTERROR");
+  const errorAddress = assembled.address("ERROR");
   let enteredError = false;
   let bdosTextCall = false;
   let diagnosticWrites = 0;
-  writeWord(memory, assembled.address("SRTIOPUT"), putHook);
-  writeWord(memory, assembled.address("SRTIOGET"), getHook);
+  writeWord(memory, assembled.address("CON_PUT"), putHook);
+  writeWord(memory, assembled.address("CON_GET"), getHook);
   setup();
   // A failed provider call takes the runtime's checked diagnostic path. The
   // fixture returns from BDOS and turns the final fatal jump into the test
@@ -85,7 +85,7 @@ function runWithProvider(
   }
   if (expectBalancedStack) assert.equal(cpu.sp, 0xdff2, `${label} stack`);
   if (expectError) {
-    assert.ok(enteredError, `${label} did not enter SRTERROR`);
+    assert.ok(enteredError, `${label} did not enter ERROR`);
     assert.ok(
       diagnosticWrites > 0,
       `${label} did not send diagnostics through the provider`,
@@ -107,24 +107,24 @@ Deno.test("runtime text services can use an effect provider without source chang
   const client = new EffectClient(new ProviderTransport(effects));
   const provider = new EffectPortProvider(client);
 
-  const text = assembled.address("SRTWQT");
-  runWithProvider(assembled, memory, cpu, provider, "SRTTEXT", () => {
+  const text = assembled.address("WR_TRUE");
+  runWithProvider(assembled, memory, cpu, provider, "OUT_TEXT", () => {
     memory[0xf300] = 79;
     memory[0xf301] = 75;
     memory[0xf302] = 0x24;
     cpu.d = 0xf3;
     cpu.e = 0x00;
   });
-  runWithProvider(assembled, memory, cpu, provider, "SRTINNXT");
+  runWithProvider(assembled, memory, cpu, provider, "IN_NEXT");
   assert.equal(cpu.a, 0);
   assert.equal((cpu.h << 8) | cpu.l, 0xff41);
-  runWithProvider(assembled, memory, cpu, provider, "SRTINNXT");
+  runWithProvider(assembled, memory, cpu, provider, "IN_NEXT");
   assert.equal(cpu.a, 0);
   assert.equal((cpu.h << 8) | cpu.l, 0xff0a);
 
   // The fixed readable-value messages use the same service, rather than BDOS
   // function nine, so host and CP/M output have one observable byte path.
-  runWithProvider(assembled, memory, cpu, provider, "SRTWMSG", () => {
+  runWithProvider(assembled, memory, cpu, provider, "WR_SEND", () => {
     cpu.d = text >>> 8;
     cpu.e = text & 0xff;
   });
@@ -153,7 +153,7 @@ Deno.test("provider carry failures use the checked runtime path", async () => {
     memory,
     cpu,
     failing,
-    "SRTCH",
+    "OUT_CHAR",
     () => {
       cpu.a = 0x41;
     },
@@ -165,7 +165,7 @@ Deno.test("provider carry failures use the checked runtime path", async () => {
     memory,
     cpu,
     failing,
-    "SRTIN",
+    "IN_BYTE",
     () => {},
     false,
     true,
@@ -182,7 +182,7 @@ Deno.test("runtime error messages use the selected output provider", async () =>
     memory,
     cpu,
     provider,
-    "SRTERROR",
+    "ERROR",
     () => {},
     false,
     true,

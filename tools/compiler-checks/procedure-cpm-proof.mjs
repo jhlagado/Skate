@@ -28,17 +28,17 @@ const provider = await loadAssembly(
   "src/runtime/image.asm",
 );
 assert.equal(compiler.image.base, 0);
-assert.equal(compiler.address("SCMAIN"), 0x0100);
-assert.ok(compiler.address("SCEND") < 0x10000);
+assert.equal(compiler.address("CMD_MAIN"), 0x0100);
+assert.ok(compiler.address("W_IMGEND") < 0x10000);
 const runtimeLength = provider.image.bytes.length - 0x0100;
-assert.equal(runtimeLength, compiler.address("SRTLEN"));
-const heapPointerAddress = provider.address("SRTHEAPP");
-const lowStackAddress = provider.address("SRTLOWSP");
-const bindingAllocationAddress = provider.address("SRTBCNT");
-const closureAllocationAddress = provider.address("SRTCCNT");
-const pairAllocationAddress = provider.address("SRTPCNT");
-const collectionCountAddress = provider.address("SRTGCNT");
-const frameCountAddress = provider.address("SRTACNT");
+assert.equal(runtimeLength, compiler.address("RT_SIZE"));
+const heapPointerAddress = provider.address("HEAP_LIM");
+const lowStackAddress = provider.address("RT_LOWSP");
+const bindingAllocationAddress = provider.address("CNT_BIND");
+const closureAllocationAddress = provider.address("CNT_CLOS");
+const pairAllocationAddress = provider.address("CNT_PAIR");
+const collectionCountAddress = provider.address("CNT_GC");
+const frameCountAddress = provider.address("CNT_MAPS");
 let disk = installCpm22File(backing, {
   name: "SKATE.COM",
   bytes: compiler.image.bytes.slice(0x0100),
@@ -62,23 +62,32 @@ if (Deno.args.includes("--data")) {
   });
 }
 
-// Pin the live-pair ceiling of four-byte pair cells.  With the current runtime
-// image this program keeps 1,856 pairs (58 full 32-record pair pages) live;
+// Pin the live-pair ceiling of four-byte pair cells.  This program loads only
+// the core runtime and keeps 2,720 pairs (85 full 32-record pair pages) live;
 // one more pair must stop with RUNTIME ERROR rather than corrupt the heap.
-const livePairCeiling = 1856;
+const livePairCeiling = 2720;
 function livePairSource(count) {
   return `(define build (lambda (n acc) (if (zero? n) acc (build (- n 1) (cons n acc))))) (define len (lambda (l n) (if (null? l) n (len (cdr l) (+ n 1))))) (define keep (build ${count} '())) (begin (write (len keep 0)) (newline))`;
 }
 // The data group's disk directory is nearly full, so the ceiling cases run with
-// the ordinary procedure group.
-const capacityCases = [
+// the ordinary procedure group.  A probe build (deno task probe:on) has a
+// larger runtime and fewer pair pages, so it skips the pin.
+const probeBuild = (() => {
+  try {
+    Deno.statSync("build/PROBE");
+    return true;
+  } catch {
+    return false;
+  }
+})();
+const capacityCases = probeBuild ? [] : [
   [
     `PAIR${livePairCeiling}.SK8`,
     livePairSource(livePairCeiling),
     String(livePairCeiling),
   ],
 ];
-const capacityRuntimeErrorCases = [
+const capacityRuntimeErrorCases = probeBuild ? [] : [
   [
     `PAIR${livePairCeiling + 1}.SK8`,
     livePairSource(livePairCeiling + 1),
@@ -607,13 +616,120 @@ const integerCases = [
     "#t\r\n#f\r\n#f\r\n#t\r\n#f\r\n#f\r\n#t\r\n#f\r\n#t\r\n#f\r\n#t\r\n#f\r\n#t\r\n#t\r\n#f\r\n#t\r\n#f\r\n#f",
   ],
 ];
+// Twenty-four-bit exact integers: both endpoints, products and quotients at
+// the bounds, printing, identity and equality, quoted and vector storage,
+// case dispatch and mixed comparison with floats.
+const int24Case = [
+  "INT24.SK8",
+  `(begin
+    (write 8388607) (newline)
+    (write -8388608) (newline)
+    (write (+ 8388606 1)) (newline)
+    (write (- -8388607 1)) (newline)
+    (write (* 2896 2896)) (newline)
+    (write (* -2048 4096)) (newline)
+    (write (quotient 8388607 -1)) (newline)
+    (write (quotient -8388608 2)) (newline)
+    (write (remainder 8388607 1000)) (newline)
+    (write (modulo -70000 7)) (newline)
+    (write (modulo 100001 -7)) (newline)
+    (write (abs -8388607)) (newline)
+    (write (< 32767 32768)) (newline)
+    (write (= 65536 65536)) (newline)
+    (write (> -32769 -32768)) (newline)
+    (write (eqv? 70000 70000)) (newline)
+    (write (eq? 70000 70001)) (newline)
+    (write (zero? 65536)) (newline)
+    (write (number->string -8388608)) (newline)
+    (write (quote (100000 -70000 255 256))) (newline)
+    (write (vector-ref (vector 1000000 2) 0)) (newline)
+    (write (case 70000 ((70000) 1) (else 2))) (newline)
+    (write (equal? (list 70000) (list 70000))) (newline)
+    (write (member 70000 (quote (1 70000 3)))) (newline)
+    (write (+ 32768 0.5)) (write (+ 65536 0.5)) (newline)
+    (write (< 40000 50000.0)) (newline)
+    (write (= 32768 32768.0)) (newline)
+    (write (> 65505 65504.0)) (newline))`,
+  [
+    "8388607",
+    "-8388608",
+    "8388607",
+    "-8388608",
+    "8386816",
+    "-8388608",
+    "-8388607",
+    "-4194304",
+    "607",
+    "0",
+    "-1",
+    "8388607",
+    "#t",
+    "#t",
+    "#f",
+    "#t",
+    "#f",
+    "#f",
+    '"-8388608"',
+    "(100000 -70000 255 256)",
+    "1000000",
+    "1",
+    "#t",
+    "(70000 3)",
+    "32768.565536.0",
+    "#t",
+    "#t",
+    "#t",
+  ].join("\r\n"),
+];
+integerCases.push(int24Case);
+// A wide literal in every syntactic position the compiler reads ahead of:
+// its third byte must survive each compile-time stash.
+integerCases.push([
+  "INT24POS.SK8",
+  `(define g 100001)
+   (define (f x) (+ x 100002))
+   (define v (vector 100003 (if #t 100004 0) (cond (#f 0) (else 100005))))
+   (define (h) 100006)
+   (write (list g (f 1) (vector-ref v 0) (vector-ref v 1) (vector-ref v 2) (h)))
+   (newline)
+   (write (list (let ((a 100007) (b (+ 1 100008))) (list a b))
+                (let* ((a 100009)) a)
+                (letrec ((a (lambda () 100010))) (a))
+                (let loop ((i 100011)) (if (> i 100011) 0 i))))
+   (newline)
+   (write (list (case 3 ((3) 100012) (else 0)) (when #t 100013)
+                (unless #f 100014) (and 1 100015) (or #f 100016)
+                (begin 100017)))
+   (newline)
+   (write (list ((lambda (x) x) 100018) ((lambda () 100019))
+                (apply + (list 100020 1)) (begin (set! g 100021) g)
+                (if #f 0 100022) (cond ((= 1 1) 100023))))
+   (newline)
+   (write (list (quote 100024) '(100025 . 100026) (car '((100027) 100028))
+                (- 100029) (* -1 100030) (vector-ref (vector 100031) 0)))
+   (newline)`,
+  [
+    "(100001 100003 100003 100004 100005 100006)",
+    "((100007 100009) 100009 100010 100011)",
+    "(100012 100013 100014 100015 100016 100017)",
+    "(100018 100019 100021 100021 100022 100023)",
+    "(100024 (100025 . 100026) (100027) -100029 -100030 100031)",
+  ].join("\r\n"),
+]);
 const integerRuntimeErrorCases = [
+  ["CXRBAD.SK8", "(cadr '(1))", "RUNTIME ERROR\r\n"],
   ["INTDIV0.SK8", "(quotient 7 0)", "RUNTIME ERROR\r\n"],
   ["INTREM0.SK8", "(remainder 7 0)", "RUNTIME ERROR\r\n"],
   ["INTTYPE.SK8", "(+ 1 #t)", "RUNTIME ERROR\r\n"],
   ["CMPBAD.SK8", "(< 1 #t)", "RUNTIME ERROR\r\n"],
-  ["INTOVF.SK8", "(+ 32767 1)", "RUNTIME ERROR\r\n"],
-  ["INTQOVF.SK8", "(quotient -32768 -1)", "RUNTIME ERROR\r\n"],
+  ["INTOVF.SK8", "(+ 8388607 1)", "RUNTIME ERROR\r\n"],
+  ["INTQOVF.SK8", "(quotient -8388608 -1)", "RUNTIME ERROR\r\n"],
+  ["INTMOVF.SK8", "(* 2897 2897)", "RUNTIME ERROR\r\n"],
+  ["INTNOVF.SK8", "(- -8388608)", "RUNTIME ERROR\r\n"],
+  ["INTAOVF.SK8", "(abs -8388608)", "RUNTIME ERROR\r\n"],
+  ["INTVIDX.SK8", "(vector-ref (vector 1) 65536)", "RUNTIME ERROR\r\n"],
+  ["INTLIDX.SK8", "(list-tail (list 1) 65536)", "RUNTIME ERROR\r\n"],
+  ["INTWCHR.SK8", "(integer->char 65536)", "RUNTIME ERROR\r\n"],
   ["INCHERR.SK8", "(integer->char 256)", "RUNTIME ERROR\r\n"],
   ["NOTARITY.SK8", "(not #t #f)", "RUNTIME ERROR\r\n"],
   ["MINUS0.SK8", "(-)", "RUNTIME ERROR\r\n"],
@@ -623,6 +739,97 @@ const integerRuntimeErrorCases = [
 // references from procedures, formal shadowing, if nesting capacity and
 // control bytes inside tokens.
 const regressionCases = [
+  // caar through cdddr, and memv and assv as the eqv? forms of memq and assq.
+  [
+    "CXR.SK8",
+    `(define x '((1 2) (3 4 5) 6 7))
+(write (list (caar x) (cadr x) (cdar x) (cddr x)))
+(newline)
+(write (list (caadr x) (caddr x) (cdadr x) (cdddr x)))
+(newline)
+(write (list (caaar '(((a)))) (cadar '((a b))) (cdaar '(((a b)))) (cddar '((a b c)))))
+(newline)
+(write (list (memv 70000 '(1 70000 3)) (assv 2 '((1 . a) (2 . b))) (memv 9 '(1))))
+(newline)`,
+    "(1 (3 4 5) (2) (6 7))\r\n(3 6 (4 5) (7))\r\n(a b (b) (c))\r\n((70000 3) (2 . b) #f)",
+  ],
+  // Vector literals are self-evaluating quoted data, alone, quoted, nested
+  // in lists and vectors, empty, at the 63-element quoted-datum limit, as
+  // case results and under equal?.
+  [
+    "VECLIT.SK8",
+    `(write #(1 2 3))
+(newline)
+(write '#(a "b" #\\c 1.5 -70000))
+(newline)
+(write '(1 #(2 (3)) #()))
+(newline)
+(write (vector-ref #(#(1 2) #(3 4)) 1))
+(newline)
+(write (vector-length '#(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62)))
+(newline)
+(define (f) #(9 8))
+(write (eq? (f) (f)))
+(write (equal? #(1 (2)) (vector 1 (list 2))))
+(newline)
+(write (case 2 ((1) #(one)) ((2) #(two))))
+(newline)`,
+    '#(1 2 3)\r\n#(a "b" #\\c 1.5 -70000)\r\n(1 #(2 (3)) #())\r\n#(3 4)\r\n63\r\n#t#t\r\n#(two)',
+  ],
+  // do loops are rewritten to named lets: results, missing steps and
+  // results, nesting, a do as a body's first form, and constant-stack loops.
+  [
+    "DOLOOPS.SK8",
+    `(write (do ((i 0 (+ i 1)) (acc '() (cons i acc))) ((= i 5) acc)))
+(newline)
+(write (do ((vec (make-vector 5)) (i 0 (+ i 1))) ((= i 5) vec) (vector-set! vec i i)))
+(newline)
+(write (let ((x '(1 3 5 7 9))) (do ((x x (cdr x)) (sum 0 (+ sum (car x)))) ((null? x) sum))))
+(newline)
+(define (count n) (do ((i 0 (+ i 1))) ((= i n)) (display i)))
+(count 3)
+(newline)
+(write (do ((i 0 (+ i 1))) ((= i 3) (display "done") 'end)))
+(newline)
+(write (do ((i 0 (+ i 1)) (j 10)) ((= i 2) (list i j)) (do ((k 0 (+ k 1))) ((= k 2)) (display k))))
+(newline)
+(write (do ((i 0 (+ i 1)) (s 0 (+ s i))) ((= i 3000) s)))
+(newline)`,
+    "(4 3 2 1 0)\r\n#(0 1 2 3 4)\r\n25\r\n012\r\ndoneend\r\n0101(2 10)\r\n4498500",
+  ],
+  // A nested procedure body must not overwrite the enclosing body's pending
+  // tail-call records: a non-final named let or a lambda after a tail call
+  // once returned from the enclosing procedure.
+  [
+    "TAILNLET.SK8",
+    "(define (g) (let loop ((i 0)) (if (< i 3) (loop (+ i 1)) i)) 7) (g)",
+    "7",
+  ],
+  // Descriptors are emitted as procedures close, so a program is no longer
+  // limited to the 21 records the compiler once held until the end.
+  [
+    "PROCS40.SK8",
+    Array.from(
+      { length: 40 },
+      (_, index) =>
+        index === 0
+          ? "(define (p0) 0)"
+          : `(define (p${index}) (+ (p${index - 1}) 1))`,
+    ).join(" ") + " (p39)",
+    "39",
+  ],
+  // Globals live at fixed addresses, so references to them take no entries
+  // in the 320-record fixup table: this program makes 400.
+  [
+    "GREFS.SK8",
+    "(define x 0) " + "(set! x (+ x 1)) ".repeat(200) + "x",
+    "200",
+  ],
+  [
+    "TAILLAM.SK8",
+    "(define (k) 1) (define (f c) (if c (k) (lambda () (k))) 2) (f #t)",
+    "2",
+  ],
   [
     "TAILIFIF.SK8",
     "(define (loop n) (if (if (= n 0) #f #t) (loop (- n 1)) 0)) (loop 4000)",
@@ -650,6 +857,7 @@ const regressionCases = [
   ],
 ];
 const regressionErrorCases = [
+  ["VECDOT.SK8", "(write '#(1 . 2))", "COMPILE ERROR\r\n"],
   ["IF33.SK8", "(if #t ".repeat(33) + "1" + " 2)".repeat(33), "CAP\r\n"],
   ["CTLTOKEN.SK8", "(quote ab\x01c)", "COMPILE ERROR\r\n"],
   ["NULTOKEN.SK8", "(write +inf.0\x00-inf.0)", "COMPILE ERROR\r\n"],
@@ -846,7 +1054,7 @@ function errorCasesFor(mode) {
     case "runtime-errors":
     case "apply":
     case "integers":
-      return [];
+      return [["INTWIDE.SK8", "(write 8388608)", "COMPILE ERROR\r\n"]];
     case "ec":
       return errorCases.filter(([name]) => name.startsWith("EC"));
     case "data":
@@ -933,7 +1141,7 @@ try {
       generated,
       name,
     );
-    const imageEndOffset = provider.address("SRTIMGE") - 0x0100;
+    const imageEndOffset = provider.address("RT_LIMIT") - 0x0100;
     const publishedImageEnd = generated[imageEndOffset] |
       generated[imageEndOffset + 1] << 8;
     assert.equal(

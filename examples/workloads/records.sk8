@@ -1,0 +1,163 @@
+; Staff records: sort, group, total and tabulate.  Records are vectors of
+; a name string, a department symbol and a salary in whole pounds.  The
+; program exercises vectors, strings, characters, symbols, merge sort and
+; formatted output.
+
+(define (record name department salary) (vector name department salary))
+(define (record-name r) (vector-ref r 0))
+(define (record-department r) (vector-ref r 1))
+(define (record-salary r) (vector-ref r 2))
+
+; A call takes at most eight arguments, so the ten records are built as two
+; lists and joined.
+(define (join left right)
+  (if (null? left) right (cons (car left) (join (cdr left) right))))
+
+(define staff
+  (join (list (record "Ada" 'research 3400)
+              (record "Brian" 'sales 2100)
+              (record "Chloe" 'research 3900)
+              (record "Dev" 'support 1800)
+              (record "Edith" 'sales 2600))
+        (list (record "Farid" 'research 3100)
+              (record "Grace" 'support 2050)
+              (record "Hugo" 'sales 1950)
+              (record "Ines" 'support 2200)
+              (record "Jonas" 'research 4100))))
+
+; ---- Lists ---------------------------------------------------------------
+
+(define (length-of items)
+  (let loop ((items items) (n 0))
+    (if (null? items) n (loop (cdr items) (+ n 1)))))
+
+(define (take items n)
+  (if (= n 0) '() (cons (car items) (take (cdr items) (- n 1)))))
+
+(define (drop items n)
+  (if (= n 0) items (drop (cdr items) (- n 1))))
+
+(define (merge left right before?)
+  (cond ((null? left) right)
+        ((null? right) left)
+        ((before? (car right) (car left))
+         (cons (car right) (merge left (cdr right) before?)))
+        (else (cons (car left) (merge (cdr left) right before?)))))
+
+(define (sort items before?)
+  (let ((n (length-of items)))
+    (if (< n 2)
+        items
+        (let ((half (quotient n 2)))
+          (merge (sort (take items half) before?)
+                 (sort (drop items half) before?)
+                 before?)))))
+
+; ---- Strings -------------------------------------------------------------
+
+(define (string<? a b)
+  (let ((la (string-length a)) (lb (string-length b)))
+    (let loop ((i 0))
+      (cond ((= i la) (< la lb))
+            ((= i lb) #f)
+            ((< (char->integer (string-ref a i)) (char->integer (string-ref b i))) #t)
+            ((> (char->integer (string-ref a i)) (char->integer (string-ref b i))) #f)
+            (else (loop (+ i 1)))))))
+
+(define (spaces n)
+  (if (> n 0) (begin (write-char #\space) (spaces (- n 1)))))
+
+(define (digits n)
+  (if (< n 10) 1 (+ 1 (digits (quotient n 10)))))
+
+(define (pad-right text width)
+  (display text)
+  (spaces (- width (string-length text))))
+
+(define (pad-number n width)
+  (spaces (- width (digits n)))
+  (display n))
+
+(define (upcase text)
+  (let ((n (string-length text)))
+    (let loop ((i 0) (chars '()))
+      (if (= i n)
+          (list->string-of (reverse-of chars))
+          (let ((c (char->integer (string-ref text i))))
+            (loop (+ i 1)
+                  (cons (integer->char (if (and (>= c 97) (<= c 122)) (- c 32) c))
+                        chars)))))))
+
+(define (reverse-of items)
+  (let loop ((items items) (out '()))
+    (if (null? items) out (loop (cdr items) (cons (car items) out)))))
+
+(define (list->string-of chars)
+  (apply string chars))
+
+; ---- Reports -------------------------------------------------------------
+
+(define (show-record r)
+  (pad-right (record-name r) 8)
+  (pad-right (upcase (symbol-name (record-department r))) 10)
+  (pad-number (record-salary r) 6)
+  (newline))
+
+(define (symbol-name s)
+  (cond ((eq? s 'research) "research")
+        ((eq? s 'sales) "sales")
+        ((eq? s 'support) "support")
+        (else "?")))
+
+(define (show-all records)
+  (if (not (null? records))
+      (begin (show-record (car records)) (show-all (cdr records)))))
+
+(define (total-for department records)
+  (let loop ((records records) (sum 0) (count 0))
+    (cond ((null? records) (cons sum count))
+          ((eq? (record-department (car records)) department)
+           (loop (cdr records) (+ sum (record-salary (car records))) (+ count 1)))
+          (else (loop (cdr records) sum count)))))
+
+(define (show-department department)
+  (let ((totals (total-for department staff)))
+    (pad-right (symbol-name department) 10)
+    (pad-number (car totals) 6)
+    (pad-number (cdr totals) 3)
+    (pad-number (quotient (car totals) (cdr totals)) 6)
+    (newline)))
+
+; A histogram of salaries in bands of 500, held in a vector.
+(define bands (make-vector 6 0))
+
+(define (count-bands records)
+  (if (not (null? records))
+      (let ((band (- (quotient (record-salary (car records)) 500) 3)))
+        (vector-set! bands band (+ (vector-ref bands band) 1))
+        (count-bands (cdr records)))))
+
+(define (show-bands)
+  (let loop ((i 0))
+    (if (< i 6)
+        (begin
+          (pad-number (* (+ i 3) 500) 5)
+          (display " ")
+          (let stars ((n (vector-ref bands i)))
+            (if (> n 0) (begin (write-char #\*) (stars (- n 1)))))
+          (newline)
+          (loop (+ i 1))))))
+
+(display "By name") (newline)
+(show-all (sort staff (lambda (a b) (string<? (record-name a) (record-name b)))))
+(newline)
+(display "By salary") (newline)
+(show-all (sort staff (lambda (a b) (< (record-salary a) (record-salary b)))))
+(newline)
+(display "Department   total  n  mean") (newline)
+(show-department 'research)
+(show-department 'sales)
+(show-department 'support)
+(newline)
+(count-bands staff)
+(show-bands)

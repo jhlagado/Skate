@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { loadAssembly } from "../../tests/z80.ts";
+import * as F24 from "./float24-reference.ts";
 import { validateAso } from "./aso-proof.mjs";
 import {
   installCpm22File,
@@ -21,7 +22,7 @@ const provider = await loadAssembly(
   "src/runtime/image.asm",
 );
 assert.equal(compiler.image.base, 0);
-assert.equal(provider.image.bytes.length - 0x100, compiler.address("SRTLEN"));
+assert.equal(provider.image.bytes.length - 0x100, compiler.address("RT_SIZE"));
 let disk = installCpm22File(backing, {
   name: "SKATE.COM",
   bytes: compiler.image.bytes.slice(0x100),
@@ -77,7 +78,7 @@ const cases = [
     "+inf.0\r\n-inf.0\r\n+nan.0\r\n",
   ],
   ["EXACTINT.SK8", "(begin (write (+ 1 2)) (newline))", "3\r\n"],
-  ["ROUNDING.SK8", "(begin (display 2049.0) (newline))", "2048.0\r\n"],
+  ["ROUNDING.SK8", "(begin (display 131073.0) (newline))", "131072.0\r\n"],
   [
     "ZEROPRED.SK8",
     "(begin (write (zero? 0.0)) (write (zero? -0.0)) (write (zero? 1.5)) (newline))",
@@ -100,7 +101,107 @@ const cases = [
     "(0.5 2.5)\r\n",
   ],
 ];
+// Float24 behaviour across its range, with every expected spelling computed
+// by the bit-exact host reference: literals that round, overflow and flush,
+// subnormals, ties at the 17-bit limit and arithmetic that needs every bit.
+const wideLiterals = [
+  "1e19",
+  "18446603336221196288.0",
+  "1e20",
+  "-1e20",
+  "3.3e-24",
+  "1e-25",
+  "2.168404344971009e-19",
+  "0.1",
+  "-131073.0",
+  "131075.0",
+  "123456.789",
+];
+cases.push([
+  "F24LIT.SK8",
+  `(begin ${wideLiterals.map((l) => `(display ${l}) (newline)`).join(" ")})`,
+  wideLiterals.map((l) => F24.print(F24.parse(l)) + "\r\n").join(""),
+]);
+const one = F24.parse("1.0"), three = F24.parse("3.0");
+const tenth = F24.parse("0.1"), big = F24.parse("1e19");
+cases.push([
+  "F24ARITH.SK8",
+  `(begin (display (/ 1 3)) (newline) (display (- 0.1 0.1)) (newline)
+    (display (* 1e19 2.0)) (newline) (display (/ 1e-20 1e10)) (newline)
+    (display (+ 8388607 0.5)) (newline) (display (* 3.0 0.1)) (newline)
+    (write (< 1e19 8388607)) (write (> 1e19 8388607)) (write (= 0.1 0.1))
+    (newline))`,
+  [
+    F24.div(one, three),
+    F24.sub(tenth, tenth),
+    F24.mul(big, F24.parse("2.0")),
+    F24.div(F24.parse("1e-20"), F24.parse("1e10")),
+    F24.add(F24.fromInteger(8388607), F24.parse("0.5")),
+    F24.mul(three, tenth),
+  ].map((bits) => F24.print(bits) + "\r\n").join("") + "#f#t#t\r\n",
+]);
+// The standard numeric procedures: exactness, rounding, min and max,
+// predicates, gcd and lcm, expt and sqrt, and float number->string.
+const show = (bits) => F24.print(bits);
+cases.push([
+  "NUMPROC1.SK8",
+  `(begin
+    (write (list (exact->inexact 3) (inexact->exact 4.0) (exact 1e5) (inexact 7)))
+    (newline)
+    (write (list (floor 2.5) (ceiling 2.5) (truncate -2.5) (round 2.5)
+                 (round 3.5) (round -2.5)))
+    (newline)
+    (write (list (floor -0.5) (round 7) (round -0.4) (floor 1e19) (ceiling 0.1)))
+    (newline)
+    (write (list (min 3 1 2) (max 3 1 2) (max 1 2.0) (min 1.5 3)))
+    (newline)
+    (write (list (even? 4) (odd? 4) (positive? 2) (negative? -1.5)
+                 (positive? 0)))
+    (newline)
+    (write (list (exact? 1) (inexact? 1.0) (integer? 2.0) (integer? 2.5)
+                 (integer? 'a)))
+    (newline))`,
+  [
+    "(3.0 4 100000 7.0)",
+    "(2.0 3.0 -2.0 2.0 4.0 -2.0)",
+    `(-1.0 7 -0.0 ${show(F24.roundIntegral(F24.parse("1e19"), "floor"))} 1.0)`,
+    "(1 3 2.0 1.5)",
+    "(#t #f #t #t #f)",
+    "(#t #t #t #f #f)",
+  ].join("\r\n") + "\r\n",
+]);
+cases.push([
+  "NUMPROC2.SK8",
+  `(begin
+    (write (list (gcd 12 18) (gcd) (gcd -8 12 20) (lcm 4 6) (lcm) (lcm 3 0)
+                 (lcm -4 6)))
+    (newline)
+    (write (list (expt 2 10) (expt -3 3) (expt 2 22) (expt 2.0 -2) (expt 0 0)
+                 (expt 1.5 2) (expt 2 -1)))
+    (newline)
+    (write (list (sqrt 16) (sqrt 2) (sqrt 2.25) (sqrt 0) (sqrt 8386816)))
+    (newline)
+    (write (list (sqrt 3.0) (sqrt -1.0) (sqrt 1e-20) (sqrt -0.0)))
+    (newline)
+    (write (list (number->string 1.5) (number->string -0.0)
+                 (number->string 1e19) (number->string 42)))
+    (newline))`,
+  [
+    "(6 0 4 12 1 0 12)",
+    "(1024 -27 4194304 0.25 1 2.25 0.5)",
+    `(4 ${show(F24.sqrt(F24.fromInteger(2)))} 1.5 0 2896)`,
+    `(${show(F24.sqrt(F24.parse("3.0")))} +nan.0 ${
+      show(F24.sqrt(F24.parse("1e-20")))
+    } -0.0)`,
+    `("1.5" "-0.0" "${show(F24.parse("1e19"))}" "42")`,
+  ].join("\r\n") + "\r\n",
+]);
 const errorCases = [
+  ["SQRTNEG.SK8", "(sqrt -4)"],
+  ["EXPTOVF.SK8", "(expt 2 23)"],
+  ["EXACTFR.SK8", "(inexact->exact 1.5)"],
+  ["EVENFLT.SK8", "(even? 1.5)"],
+  ["MINNONE.SK8", "(min)"],
   ["NODIV.SK8", "(/)"],
   ["BADDIV.SK8", "(/ #t 2)"],
 ];

@@ -1,131 +1,131 @@
 ; Scope replay declaration installation and deferred stores.
-; Entry points: SCRECPRE, SCRECUSE, SCRECPEN and SCRECSTO.
+; Entry points: REC_DECL, REC_SLOT, REC_PUSH and REC_FILL.
 ; Included in compiler order by ../replay.asm.
 
 ; Install every declaration before replaying any initializer.
-SCRECPRE:
-        LD HL,(SCRECBAS)           ; Scan the retained range without consuming source.
-        LD (SCRECRP),HL
+REC_DECL:
+        LD HL,(ST_EVLO)            ; Scan the retained range without consuming source.
+        LD (ST_GETP),HL
         XOR A
-        LD (SCREDEP),A             ; No binding pair is open yet.
-        LD (SCRECHD),A             ; No binding name is pending.
-        LD (SCRECCNT),A
-SCRECPRL:
-        CALL SCNEXT                 ; Read the next retained structural event.
+        LD (ST_NEST),A             ; No binding pair is open yet.
+        LD (ST_HEAD),A             ; No binding name is pending.
+        LD (ST_RCNT),A
+.LOOP:
+        CALL REC_NEXT               ; Read the next retained structural event.
         RET C
-        LD (SCBEV),A
-        LD (SCBVAL),HL
+        LD (ST_EVENT),A
+        LD (ST_EVVAL),HL
         CP 1
-        JR Z,SCRECPRO
+        JR Z,.OPEN
         CP 2
-        JR Z,SCRECCPR
+        JR Z,.CLOSE
         CP 5
-        JR NZ,SCRECPRL
-        LD A,(SCRECHD)
+        JR NZ,.LOOP
+        LD A,(ST_HEAD)
         OR A
-        JR Z,SCRECPRL
-        LD HL,(SCBVAL)
-        LD (SCID),HL
-        LD A,(SCRECCNT)
+        JR Z,.LOOP
+        LD HL,(ST_EVVAL)
+        LD (ST_SYMID),HL
+        LD A,(ST_RCNT)
         CP 128
-        JP NC,SCCAP
-        CALL SCRECDEC              ; Duplicate names are rejected here.
+        JP NC,ERR_CAP
+        CALL LET_DECL              ; Duplicate names are rejected here.
         RET C
-        LD (SCSLOT),A
-        CALL SCCLEAR               ; Every recursive cell starts unbound.
+        LD (ST_SLOT),A
+        CALL EM_CLEAR              ; Every recursive cell starts unbound.
         RET C
-        CALL SCRECPEN              ; Installation order drives reverse stores.
+        CALL REC_PUSH              ; Installation order drives reverse stores.
         RET C
-        LD A,(SCRECCNT)
+        LD A,(ST_RCNT)
         INC A
-        LD (SCRECCNT),A
+        LD (ST_RCNT),A
         XOR A
-        LD (SCRECHD),A
-        JR SCRECPRL
-SCRECPRO:
-        LD A,(SCREDEP)
+        LD (ST_HEAD),A
+        JR .LOOP
+.OPEN:
+        LD A,(ST_NEST)
         OR A
-        JR NZ,SCRECINC
+        JR NZ,.NEST
         LD A,1
-        LD (SCREDEP),A
+        LD (ST_NEST),A
         LD A,1
-        LD (SCRECHD),A
-        JR SCRECPRL
-SCRECINC:
+        LD (ST_HEAD),A
+        JR .LOOP
+.NEST:
         INC A
-        LD (SCREDEP),A
-        JR SCRECPRL
-SCRECCPR:
-        LD A,(SCREDEP)
+        LD (ST_NEST),A
+        JR .LOOP
+.CLOSE:
+        LD A,(ST_NEST)
         OR A
-        JR Z,SCRECPRD
+        JR Z,.DONE
         DEC A
-        LD (SCREDEP),A
-        JR SCRECPRL
-SCRECPRD:
-        LD HL,(SCRECBAS)
-        LD (SCRECRP),HL
+        LD (ST_NEST),A
+        JR .LOOP
+.DONE:
+        LD HL,(ST_EVLO)
+        LD (ST_GETP),HL
         LD A,1
-        LD (SCREP),A
+        LD (ST_PLAY),A
         XOR A
         RET
 
 ; The replay declaration already has a cell; return its active slot.
-SCRECUSE:
-        CALL SCLOCF
+REC_SLOT:
+        CALL BIND_HAS
         SCF
         RET NC
         OR A
         RET
 
 ; Append the selected declaration slot to the deferred initializer list.
-SCRECPEN:
-        LD A,(SCBNDTOP)
+REC_PUSH:
+        LD A,(ST_BINDS)
         CP 128
-        JP NC,SCCAP
+        JP NC,ERR_CAP
         LD L,A
         LD H,0
-        LD DE,SCBINDSL
+        LD DE,W_BSLOTS
         ADD HL,DE
-        LD A,(SCSLOT)
+        LD A,(ST_SLOT)
         LD (HL),A
-        LD A,(SCBNDTOP)
+        LD A,(ST_BINDS)
         INC A
-        LD (SCBNDTOP),A
+        LD (ST_BINDS),A
         XOR A
         RET
 
 ; Pop deferred values in reverse declaration order and initialize their cells.
-SCRECSTO:
-        LD A,(SCBNDTOP)
-        LD (SCRECIDX),A
-        LD A,(SCRECPND)
-        LD (SCRECMRK),A
-SCRECSTL:
-        LD A,(SCRECIDX)
+REC_FILL:
+        LD A,(ST_BINDS)
+        LD (ST_RIDX),A
+        LD A,(ST_RPEND)
+        LD (ST_RMARK),A
+.LOOP:
+        LD A,(ST_RIDX)
         LD C,A
-        LD A,(SCRECMRK)
+        LD A,(ST_RMARK)
         CP C
-        JR Z,SCRECSTD
+        JR Z,.DONE
         LD A,C
         DEC A
-        LD (SCRECIDX),A
+        LD (ST_RIDX),A
         LD L,A
         LD H,0
-        LD DE,SCBINDSL
+        LD DE,W_BSLOTS
         ADD HL,DE
         LD A,(HL)
-        LD (SCSLOT),A
-        CALL SCPOP                 ; Recover the value saved after its initializer.
+        LD (ST_SLOT),A
+        CALL EM_POP                ; Recover the value saved after its initializer.
         RET C
-        LD A,(SCSLOT)
+        LD A,(ST_SLOT)
         LD L,A
         LD A,1
-        CALL SCSTORE
+        CALL EM_STORE
         RET C
-        JR SCRECSTL
-SCRECSTD:
-        LD A,(SCRECMRK)
-        LD (SCBNDTOP),A
+        JR .LOOP
+.DONE:
+        LD A,(ST_RMARK)
+        LD (ST_BINDS),A
         XOR A
         RET

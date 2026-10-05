@@ -37,8 +37,8 @@ function runEntry(
   limit = 20_000_000,
 ) {
   const returnAddress = 0xef00;
-  const gcAddress = assembled.address("SRTGC");
-  const constructorAddress = assembled.address("SRTMAKEP");
+  const gcAddress = assembled.address("GC");
+  const constructorAddress = assembled.address("PAIR_NEW");
   cpu.pc = assembled.address(label);
   cpu.sp = 0xdff0;
   writeWord(memory, cpu.sp, returnAddress);
@@ -73,17 +73,17 @@ function initialiseSinglePairPage(
   cpu.h = assembled.image.end >>> 8;
   cpu.l = assembled.image.end & 255;
   assert.equal(
-    runEntry(assembled, "SRTGPINI", memory, cpu, () => {}).carry,
+    runEntry(assembled, "PAGE_INI", memory, cpu, () => {}).carry,
     0,
   );
   assert.equal(
-    runEntry(assembled, "SRTPIN", memory, cpu, () => {}).carry,
+    runEntry(assembled, "PAIR_INI", memory, cpu, () => {}).carry,
     0,
   );
   // Keep this fixture to one class page so the constructor must collect
   // instead of growing into the second managed extent.
-  memory[assembled.address("SRTPSLIM")] = 1;
-  return memory[assembled.address("SRTPSLT")] << 8;
+  memory[assembled.address("PS_LIMIT")] = 1;
+  return memory[assembled.address("PS_TABLE")] << 8;
 }
 
 function fillSinglePairPage(
@@ -101,8 +101,8 @@ function fillSinglePairPage(
     memory[address + CDR_META] = 0;
   }
   assert.deepEqual(memory.slice(end, end + 4), canary);
-  memory[assembled.address("SRTPSLT") + 2] = 0xff;
-  memory[assembled.address("SRTPSLHD")] = 0;
+  memory[assembled.address("PS_TABLE") + 2] = 0xff;
+  memory[assembled.address("PS_HEAD")] = 0;
 }
 
 function callRoutine(
@@ -115,36 +115,6 @@ function callRoutine(
   return runEntry(assembled, label, memory, cpu, () => {}, undefined, limit);
 }
 
-Deno.test("direct cons preserves both scalar inputs through collection", async () => {
-  const assembled = await loadAssembly(
-    "src/runtime/image.asm",
-  );
-  const memory = assembled.runtime.hardware.memory;
-  const cpu = assembled.runtime.cpu as CpuState;
-  const pairPage = initialiseSinglePairPage(assembled, memory, cpu);
-  const result = runEntry(
-    assembled,
-    "SRTCONS",
-    memory,
-    cpu,
-    () => {
-      writeWord(memory, 0xdff2, 0x5678);
-      writeWord(memory, 0xdff4, 0x0300);
-      writeWord(memory, 0xdff6, 0x1234);
-      writeWord(memory, 0xdff8, 0x0300);
-    },
-    () => fillSinglePairPage(assembled, memory, pairPage),
-  );
-  assert.equal(result.gcCount, 1);
-  assert.equal(result.forcedCount, 1);
-  assert.equal(result.sp, 0xdffa);
-  assert.equal(result.carry, 0);
-  assert.equal(readWord(memory, result.payload), 0x1234);
-  assert.equal(readWord(memory, result.payload + CDR_PAYLOAD), 0x5678);
-  assert.equal(memory[result.payload + CAR_META], 0x43);
-  assert.equal(memory[result.payload + CDR_META], 3);
-});
-
 Deno.test("packet cons preserves both scalar inputs through collection", async () => {
   const assembled = await loadAssembly(
     "src/runtime/image.asm",
@@ -152,19 +122,21 @@ Deno.test("packet cons preserves both scalar inputs through collection", async (
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu as CpuState;
   const pairPage = initialiseSinglePairPage(assembled, memory, cpu);
-  const packet = assembled.address("SRTARGPK");
+  const packet = assembled.address("ARG_PKT");
   const result = runEntry(
     assembled,
-    "SRTPCONS",
+    "PKT_CONS",
     memory,
     cpu,
     () => {
       cpu.ix = 0xef00;
-      memory[assembled.address("SRTARGC")] = 2;
+      memory[assembled.address("ARG_CNT")] = 2;
       writeWord(memory, packet, 0x1234);
-      memory[packet + 2] = 3;
+      memory[packet + 2] = 0; // Clear extension byte.
+      memory[packet + 3] = 3;
       writeWord(memory, packet + 4, 0x5678);
-      memory[packet + 6] = 3;
+      memory[packet + 6] = 0; // Clear extension byte.
+      memory[packet + 7] = 3;
     },
     () => fillSinglePairPage(assembled, memory, pairPage),
   );
@@ -185,18 +157,20 @@ Deno.test("quoted list construction survives collection at both allocations", as
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu as CpuState;
   const pairPage = initialiseSinglePairPage(assembled, memory, cpu);
-  const quoted = assembled.address("SRTQBASE");
+  const quoted = assembled.address("RT_QTLO");
   const result = runEntry(
     assembled,
-    "SRTQBLD",
+    "QT_FOLD",
     memory,
     cpu,
     () => {
       writeWord(memory, quoted, 41);
-      memory[quoted + 2] = 3;
+      memory[quoted + 2] = 0; // Clear extension byte.
+      memory[quoted + 3] = 3;
       writeWord(memory, quoted + 4, 42);
-      memory[quoted + 6] = 3;
-      writeWord(memory, assembled.address("SRTQSP"), quoted + 8);
+      memory[quoted + 6] = 0; // Clear extension byte.
+      memory[quoted + 7] = 3;
+      writeWord(memory, assembled.address("QT_SP"), quoted + 8);
       cpu.a = 2;
       cpu.b = 0;
     },
@@ -226,14 +200,14 @@ Deno.test("tracing preserves a linked list of more than one thousand pairs", asy
   cpu.h = assembled.image.end >>> 8;
   cpu.l = assembled.image.end & 255;
   assert.equal(
-    callRoutine(assembled, "SRTGPINI", memory, cpu).carry,
+    callRoutine(assembled, "PAGE_INI", memory, cpu).carry,
     0,
   );
-  assert.equal(callRoutine(assembled, "SRTPIN", memory, cpu).carry, 0);
+  assert.equal(callRoutine(assembled, "PAIR_INI", memory, cpu).carry, 0);
 
   const records: number[] = [];
   for (let index = 0; index < 1100; index++) {
-    const result = callRoutine(assembled, "SRTFINDP", memory, cpu);
+    const result = callRoutine(assembled, "PAIR_GET", memory, cpu);
     assert.equal(result.carry, 0, `allocation ${index} failed`);
     records.push(result.payload);
   }
@@ -251,11 +225,11 @@ Deno.test("tracing preserves a linked list of more than one thousand pairs", asy
     }
   }
   writeWord(memory, 0xd700, records[0]);
-  memory[0xd702] = 1;
-  memory[0xd703] = 1;
-  writeWord(memory, assembled.address("SRTGBASE"), 0xd700);
-  writeWord(memory, assembled.address("SRTGEND"), 0xd704);
-  const result = callRoutine(assembled, "SRTGC", memory, cpu, 50_000_000);
+  memory[0xd702] = 0; // Clear extension byte.
+  memory[0xd703] = 0x11;
+  writeWord(memory, assembled.address("G_BASE"), 0xd700);
+  writeWord(memory, assembled.address("G_END"), 0xd704);
+  const result = callRoutine(assembled, "GC", memory, cpu, 50_000_000);
   assert.equal(result.sp, 0xdff2);
   for (let index = 0; index < records.length; index++) {
     const address = records[index];

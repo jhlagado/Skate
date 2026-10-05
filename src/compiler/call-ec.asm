@@ -4,24 +4,24 @@
 ; runtime installs its dynamic escape record. The target receives one private
 ; escape value; the runtime does the stack restore when that value is called.
 
-SCCALEF:
-        LD A,(SCTCTX)              ; call/ec itself returns a normal expression value.
+CALL_EC:
+        LD A,(ST_TAIL)             ; call/ec itself returns a normal expression value.
         PUSH AF                    ; Preserve the surrounding tail context.
         XOR A
-        LD (SCTCTX),A              ; The target expression is never tail-position.
-        CALL SCEXPR                ; Evaluate the procedure supplied to call/ec.
-        JR C,SCCALEE               ; Restore the compiler context after a source error.
+        LD (ST_TAIL),A             ; The target expression is never tail-position.
+        CALL CMD_NEXT              ; Evaluate the procedure supplied to call/ec.
+        JR C,.FAIL                 ; Restore the compiler context after a source error.
         POP AF
-        LD (SCTCTX),A
-        CALL SCPUSH                ; Root the target while the closing delimiter is read.
+        LD (ST_TAIL),A
+        CALL EM_PUSH               ; Root the target while the closing delimiter is read.
         RET C
-        CALL SCEXPECT              ; call/ec takes exactly one target expression.
+        CALL CMD_END               ; call/ec takes exactly one target expression.
         RET C
-        LD HL,SRTCECAL             ; The runtime installs and invokes the escape frame.
-        JP SCCALL
+        LD HL,EC_CALL              ; The runtime installs and invokes the escape frame.
+        JP EM_CALL
 
-SCCALEE:
+.FAIL:
         POP AF                     ; Do not leave the enclosing tail context on the stack.
-        LD (SCTCTX),A
+        LD (ST_TAIL),A
         SCF                        ; The nested target expression already reported failure.
         RET

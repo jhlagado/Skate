@@ -24,6 +24,8 @@ export interface ScopeControlBudget {
   readonly globalSlotCapacity: number;
   readonly localSlotCapacity: number;
   readonly fixupCapacity: number;
+  readonly procedureCapacity: number;
+  readonly procedureDepth: number;
   readonly symbolCapacity: number;
 }
 
@@ -31,36 +33,36 @@ export function measureScopeControlBudget(
   image: { end: number },
   address: (label: string) => number,
 ): ScopeControlBudget {
-  const entry = address("SCMAIN");
+  const entry = address("CMD_MAIN");
   if (entry !== SCOPE_LOAD) {
     throw new RangeError(`scope compiler entry is $${entry.toString(16)}`);
   }
   const imageBytes = image.end - entry;
-  const stageGap = address("SCSTAGE") - image.end;
+  const stageGap = address("W_STAGE") - image.end;
   if (stageGap < SCOPE_STAGE_GUARD) {
     throw new RangeError(
-      `scope compiler image leaves only ${stageGap} B before SCSTAGE`,
+      `scope compiler image leaves only ${stageGap} B before W_STAGE`,
     );
   }
-  const stagedOutputLimit = address("SCEND") - address("SCSTAGE");
-  const fixedTableBytes = address("SCWEND") - address("SCGKEYS");
-  const stringPoolEnd = address("SCSTRPL") + SCOPE_STRING_POOL_BYTES;
+  const stagedOutputLimit = address("W_IMGEND") - address("W_STAGE");
+  const fixedTableBytes = address("W_END") - address("W_GKEYS");
+  const stringPoolEnd = address("W_STRBUF") + SCOPE_STRING_POOL_BYTES;
   const stackFloor = SCOPE_STACK_TOP - SCOPE_STACK_RESERVE;
-  if (stringPoolEnd > address("SCPMETA")) {
+  if (stringPoolEnd > address("W_PBASE")) {
     throw new RangeError(
       `string pool crosses procedure metadata at $${
         stringPoolEnd.toString(16)
       }`,
     );
   }
-  if (address("SCRECEND") > stackFloor) {
+  if (address("W_REPEND") > stackFloor) {
     throw new RangeError(
       `replay workspace crosses stack reserve at $${
-        address("SCRECEND").toString(16)
+        address("W_REPEND").toString(16)
       }`,
     );
   }
-  if (address("SCRECFR") >= address("SCRECEND")) {
+  if (address("W_REPLAY") >= address("W_REPEND")) {
     throw new RangeError("replay workspace has no capacity");
   }
   const allocationBytes = imageBytes + stagedOutputLimit + fixedTableBytes +
@@ -79,11 +81,13 @@ export function measureScopeControlBudget(
     stackGap: SCOPE_STACK_TOP - image.end,
     stageGap,
     stagedOutputLimit,
-    stagedOutputGuard: address("SCEND"),
+    stagedOutputGuard: address("W_IMGEND"),
     fixedTableBytes,
     globalSlotCapacity: 256,
     localSlotCapacity: 128,
     fixupCapacity: 320,
+    procedureCapacity: address("W_PROC_N"),
+    procedureDepth: address("W_OPEN_N"),
     symbolCapacity: 320,
   };
 }
@@ -108,6 +112,7 @@ export function renderScopeControlBudget(
       hex(budget.stagedOutputGuard)
     }`,
     `Tables: ${budget.globalSlotCapacity} globals, ${budget.localSlotCapacity} simultaneous locals, ${budget.fixupCapacity} slot fixups, ${budget.symbolCapacity} symbol entries`,
+    `Procedures: ${budget.procedureCapacity} per program, ${budget.procedureDepth} open at once`,
     "",
   ].join("\n");
 }

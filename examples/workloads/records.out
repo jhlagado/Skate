@@ -1,0 +1,35 @@
+By name
+Ada     RESEARCH    3400
+Brian   SALES       2100
+Chloe   RESEARCH    3900
+Dev     SUPPORT     1800
+Edith   SALES       2600
+Farid   RESEARCH    3100
+Grace   SUPPORT     2050
+Hugo    SALES       1950
+Ines    SUPPORT     2200
+Jonas   RESEARCH    4100
+
+By salary
+Dev     SUPPORT     1800
+Hugo    SALES       1950
+Grace   SUPPORT     2050
+Brian   SALES       2100
+Ines    SUPPORT     2200
+Edith   SALES       2600
+Farid   RESEARCH    3100
+Ada     RESEARCH    3400
+Chloe   RESEARCH    3900
+Jonas   RESEARCH    4100
+
+Department   total  n  mean
+research   14500  4  3625
+sales       6650  3  2216
+support     6050  3  2016
+
+ 1500 **
+ 2000 ***
+ 2500 *
+ 3000 **
+ 3500 *
+ 4000 *

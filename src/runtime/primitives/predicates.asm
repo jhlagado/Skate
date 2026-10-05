@@ -1,131 +1,131 @@
 ; Primitive logical and type predicates.
-; Entry points: SRTNOT, SRTTYPE and canonical boolean results.
+; Entry points: PRIM_NOT, PRIM_IS and canonical boolean results.
 ; Included in runtime order by ../primitives.asm.
 
 ; not and the type predicates return canonical boolean values.
-SRTNOT:
-        LD A,(SRTARGC)
+PRIM_NOT:
+        LD A,(ARG_CNT)
         CP 1
-        JP NZ,SRTERROR
-        LD HL,SRTARGPK
-        CALL SRTPVAL
-        CALL SRTFALSE
-        JP Z,SRTBYES
-        JP SRTBNO
-SRTTYPE:
-        LD A,(SRTARGC)
+        JP NZ,ERROR
+        LD HL,ARG_PKT
+        CALL PKT_VAL
+        CALL RT_TEST
+        JP Z,PKT_YES
+        JP PKT_NO
+PRIM_IS:
+        LD A,(ARG_CNT)
         CP 1
-        JP NZ,SRTERROR
-        LD HL,SRTARGPK
-        CALL SRTPVAL
-        LD (SRTNVAL),HL
-        LD (SRTNTAG),A
-        LD A,(SRTPID)
+        JP NZ,ERROR
+        LD HL,ARG_PKT
+        CALL PKT_VAL
+        LD (NUM_VAL),HL
+        LD (NUM_TAG),A
+        LD A,(PRIM_ID)
         CP 22
-        JP Z,SRTTNUM
+        JP Z,.NUMBER
         CP 23
-        JP Z,SRTTBOOL
+        JP Z,.BOOLEAN
         CP 24
-        JP Z,SRTTSYM
+        JP Z,.SYMBOL
         CP 25
-        JP Z,SRTTPRO
+        JP Z,.PROC
         CP 26
-        JP Z,SRTTSTR
+        JP Z,.STRING
         CP 27
-        JP Z,SRTTCHAR
-        JP SRTTEOF
-SRTTNUM:
-        LD A,(SRTNTAG)
-        LD HL,(SRTNVAL)
-        CALL SRTNCHK
-        JP C,SRTBNO
-        JP SRTBYES
-SRTTBOOL:
-        LD A,(SRTNTAG)
+        JP Z,.CHAR
+        JP .EOF
+.NUMBER:
+        LD A,(NUM_TAG)
+        LD HL,(NUM_VAL)
+        CALL PRIM_NUM
+        JP C,PKT_NO
+        JP PKT_YES
+.BOOLEAN:
+        LD A,(NUM_TAG)
         OR A
-        JP NZ,SRTBNO
-        LD HL,(SRTNVAL)
+        JP NZ,PKT_NO
+        LD HL,(NUM_VAL)
         LD DE,0FE00H
         OR A
         SBC HL,DE
-        JP Z,SRTBYES
-        LD HL,(SRTNVAL)
+        JP Z,PKT_YES
+        LD HL,(NUM_VAL)
         LD DE,0FE01H
         OR A
         SBC HL,DE
-        JP Z,SRTBYES
-        JP SRTBNO
-SRTTSYM:
-        LD A,(SRTNTAG)
+        JP Z,PKT_YES
+        JP PKT_NO
+.SYMBOL:
+        LD A,(NUM_TAG)
         CP 4
-        JP Z,SRTBYES
-        JP SRTBNO
-SRTTPRO:
-        LD A,(SRTNTAG)
+        JP Z,PKT_YES
+        JP PKT_NO
+.PROC:
+        LD A,(NUM_TAG)
         CP 8
-        JR NZ,SRTTPROC
-        LD HL,(SRTNVAL)
+        JR NZ,.PROC_TAG
+        LD HL,(NUM_VAL)
         LD A,H
         CP 0F0H
-        JP NC,SRTBNO                ; Port tokens are opaque, not procedures.
-        JP SRTBYES
-SRTTPROC:
+        JP NC,PKT_NO                ; Port tokens are opaque, not procedures.
+        JP PKT_YES
+.PROC_TAG:
         CP 2
-        JP Z,SRTBYES
+        JP Z,PKT_YES
         OR A
-        JP NZ,SRTBNO
-        LD HL,(SRTNVAL)
+        JP NZ,PKT_NO
+        LD HL,(NUM_VAL)
         LD A,H
         CP 0FEH
-        JP NZ,SRTBNO
+        JP NZ,PKT_NO
         LD A,L
         CP 20H
-        JP C,SRTBNO
-        CP 5CH
-        JP C,SRTBYES
-        JP SRTBNO
-SRTTSTR:
-        LD A,(SRTNTAG)
+        JP C,PKT_NO
+        CP PRIM_LIM
+        JP C,PKT_YES
+        JP PKT_NO
+.STRING:
+        LD A,(NUM_TAG)
         CP 5
-        JP Z,SRTBYES
+        JP Z,PKT_YES
         CP 6
-        JP NZ,SRTBNO
-        LD HL,(SRTNVAL)
-        CALL SRTSVLD
-        JP C,SRTBNO
-        JP SRTBYES
-SRTTCHAR:
-        LD A,(SRTNTAG)
+        JP NZ,PKT_NO
+        LD HL,(NUM_VAL)
+        CALL STR_CHK
+        JP C,PKT_NO
+        JP PKT_YES
+.CHAR:
+        LD A,(NUM_TAG)
         OR A
-        JP NZ,SRTBNO
-        LD HL,(SRTNVAL)
+        JP NZ,PKT_NO
+        LD HL,(NUM_VAL)
         LD A,H
         CP 0FFH
-        JP Z,SRTBYES
-        JP SRTBNO
-SRTTEOF:
-        LD A,(SRTNTAG)
+        JP Z,PKT_YES
+        JP PKT_NO
+.EOF:
+        LD A,(NUM_TAG)
         OR A
-        JP NZ,SRTBNO
-        LD HL,(SRTNVAL)
+        JP NZ,PKT_NO
+        LD HL,(NUM_VAL)
         LD DE,0FE03H
         OR A
         SBC HL,DE
-        JP NZ,SRTBNO
-SRTBYES:
+        JP NZ,PKT_NO
+PKT_YES:
         LD A,1
-SRTPBRES:
+PKT_BOOL:
         OR A
-        JR Z,SRTBZERO
+        JR Z,.FALSE
         XOR A
         LD HL,0FE01H
         PUSH IX
         RET
-SRTBZERO:
+.FALSE:
         XOR A
         LD HL,0FE00H
         PUSH IX
         RET
-SRTBNO:
+PKT_NO:
         XOR A
-        JR SRTPBRES
+        JR PKT_BOOL

@@ -29,17 +29,17 @@ const managedCeiling = ceilingArgument === undefined
   ? 0xc000
   : Number.parseInt(ceilingArgument.slice("--ceiling=".length), 16);
 assert.ok(
-  Number.isInteger(managedCeiling) && managedCeiling >= 0xb800 &&
+  Number.isInteger(managedCeiling) && managedCeiling >= 0xab00 &&
     managedCeiling <= 0xc000 && (managedCeiling & 0xff) === 0,
-  "managed ceiling must be a page-aligned B800H..C000H value",
+  "managed ceiling must be a page-aligned AB00H..C000H value",
 );
 assert.equal(compiler.image.base, 0);
-assert.ok(compiler.address("SCMAIN") === 0x0100);
-assert.ok(compiler.address("SCEND") < 0x10000);
+assert.ok(compiler.address("CMD_MAIN") === 0x0100);
+assert.ok(compiler.address("W_IMGEND") < 0x10000);
 const runtimeLength = provider.image.bytes.length - 0x0100;
-assert.equal(runtimeLength, compiler.address("SRTLEN"));
+assert.equal(runtimeLength, compiler.address("RT_SIZE"));
 const runtimeImage = Uint8Array.from(provider.image.bytes);
-const ceilingAddress = provider.address("SRTHEAPP");
+const ceilingAddress = provider.address("HEAP_LIM");
 runtimeImage[ceilingAddress] = managedCeiling & 0xff;
 runtimeImage[ceilingAddress + 1] = managedCeiling >>> 8;
 let disk = installCpm22File(backing, {

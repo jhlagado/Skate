@@ -1,396 +1,414 @@
 ; Scope compiler symbol and string literal publication.
-; Entry points: SCLITADD, SCLITDAT and SCSYMDAT.
+; Entry points: LIT_ADD, LIT_EMIT and .SYM_DIR.
 ; Included in compiler order by ../data.asm.
 
 ; Add one symbol or string spelling to the bounded literal pool.  A is the
 ; eventual runtime tag (four for symbol, five for string), HL is the reader ID.
-SCLITADD:
-        LD (SCLITKND),A
-        LD (SCLITVAL),HL
-        LD HL,(SCLITVAL)
+LIT_ADD:
+        LD (LIT_KIND),A
+        LD (LIT_ID),HL
+        LD HL,(LIT_ID)
         LD A,H
         AND 1FH                    ; Remove the reader's reference subtype.
         LD H,A
-        LD A,(SCLITKND)
+        LD A,(LIT_KIND)
         CP 4
-        JP Z,SCLITSYM
+        JP Z,.SYMBOL
 
 ; String descriptor: four bytes per identity and an arbitrary byte length.
         LD D,H
         LD E,L
         ADD HL,HL
         ADD HL,HL
-        LD DE,SCSTRDS
+        LD DE,W_STRTAB
         ADD HL,DE
         LD E,(HL)
         INC HL
         LD D,(HL)
-        LD (SCLITOFF),DE
+        LD (LIT_OFF),DE
         INC HL
         LD A,(HL)
-        LD (SCLITLEN),A
-        LD DE,SCSTRPL
-        LD (SCLITPB),DE
-        JP SCLITSP
+        LD (LIT_LEN),A
+        LD DE,W_STRBUF
+        LD (LIT_POOL),DE
+        JP .SPELL
 
 ; Symbol descriptor: three bytes per identity and a one-byte length.
-SCLITSYM:
+.SYMBOL:
         LD D,H
         LD E,L
         ADD HL,HL
         ADD HL,DE
-        LD DE,SCNAMEDS
+        LD DE,W_SYMTAB
         ADD HL,DE
         LD E,(HL)
         INC HL
         LD D,(HL)
-        LD (SCLITOFF),DE
+        LD (LIT_OFF),DE
         INC HL
         LD A,(HL)
-        LD (SCLITLEN),A
-        LD DE,SCNAMEPL
-        LD (SCLITPB),DE
-SCLITSP:
-        LD A,(SCLITLEN)
+        LD (LIT_LEN),A
+        LD DE,W_SYMBUF
+        LD (LIT_POOL),DE
+.SPELL:
+        LD A,(LIT_LEN)
         LD C,A
         LD B,0
-        LD (SCLITREM),BC
+        LD (LIT_SIZE),BC
         PUSH BC                    ; The search uses BC while walking records.
-        CALL SCLTFIND             ; Reuse an equal spelling and its output slot.
+        CALL .FIND                ; Reuse an equal spelling and its output slot.
         POP BC                     ; Keep the source length for a new record.
-        JP C,SCLITPTR             ; Existing symbols and strings keep identity.
-        LD A,(SCLITN)
+        JP C,.POINTER             ; Existing symbols and strings keep identity.
+        LD A,(LIT_CNT)
         CP 64
-        JP NC,SCCAP               ; Only a genuinely new literal needs a record.
-        LD HL,(SCLITUSE)
-        LD (SCLITPOF),HL
+        JP NC,ERR_CAP             ; Only a genuinely new literal needs a record.
+        LD HL,(LIT_USED)
+        LD (LIT_POS),HL
         ADD HL,BC
-        LD DE,SCLITPSZ
+        LD DE,W_LITCAP
         OR A
         SBC HL,DE
-        JP NC,SCCAP
-        LD HL,(SCLITOFF)
-        LD DE,(SCLITPB)
+        JP NC,ERR_CAP
+        LD HL,(LIT_OFF)
+        LD DE,(LIT_POOL)
         ADD HL,DE
-        LD (SCLITSRC),HL
-        LD HL,(SCLITUSE)
-        LD DE,SCLITPL
+        LD (LIT_SRCP),HL
+        LD HL,(LIT_USED)
+        LD DE,W_LITBUF
         ADD HL,DE
-        LD (SCLITDST),HL
-        LD BC,(SCLITREM)
+        LD (LIT_DST),HL
+        LD BC,(LIT_SIZE)
         LD A,B                     ; A zero-length literal needs no copy at all.
         OR C                       ; A zero BC would make Z80 LDIR copy 65536 bytes.
-        JR Z,SCLTNCPY              ; The descriptor still records the empty spelling.
-        LD DE,(SCLITDST)
-        LD HL,(SCLITSRC)
+        JR Z,.COPIED               ; The descriptor still records the empty spelling.
+        LD DE,(LIT_DST)
+        LD HL,(LIT_SRCP)
         LDIR                       ; Copy only after the nonzero length guard.
-SCLTNCPY:
-        LD HL,(SCLITUSE)
-        LD DE,(SCLITREM)
+.COPIED:
+        LD HL,(LIT_USED)
+        LD DE,(LIT_SIZE)
         ADD HL,DE
-        LD (SCLITUSE),HL
-        LD A,(SCLITN)
-        LD (SCLITIDX),A
-        CALL SCLITRCA
-        LD DE,(SCLITPOF)
+        LD (LIT_USED),HL
+        LD A,(LIT_CNT)
+        LD (LIT_IDX),A
+        CALL LIT_REC
+        LD DE,(LIT_POS)
         LD (HL),E
         INC HL
         LD (HL),D
         INC HL
-        LD A,(SCLITLEN)
+        LD A,(LIT_LEN)
         LD (HL),A
         INC HL
-        LD A,(SCLITKND)            ; Keep symbol and string records distinct.
+        LD A,(LIT_KIND)            ; Keep symbol and string records distinct.
         LD (HL),A
-        LD A,(SCLITN)
+        LD A,(LIT_CNT)
         INC A
-        LD (SCLITN),A
-        JP SCLITPTR
+        LD (LIT_CNT),A
+        JP .POINTER
 
 ; Find an existing literal with the same runtime kind and copied spelling.
-; SCLITIDX returns the matching record, or the next free index on a miss.
-SCLTFIND:
+; LIT_IDX returns the matching record, or the next free index on a miss.
+.FIND:
         XOR A
-        LD (SCLITIDX),A
-SCLITFLP:
-        LD A,(SCLITIDX)
+        LD (LIT_IDX),A
+.RECORD:
+        LD A,(LIT_IDX)
         LD B,A
-        LD A,(SCLITN)
+        LD A,(LIT_CNT)
         CP B
-        JR Z,SCLTMISS
+        JR Z,.MISS
         LD A,B
-        CALL SCLITRCA
+        CALL LIT_REC
         INC HL
         INC HL
         LD A,(HL)                 ; Compare decoded lengths before reading bytes.
         LD B,A
-        LD A,(SCLITLEN)
+        LD A,(LIT_LEN)
         CP B
-        JR NZ,SCLTNEXT
+        JR NZ,.NEXT_REC
         INC HL
         LD A,(HL)                 ; The final record byte stores the value kind.
         LD B,A
-        LD A,(SCLITKND)
+        LD A,(LIT_KIND)
         CP B
-        JR NZ,SCLTNEXT
-        LD A,(SCLITIDX)
-        CALL SCLITRCA
+        JR NZ,.NEXT_REC
+        LD A,(LIT_IDX)
+        CALL LIT_REC
         LD E,(HL)
         INC HL
         LD D,(HL)
-        LD (SCLTFOFF),DE
-        LD HL,(SCLITOFF)
-        LD DE,(SCLITPB)
+        LD (LIT_OLD),DE
+        LD HL,(LIT_OFF)
+        LD DE,(LIT_POOL)
         ADD HL,DE
-        LD (SCLTFSRC),HL
-        LD HL,(SCLTFOFF)
-        LD DE,SCLITPL
+        LD (LIT_NEWP),HL
+        LD HL,(LIT_OLD)
+        LD DE,W_LITBUF
         ADD HL,DE
-        LD (SCLTFDST),HL
-        LD A,(SCLITLEN)
+        LD (LIT_OLDP),HL
+        LD A,(LIT_LEN)
         OR A
-        JR Z,SCTFOUND
-        LD (SCLTFREM),A
-SCLTCMP:
-        LD HL,(SCLTFSRC)
+        JR Z,.FOUND
+        LD (LIT_TODO),A
+.COMPARE:
+        LD HL,(LIT_NEWP)
         LD A,(HL)
         INC HL
-        LD (SCLTFSRC),HL
-        LD HL,(SCLTFDST)
+        LD (LIT_NEWP),HL
+        LD HL,(LIT_OLDP)
         CP (HL)
-        JR NZ,SCLTNEXT
+        JR NZ,.NEXT_REC
         INC HL
-        LD (SCLTFDST),HL
-        LD A,(SCLTFREM)
+        LD (LIT_OLDP),HL
+        LD A,(LIT_TODO)
         DEC A
-        LD (SCLTFREM),A
-        JR NZ,SCLTCMP
-SCTFOUND:
+        LD (LIT_TODO),A
+        JR NZ,.COMPARE
+.FOUND:
         SCF
         RET
-SCLTNEXT:
-        LD A,(SCLITIDX)
+.NEXT_REC:
+        LD A,(LIT_IDX)
         INC A
-        LD (SCLITIDX),A
-        JR SCLITFLP
-SCLTMISS:
+        LD (LIT_IDX),A
+        JR .RECORD
+.MISS:
         OR A
         RET
 
-; Emit a literal pointer placeholder and remember its record index.
-SCLITPTR:
+; Emit a literal pointer placeholder and remember its record index.  Inside a
+; quoted-data encoding the pointer is preceded by code 6 (symbol) or 7
+; (string) instead of LD HL, and no tag load follows.
+.POINTER:
+        LD A,(QUO_ENC)
+        OR A
         LD A,21H
-        CALL SINKBYTE
+        JR Z,.OPCODE
+        LD A,(LIT_KIND)            ; Kinds four and five become codes 6 and 7.
+        ADD A,2
+.OPCODE:
+        CALL SINK_PUT
         RET C
-        LD HL,(SCPC)
-        LD A,3                     ; Fixup kind three selects SCLITOUT.
-        LD (SCFKIND),A
-        LD A,(SCLITIDX)
-        LD (SCFSLOT),A
-        CALL SCFIX
+        LD HL,(ST_PC)
+        LD A,3                     ; Fixup kind three selects W_LITOUT.
+        LD (ST_FKIND),A
+        LD A,(LIT_IDX)
+        LD (ST_FSLOT),A
+        CALL EM_FIXUP
         RET C
         XOR A
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
+        LD A,(QUO_ENC)
+        OR A
+        RET NZ                     ; Carry is clear: the encoding has no tag.
         LD A,3EH
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
-        LD A,(SCLITKND)
-        JP SINKBYTE
+        LD A,(LIT_KIND)
+        CALL SINK_PUT
+        RET C
+        LD A,0EH                   ; LD C,0: a literal's byte 2.
+        CALL SINK_PUT
+        RET C
+        XOR A
+        JP SINK_PUT
 
 ; Append copied literals after generated code, slots and procedure records.
-SCLITDAT:
-        LD A,(SCLITN)
-        LD (SCLITRC8),A
+LIT_EMIT:
+        LD A,(LIT_CNT)
+        LD (LIT_STOP),A
         XOR A
-        LD (SCLITIDX),A
-SCLITDL:
-        LD A,(SCLITRC8)
+        LD (LIT_IDX),A
+.RECORD:
+        LD A,(LIT_STOP)
         OR A
-        JP Z,SCLITDD
-        LD A,(SCLITIDX)
-        CALL SCLITRCA
+        JP Z,.SYMBOLS
+        LD A,(LIT_IDX)
+        CALL LIT_REC
         LD E,(HL)
         INC HL
         LD D,(HL)
-        LD (SCLITOFF),DE
+        LD (LIT_OFF),DE
         INC HL
         LD A,(HL)
-        LD (SCLITLEN),A
-        LD HL,(SCPC)
-        LD (SCLITBAS),HL
-        LD A,(SCLITLEN)
-        CALL SINKBYTE
+        LD (LIT_LEN),A
+        LD HL,(ST_PC)
+        LD (LIT_BASE),HL
+        LD A,(LIT_LEN)
+        CALL SINK_PUT
         RET C
-        LD HL,(SCLITOFF)
-        LD DE,SCLITPL
+        LD HL,(LIT_OFF)
+        LD DE,W_LITBUF
         ADD HL,DE
-        LD (SCLITSRC),HL
-        LD A,(SCLITLEN)
-        LD (SCLITRM8),A
-SCLITDB:
-        LD A,(SCLITRM8)
+        LD (LIT_SRCP),HL
+        LD A,(LIT_LEN)
+        LD (LIT_LEFT),A
+.BYTE:
+        LD A,(LIT_LEFT)
         OR A
-        JP Z,SCLITDN
-        LD HL,(SCLITSRC)
+        JP Z,.BASE
+        LD HL,(LIT_SRCP)
         LD A,(HL)
         INC HL
-        LD (SCLITSRC),HL
-        CALL SINKBYTE
+        LD (LIT_SRCP),HL
+        CALL SINK_PUT
         RET C
-        LD A,(SCLITRM8)
+        LD A,(LIT_LEFT)
         DEC A
-        LD (SCLITRM8),A
-        JP SCLITDB
-SCLITDN:
-        LD A,(SCLITIDX)
-        CALL SCLITOA
-        LD DE,(SCLITBAS)
+        LD (LIT_LEFT),A
+        JP .BYTE
+.BASE:
+        LD A,(LIT_IDX)
+        CALL LIT_OUT
+        LD DE,(LIT_BASE)
         LD (HL),E
         INC HL
         LD (HL),D
-        LD A,(SCLITIDX)
+        LD A,(LIT_IDX)
         INC A
-        LD (SCLITIDX),A
-        LD A,(SCLITRC8)
+        LD (LIT_IDX),A
+        LD A,(LIT_STOP)
         LD B,A
-        LD A,(SCLITIDX)
+        LD A,(LIT_IDX)
         CP B
-        JP C,SCLITDL
-SCLITDD:
-        CALL SCSYMDAT              ; Publish a pointer directory for symbol literals.
+        JP C,.RECORD
+.SYMBOLS:
+        CALL .SYM_DIR              ; Publish a pointer directory for symbol literals.
         RET C
-        LD HL,(SCPC)
+        LD HL,(ST_PC)
         XOR A
         RET
 
 ; Append the count-and-pointer directory consumed by the runtime symbol reader.
-SCSYMDAT:
-        LD HL,(SCPC)
-        LD (SCSYMBAS),HL          ; The count byte is the directory start.
-        CALL SCSYMCN               ; Count kind-four records before writing bytes.
-        LD A,(SCSYMCT)
-        CALL SINKBYTE
+.SYM_DIR:
+        LD HL,(ST_PC)
+        LD (LIT_DIR),HL           ; The count byte is the directory start.
+        CALL .SYM_CNT              ; Count kind-four records before writing bytes.
+        LD A,(LIT_SYMS)
+        CALL SINK_PUT
         RET C
         XOR A
-        LD (SCSYMIDX),A
-SCSYMLP:
-        LD A,(SCSYMIDX)
+        LD (LIT_ROW),A
+.DIR_LOOP:
+        LD A,(LIT_ROW)
         LD B,A
-        LD A,(SCLITN)
+        LD A,(LIT_CNT)
         CP B
-        JR Z,SCSYMDON
+        JR Z,.DIR_DONE
         LD A,B
-        CALL SCLITRCA
+        CALL LIT_REC
         INC HL
         INC HL
         INC HL
         LD A,(HL)
         CP 4
-        JR NZ,SCSYMNXT
+        JR NZ,.DIR_NEXT
         LD A,B
-        CALL SCLITOA
+        CALL LIT_OUT
         LD E,(HL)
         INC HL
         LD D,(HL)
-        LD (SCSYMPTR),DE
-        LD DE,(SCSYMPTR)           ; The byte sink uses DE as its buffer index.
+        LD (LIT_PTR),DE
+        LD DE,(LIT_PTR)            ; The byte sink uses DE as its buffer index.
         LD A,E
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
-        LD DE,(SCSYMPTR)           ; Restore the pointer before writing its high byte.
+        LD DE,(LIT_PTR)            ; Restore the pointer before writing its high byte.
         LD A,D
-        CALL SINKBYTE
+        CALL SINK_PUT
         RET C
-SCSYMNXT:
-        LD A,(SCSYMIDX)
+.DIR_NEXT:
+        LD A,(LIT_ROW)
         INC A
-        LD (SCSYMIDX),A
-        JR SCSYMLP
-SCSYMDON:
-        LD HL,(SCPC)
-        LD (SCSYMEND),HL
+        LD (LIT_ROW),A
+        JR .DIR_LOOP
+.DIR_DONE:
+        LD HL,(ST_PC)
+        LD (LIT_END),HL
         XOR A
         RET
 
 ; Count copied literal records whose runtime tag identifies a symbol.
-SCSYMCN:
+.SYM_CNT:
         XOR A
-        LD (SCSYMCT),A
-        LD (SCSYMIDX),A
-SCSYMCLP:
-        LD A,(SCSYMIDX)
+        LD (LIT_SYMS),A
+        LD (LIT_ROW),A
+.CNT_LOOP:
+        LD A,(LIT_ROW)
         LD B,A
-        LD A,(SCLITN)
+        LD A,(LIT_CNT)
         CP B
-        JR Z,SCSYMCED
+        JR Z,.CNT_DONE
         LD A,B
-        CALL SCLITRCA
+        CALL LIT_REC
         INC HL
         INC HL
         INC HL
         LD A,(HL)
         CP 4
-        JR NZ,SCSYMCNX
-        LD A,(SCSYMCT)
+        JR NZ,.CNT_NEXT
+        LD A,(LIT_SYMS)
         INC A
-        LD (SCSYMCT),A
-SCSYMCNX:
-        LD A,(SCSYMIDX)
+        LD (LIT_SYMS),A
+.CNT_NEXT:
+        LD A,(LIT_ROW)
         INC A
-        LD (SCSYMIDX),A
-        JR SCSYMCLP
-SCSYMCED:
+        LD (LIT_ROW),A
+        JR .CNT_LOOP
+.CNT_DONE:
         RET
 
 ; Address one four-byte literal record or two-byte output-base entry.
-SCLITRCA:
+LIT_REC:
         LD L,A
         LD H,0
         ADD HL,HL
         ADD HL,HL
-        LD DE,SCLITREC
+        LD DE,W_LITREC
         ADD HL,DE
         RET
-SCLITOA:
+LIT_OUT:
         LD L,A
         LD H,0
         ADD HL,HL
-        LD DE,SCLITOUT
+        LD DE,W_LITOUT
         ADD HL,DE
         RET
 
-SCLITKND: DB 0
-SCLITIDX:  DB 0
-SCLITN:    DB 0
-SCLITLEN:  DB 0
-SCLITRM8: DB 0
-SCLITRC8: DB 0
-SCLITVAL:  DW 0
-SCLITUSE: DW 0
-SCLITPOF: DW 0
-SCLITREM:  DW 0
-SCLITOFF:  DW 0
-SCLITBAS:  DW 0
-SCLITDST:  DW 0
-SCLITSRC:  DW 0
-SCLITPB: DW 0
-SCLTFREM:  DB 0
-SCLTFOFF:  DW 0
-SCLTFSRC:  DW 0
-SCLTFDST:  DW 0
-SCSYMCT:   DB 0                   ; Number of published symbol literal pointers.
-SCSYMIDX:  DB 0                   ; Literal record cursor during directory emission.
-SCSYMBAS: DW 0                   ; Staged directory start, including its count byte.
-SCSYMEND:  DW 0                   ; Staged directory exclusive end.
-SCSYMPTR:  DW 0                   ; Literal pointer held across sink writes.
-SCQCOUNT:  DB 0
-SCQDOT:    DB 0
-SCQCNT:    DB 0                   ; Number of static quoted-list cache cells.
-SCQBASE:   DW 0                   ; Staged base address of the cache cells.
-SCQFIX:    DB 0                   ; Cache-cell index for the current list.
-SCQEV:     DB 0
-SCQTAG:    DB 0
-SCQVAL:    DW 0
+LIT_KIND: DB 0
+LIT_IDX:  DB 0
+LIT_CNT:    DB 0
+LIT_LEN:  DB 0
+LIT_LEFT: DB 0
+LIT_STOP: DB 0
+LIT_ID:  DW 0
+LIT_USED: DW 0
+LIT_POS: DW 0
+LIT_SIZE:  DW 0
+LIT_OFF:  DW 0
+LIT_BASE:  DW 0
+LIT_DST:  DW 0
+LIT_SRCP:  DW 0
+LIT_POOL: DW 0
+LIT_TODO:  DB 0
+LIT_OLD:  DW 0
+LIT_NEWP:  DW 0
+LIT_OLDP:  DW 0
+LIT_SYMS:   DB 0                  ; Number of published symbol literal pointers.
+LIT_ROW:  DB 0                    ; Literal record cursor during directory emission.
+LIT_DIR: DW 0                    ; Staged directory start, including its count byte.
+LIT_END:  DW 0                    ; Staged directory exclusive end.
+LIT_PTR:  DW 0                    ; Literal pointer held across sink writes.
+QUO_ENC:    DB 0                  ; Nonzero while a quoted list is encoded.
+QUO_LEN:  DB 0
+QUO_TAIL:    DB 0
+QUO_CNT:    DB 0                  ; Number of static quoted-list cache cells.
+QUO_BASE:   DW 0                  ; Staged base address of the cache cells.
+QUO_IDX:    DB 0                  ; Cache-cell index for the current list.
+.EVENT:     DB 0
+.TAG:    DB 0
+.VALUE:    DW 0

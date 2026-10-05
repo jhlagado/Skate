@@ -1,28 +1,28 @@
 ; Primitive pair, list and output dispatch.
-; Entry point: SRTDAT.
+; Entry point: PRIM_DAT.
 ; Included in runtime order by ../primitives.asm.
 
 ; Dispatch pair, list and console output primitives.
-SRTDAT:
-        LD A,(SRTPID)
+PRIM_DAT:
+        LD A,(PRIM_ID)
         CP 4
-        JP Z,SRTPCONS
+        JP Z,PKT_CONS
         CP 5
-        JP Z,SRTPCAR
+        JP Z,PKT_CAR
         CP 6
-        JP Z,SRTPCDR
+        JP Z,PKT_CDR
         CP 7
-        JP Z,SRTPPAR
+        JP Z,PKT_PAIR
         CP 8
-        JP Z,SRTNPRED
+        JP Z,PKT_NULL
         CP 9
-        JP Z,SRTLIST
+        JP Z,PKT_LIST
         CP 10
-        JP Z,SRTPEQ
+        JP Z,PKT_EQ
         CP 11
-        JP Z,SRTWRITE
+        JP Z,PKT_EMIT
         CP 12
-        JP Z,SRTDSPP
+        JP Z,PKT_SHOW
         CP 13
-        JP Z,SRTNWL
-        JP SRTERROR
+        JP Z,PKT_CRLF
+        JP ERROR

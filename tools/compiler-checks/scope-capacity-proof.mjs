@@ -23,7 +23,7 @@ const provider = await loadAssembly(
 );
 const compilerBytes = compiler.image.bytes.slice(0x0100);
 const runtimeBytes = provider.image.bytes.slice(0x0100);
-assert.equal(runtimeBytes.length, compiler.address("SRTLEN"));
+assert.equal(runtimeBytes.length, compiler.address("RT_SIZE"));
 const globalDefinitions = Array.from(
   { length: 256 },
   (_, index) => `(define g${String(index).padStart(3, "0")} ${index})`,

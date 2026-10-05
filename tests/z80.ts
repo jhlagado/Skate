@@ -17,6 +17,17 @@ type AssembledEntry = {
 // isolated from one another.
 const assemblyCache = new Map<string, Promise<AssembledEntry>>();
 
+// The transport probe (docs/value-contract.md) is assembled into the runtime
+// when build/PROBE exists; `deno task probe:on` and `probe:off` manage it.
+export function probeDefinitions(root: string): { PROBE: number } {
+  try {
+    Deno.statSync(`${root}/build/PROBE`);
+    return { PROBE: 1 };
+  } catch {
+    return { PROBE: 0 };
+  }
+}
+
 async function assembleEntry(
   entry: string,
   limits: AssemblyLimits,
@@ -25,6 +36,7 @@ async function assembleEntry(
   const result = await assembleAtomProject({
     root,
     entry,
+    definitions: probeDefinitions(root),
     assembler: undefined,
     target: undefined,
     // The native compiler includes the macro phase and lowerer handoff.  Its
@@ -85,8 +97,8 @@ export async function assemble(entry: string) {
   (runtime.hardware as typeof runtime.hardware & {
     memWrite: (address: number, value: number) => void;
   }).memWrite = (address, value) => {
-    const scratch = address >= symbols.get("f16work")! &&
-      address < symbols.get("f16wend")!;
+    const scratch = address >= symbols.get("f24_work")! &&
+      address < symbols.get("f24_lim")!;
     const stack = address >= 0xefe0 && address < 0xf000;
     if (!scratch && !stack) {
       throw new Error(`Unexpected write at ${address.toString(16)}`);
@@ -96,7 +108,7 @@ export async function assemble(entry: string) {
   };
   function call(name: string, left: number, right = 0, tag = 0, rightTag = 0) {
     lowestStack = 0xf000;
-    mem.fill((left ^ right) & 255, address("F16WORK"), address("F16WEND"));
+    mem.fill((left ^ right) & 255, address("F24_WORK"), address("F24_LIM"));
     cpu.flags.C = (left ^ right) & 1;
     cpu.pc = address(name);
     cpu.sp = 0xf000;

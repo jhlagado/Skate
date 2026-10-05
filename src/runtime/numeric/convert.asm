@@ -1,25 +1,29 @@
-; Numeric negation and integer-to-binary16 conversion.
-; Entry points: NNEG and the arithmetic conversion path NTOFLOAT.
-; NWORDNEG is the shared modular word helper.
-; Public unary negation. The exact range is asymmetric around zero.
-NNEG:
-    LD (NORIGVAL),HL           ; Save the unary input for an overflow return.
-    CALL NCLASS             ; Reject nonnumbers before inspecting representation.
+; Numeric negation and integer-to-float conversion.
+; Entry points: NUM_NEG and the arithmetic conversion path NUM_REAL.
+; NUM_FLIP is the shared modular word helper for comparison codes.
+; Public unary negation of A:CHL. The exact range is asymmetric around zero.
+NUM_NEG:
+    LD (NUM_ORIG),HL        ; Save the unary input for an overflow return.
+    LD B,A
+    LD A,C
+    LD (NUM_ORIG+2),A
+    LD A,B
+    CALL NUM_CHK            ; Reject nonnumbers before inspecting representation.
     RET C                   ; Classification preserves HL on failure.
     CP 3                    ; Select integer negation only for tag 3.
-    JP NZ,F16NEG            ; A numeric scalar uses binary16 sign rules.
-    LD A,H                  ; Check for the unique integer with no positive opposite.
-    CP 80H                  ; Its high byte is 80H.
-    JP NZ,NNEGWORD              ; Every other high byte permits negation.
-    LD A,L                  ; Distinguish 8000H from the other 80xxH words.
-    OR A                    ; Only 8000H has zero in the low byte.
-    JP Z,NOVERFLW              ; Negating -32768 would exceed +32767.
-NNEGWORD:
-    CALL NWORDNEG           ; Negate the signed word in place.
-    JP NINTGOOD               ; Return it with exact tag 3.
+    JP NZ,F24_NEG           ; A float uses float sign rules.
+    LD A,C                  ; Check for the unique integer with no positive opposite.
+    CP 80H                  ; Its top byte is 80H.
+    JP NZ,.INT              ; Every other top byte permits negation.
+    LD A,H                  ; Distinguish 800000H from the other 80xxxxH values.
+    OR L                    ; Only 800000H has a zero low word.
+    JP Z,NUM_OVER           ; Negating -8388608 would exceed +8388607.
+.INT:
+    CALL NUM_INV            ; Negate the signed value in place.
+    JP NUM_GOOD             ; Return it with exact tag 3.
 ; Private modular word negation. HL changes; BC/DE are preserved.
 ; The low-byte borrow is propagated explicitly into the high-byte subtraction.
-NWORDNEG:
+NUM_FLIP:
     XOR A                   ; Start a bytewise subtraction from zero.
     SUB L                   ; Compute the low byte of 0-HL.
     LD L,A                  ; Store it while retaining the low-byte borrow.
@@ -28,27 +32,47 @@ NWORDNEG:
     LD H,A                  ; HL now holds the two's-complement opposite.
     RET                     ; DE and BC are unchanged by this helper.
 
-; Round integer inputs only after both original values pass classification.
-; The F16 tail calls return directly to the original arithmetic caller.
-NTOFLOAT:
-    LD HL,(NLEFTWK)              ; Reload the original left payload.
-    LD A,(NLEFTTG)              ; Test whether it needs integer-to-float conversion.
-    CP 3                    ; Tag 3 selects the raw signed conversion.
-    CALL Z,F16FRI           ; Round an exact integer to binary16, ties to even.
-    LD (NLEFTWK),HL              ; Save the converted left across the right conversion.
-    LD HL,(NRIGHTWK)              ; Load the original right payload.
-    LD A,(NRIGHTTG)              ; Test the right representation independently.
-    CP 3                    ; Tag 3 again requires conversion.
-    CALL Z,F16FRI           ; Leave an existing float unchanged.
-    EX DE,HL                ; Place the right float in the binary16 DE register.
-    LD HL,(NLEFTWK)              ; Restore the left float in HL.
-    LD A,(NOPCODE)              ; Recover the selected arithmetic operation.
-    LD C,A                  ; C drives dispatch while A/B become scalar tags.
-    LD B,0                  ; The right operand is now tag 0.
-    XOR A                   ; The left operand is now tag 0 too.
-    DEC C                   ; Operation 0 becomes -1; operation 1 becomes zero.
-    JP M,F16ADD             ; The negative selector identifies addition.
-    JP Z,F16SUB             ; Zero identifies subtraction.
-    DEC C                   ; Operation 2 now becomes zero.
-    JP Z,F16MUL             ; Zero identifies multiplication.
-    JP F16DIV               ; Operation 3 is division; tail-call the binary16 core.
+; Convert integer operands to floats in place, then run the float operation
+; on the operand cells.
+NUM_REAL:
+    LD HL,NUM_X
+    CALL .TO_FLOAT
+    LD HL,NUM_Y
+    CALL .TO_FLOAT
+    LD A,(NUM_OP)           ; Select the float operation.
+    OR A
+    JP Z,F24_ADD
+    DEC A
+    JP Z,F24_SUB
+    DEC A
+    JP Z,F24_MUL
+    JP F24_DIV
+
+; Replace the integer in the cell at HL by the nearest float.
+.TO_FLOAT:
+    PUSH HL
+    INC HL
+    INC HL
+    INC HL
+    LD A,(HL)
+    POP HL
+    CP 3
+    RET NZ                  ; A float stays as it is.
+    PUSH HL
+    LD E,(HL)
+    INC HL
+    LD D,(HL)
+    INC HL
+    LD C,(HL)
+    EX DE,HL
+    CALL F24_ITOF
+    EX DE,HL
+    POP HL
+    LD (HL),E
+    INC HL
+    LD (HL),D
+    INC HL
+    LD (HL),C
+    INC HL
+    LD (HL),9
+    RET

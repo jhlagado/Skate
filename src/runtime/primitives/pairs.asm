@@ -1,123 +1,136 @@
 ; Primitive pair, list, equality and packet helpers.
-; Entry points: SRTPCONS, SRTPCAR, SRTPCDR, SRTLIST and SRTPEQ.
+; Entry points: PKT_CONS, PKT_CAR, PKT_CDR, PKT_LIST and PKT_EQ.
 ; Included in runtime order by ../primitives.asm.
 
 ; Read one packet argument and leave its value in A:HL.
-SRTONE:
-        LD A,(SRTARGC)
+PKT_ONE:
+        LD A,(ARG_CNT)
         CP 1
-        JP NZ,SRTERROR
-        LD HL,SRTARGPK
-        JP SRTPVAL
+        JP NZ,ERROR
+        LD HL,ARG_PKT
+        JP PKT_VAL
 
 ; Build one pair from the two packet values.
-SRTPCONS:
-        LD A,(SRTARGC)
+PKT_CONS:
+        LD A,(ARG_CNT)
         CP 2
-        JP NZ,SRTERROR
-        LD HL,SRTARGPK
-        CALL SRTPVAL
-        LD (SRTQCAR),HL
-        LD (SRTQCTAG),A
-        LD HL,SRTARGPK+4
-        CALL SRTPVAL
-        LD (SRTQCDR),HL
-        LD (SRTQDTAG),A
-        CALL SRTMAKEP
+        JP NZ,ERROR
+        LD HL,ARG_PKT
+        CALL PKT_VAL
+        LD (QT_CAR),HL
+        LD (QT_CTAG),A
+        LD A,C
+        LD (QT_CEXT),A
+        LD HL,ARG_PKT+4
+        CALL PKT_VAL
+        LD (QT_CDR),HL
+        LD (QT_DTAG),A
+        LD A,C
+        LD (QT_DEXT),A
+        CALL PAIR_NEW
         PUSH IX
         RET
 
 ; Apply a selector to the one packet argument.
-SRTPCAR:
-        CALL SRTONE
-        CALL SRTCARV
-        JP C,SRTERROR
+PKT_CAR:
+        CALL PKT_ONE
+        CALL PAIR_CAR
+        JP C,ERROR
         PUSH IX
         RET
-SRTPCDR:
-        CALL SRTONE
-        CALL SRTCDRV
-        JP C,SRTERROR
+PKT_CDR:
+        CALL PKT_ONE
+        CALL PAIR_CDR
+        JP C,ERROR
         PUSH IX
         RET
 
 ; pair? returns false for every non-pair value.
-SRTPPAR:
-        CALL SRTONE
-        CALL SRTPCHK
-        JP C,SRTFPALS
+PKT_PAIR:
+        CALL PKT_ONE
+        CALL PAIR_CHK
+        JP C,PAIR_NO
         XOR A
         LD HL,0FE01H
         PUSH IX
         RET
 
 ; null? recognises the canonical empty-list value and nothing else.
-SRTNPRED:
-        CALL SRTONE
+PKT_NULL:
+        CALL PKT_ONE
         OR A
-        JP NZ,SRTFPALS
+        JP NZ,PAIR_NO
         LD DE,0FE02H
         OR A
         SBC HL,DE
-        JP NZ,SRTFPALS
+        JP NZ,PAIR_NO
         XOR A
         LD HL,0FE01H
         PUSH IX
         RET
 
 ; list consumes the bounded packet in source order and folds it into pairs.
-SRTLIST:
-        LD A,(SRTARGC)             ; The packet holds zero through eight values.
+PKT_LIST:
+        LD A,(ARG_CNT)             ; The packet holds zero through eight values.
         CP 9                       ; Eight is the full packet, not an overflow.
-        JP NC,SRTERROR             ; Reject only a count beyond the eight records.
-        LD (SRTLCN),A
-        LD HL,SRTARGPK
-        LD (SRTLCP),HL
-SRTLLP:
-        LD A,(SRTLCN)
+        JP NC,ERROR                ; Reject only a count beyond the eight records.
+        LD (PKT_LEFT),A
+        LD HL,ARG_PKT
+        LD (PKT_PTR),HL
+.LOOP:
+        LD A,(PKT_LEFT)
         OR A
-        JR Z,SRTLDONE
-        LD HL,(SRTLCP)
-        CALL SRTPVAL
-        CALL SRTQPUT
-        LD HL,(SRTLCP)
+        JR Z,.DONE
+        LD HL,(PKT_PTR)
+        CALL PKT_VAL
+        CALL QT_PUSH
+        LD HL,(PKT_PTR)
         LD DE,4
         ADD HL,DE
-        LD (SRTLCP),HL
-        LD A,(SRTLCN)
+        LD (PKT_PTR),HL
+        LD A,(PKT_LEFT)
         DEC A
-        LD (SRTLCN),A
-        JR SRTLLP
-SRTLDONE:
-        LD A,(SRTARGC)
+        LD (PKT_LEFT),A
+        JR .LOOP
+.DONE:
+        LD A,(ARG_CNT)
         LD B,0
-        CALL SRTQBLD
+        CALL QT_FOLD
         PUSH IX
         RET
 
 ; eq? compares both logical tags and payloads.
-SRTPEQ:
-        LD A,(SRTARGC)
+PKT_EQ:
+        LD A,(ARG_CNT)
         CP 2
-        JP NZ,SRTERROR
-        LD HL,SRTARGPK
-        CALL SRTPVAL
-        LD (SRTQCAR),HL
-        LD (SRTQCTAG),A
-        LD HL,SRTARGPK+4
-        CALL SRTPVAL
-        LD (SRTQCDR),HL
-        LD (SRTQDTAG),A
-        LD A,(SRTQCTAG)
+        JP NZ,ERROR
+        LD HL,ARG_PKT
+        CALL PKT_VAL
+        LD (QT_CAR),HL
+        LD (QT_CTAG),A
+        LD A,C
+        LD (QT_CEXT),A
+        LD HL,ARG_PKT+4
+        CALL PKT_VAL
+        LD (QT_CDR),HL
+        LD (QT_DTAG),A
+        LD A,C
+        LD (QT_DEXT),A
+        LD A,(QT_CTAG)
         LD B,A
-        LD A,(SRTQDTAG)
+        LD A,(QT_DTAG)
         CP B
-        JP NZ,SRTFPALS
-        LD HL,(SRTQCAR)
-        LD DE,(SRTQCDR)
+        JP NZ,PAIR_NO
+        LD A,(QT_CEXT)
+        LD B,A
+        LD A,(QT_DEXT)
+        CP B
+        JP NZ,PAIR_NO
+        LD HL,(QT_CAR)
+        LD DE,(QT_CDR)
         OR A
         SBC HL,DE
-        JP NZ,SRTFPALS
+        JP NZ,PAIR_NO
         XOR A
         LD HL,0FE01H
         PUSH IX

@@ -1,30 +1,26 @@
 ; Numeric runtime workspace.
-; NEND marks the code boundary; the labels below are shared scratch storage.
-NEND:                      ; Exclusive end of numeric-dispatch instructions.
-; Private static operands and scratch. Calls may also use binary16 workspace.
-NWORK:
-NORIGVAL: DW 0                 ; Original left/unary word returned on failure.
-NLEFTWK: DW 0                    ; Working left payload; later its converted float.
-NRIGHTWK: DW 0                    ; Original right payload.
-NLEFTTG: DB 0                   ; Original left representation tag.
-NRIGHTTG: DB 0                   ; Original right representation tag.
-; Store BC together so setting operation C does not disturb input A/B.
-NOPCODE: DW 0                   ; Low byte: operation 0..3. High byte: saved B, unused.
-NPRODSGN: DB 0                 ; Product sign: 00H nonnegative, 80H negative.
-NREVORD: DB 0                  ; Mixed-comparison order: 0 normal, 1 reversed.
-NINTCMP: DW 0                    ; Exact integer in a mixed comparison.
-NFLOATV: DW 0                    ; Original binary16 word in a mixed comparison.
-NTRUNCV: DW 0                    ; Float truncated toward zero to a signed word.
-NIDOP:   DB 0                    ; Quotient/remainder selector.
-NIDLT:   DB 0                    ; Original left value tag.
-NIDRT:   DB 0                    ; Original right value tag.
-NIDLEFT: DW 0                    ; Original left payload.
-NIDRIGHT: DW 0                   ; Original right payload.
-NIDSIGN: DB 0                    ; Dividend or quotient sign bit.
-NIDRSIGN: DB 0                   ; Divisor sign bit.
-NIDNUM:  DW 0                    ; Shifting unsigned dividend magnitude.
-NIDDIV:  DW 0                    ; Unsigned divisor magnitude.
-NIDQUO:  DW 0                    ; Unsigned quotient magnitude.
-NIDREM:  DW 0                    ; Unsigned remainder magnitude.
-NIDCNT:  DB 0                    ; Remaining restoring-division iterations.
-NWEND:                     ; Exclusive end of private numeric workspace.
+; NUM_END marks the code boundary; the labels below are shared scratch storage.
+NUM_END:                   ; Exclusive end of numeric-dispatch instructions.
+; Private static operands and scratch. Calls may also use the float24 workspace.
+; Exact integers are signed twenty-four-bit values held as C:HL in registers
+; and as three bytes, low first, in memory.
+.WORK:
+NUM_ORIG: DS 3                 ; Original left/unary value returned on failure.
+NUM_X:    DS 4                 ; Left operand cell; later its converted float.
+NUM_Y:    DS 4                 ; Right operand cell, the binary ABI's second value.
+NUM_OP:   DB 0                 ; Operation 0..3, or the division result selector.
+NUM_PNEG: DB 0                 ; Product or text sign: 00H nonnegative, 80H negative.
+NUM_MULT: DS 3                 ; Remaining multiplier magnitude.
+NUM_SWAP: DB 0                 ; Mixed-comparison order: 0 normal, 1 reversed.
+NUM_INT:  DS 3                 ; Exact integer in a mixed comparison.
+NUM_FLT:  DS 3                 ; Original float in a mixed comparison.
+NUM_CHOP: DS 3                 ; Float truncated toward zero to a signed integer.
+NUM_QNEG: DB 0                 ; Dividend or quotient sign bit.
+NUM_DNEG: DB 0                 ; Divisor sign bit.
+NUM_NMAG: DS 3                 ; Shifting unsigned dividend magnitude.
+NUM_DMAG: DS 3                 ; Unsigned divisor magnitude.
+NUM_QMAG: DS 3                 ; Unsigned quotient magnitude.
+NUM_RMAG: DS 3                 ; Unsigned remainder magnitude.
+NUM_CNT:  DB 0                 ; Remaining restoring-division iterations.
+NUM_BUF:  DS 9                 ; Decimal text of an integer, built backwards.
+.WORK_END:                 ; Exclusive end of private numeric workspace.

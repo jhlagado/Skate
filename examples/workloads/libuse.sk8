@@ -1,0 +1,12 @@
+; The procedures in libraries/STDLIB.SK8, used through include.
+(include "STDLIB.SK8")
+(write (map (lambda (x) (* x x)) '(1 2 3 4))) (newline)
+(write (map + '(1 2 3) '(10 20 30 40))) (newline)
+(for-each (lambda (x) (display x) (display " ")) '(a b c)) (newline)
+(for-each (lambda (x y) (display (+ x y))) '(1 2) '(3 4)) (newline)
+(write (filter (lambda (x) (> x 2)) '(1 2 3 4 5))) (newline)
+(write (list (fold-left - 0 '(1 2 3)) (fold-right cons '() '(1 2 3)) (reduce + 0 '(1 2 3 4)) (reduce + 0 '()))) (newline)
+(write (list (list-copy '(1 2)) (last-pair '(1 2 3)) (iota 5) (iota 3 10))) (newline)
+(write (list (list->vector '(1 2 3)) (vector->list (vector 4 5)) (string->list "abc") (list->string '(#\x #\y)))) (newline)
+(define v (make-vector 3 0)) (vector-fill! v 7) (write v) (newline)
+(write (length (map (lambda (x) x) (iota 300)))) (newline)

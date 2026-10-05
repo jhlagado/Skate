@@ -20,7 +20,7 @@ import {
 const { firmware, sourceDisk } = await loadCpmSystem();
 const compiler = await loadAssembly("src/compiler/scope/compiler.asm");
 const provider = await loadAssembly("src/runtime/image.asm");
-assert.equal(provider.image.bytes.length - 0x100, compiler.address("SRTLEN"));
+assert.equal(provider.image.bytes.length - 0x100, compiler.address("RT_SIZE"));
 
 const files = [
   ["SKATE.COM", compiler.image.bytes.slice(0x100)],

@@ -1,41 +1,47 @@
 ; Runtime promotion of captured activation slots into managed cells.
-; Entry points: SRTPROM and SRTPRALL.
-SRTPROM:
-        LD (SRTSNUM),A              ; Preserve the slot across a collecting call.
-        CALL SRTSADDR
-        LD (SRTSADR),HL
+; Entry points: SLOT_BOX and SLOT_CAP.
+SLOT_BOX:
+        LD (SLOT_NUM),A             ; Preserve the slot across a collecting call.
+        CALL SLOT_AT
+        LD (SLOT_CUR),HL
         LD DE,3
         ADD HL,DE
         LD A,(HL)
-        LD (SRTSFLG),A
-        AND SRTSPROM
+        LD (SLOT_REP),A
+        AND SLOT_PTR
         RET NZ                      ; The slot already names its managed cell.
-        LD HL,(SRTSADR)
+        LD HL,(SLOT_CUR)
         LD E,(HL)
         INC HL
         LD D,(HL)
         INC HL
+        INC HL                      ; Skip the extension byte.
         LD A,(HL)
-        LD (SRTSVTAG),A
-        LD (SRTSVAL),DE
-        CALL SRTCELL                ; The active inline value remains the root.
-        LD (SRTCELLP),HL
-        LD A,(SRTSNUM)              ; Recompute scratch clobbered by a collecting call.
-        CALL SRTSADDR
-        LD (SRTSADR),HL
+        AND 0FH
+        LD (SLOT_TAG),A
+        LD (SLOT_VAL),DE
+        CALL HEAP_NEW               ; The active inline value remains the root.
+        LD (HEAP_OBJ),HL
+        LD A,(SLOT_NUM)             ; Recompute scratch clobbered by a collecting call.
+        CALL SLOT_AT
+        LD (SLOT_CUR),HL
         LD DE,3
         ADD HL,DE
         LD A,(HL)
-        LD (SRTSFLG),A
-        AND 1
-        JR Z,SRTPROUN               ; An uninitialized cell is already cleared.
-        LD DE,(SRTCELLP)
-        LD HL,(SRTSVAL)
-        LD A,(SRTSVTAG)
-        CALL SRTBSTOR                ; No allocation occurs during publication.
-SRTPROUN:
-        LD HL,(SRTSADR)
-        LD DE,(SRTCELLP)
+        LD (SLOT_REP),A
+        AND CELL_VAL
+        JR Z,.PUBLISH               ; An uninitialized cell is already cleared.
+        LD HL,(SLOT_CUR)
+        INC HL
+        INC HL
+        LD C,(HL)                   ; The inline value's byte 2.
+        LD DE,(HEAP_OBJ)
+        LD HL,(SLOT_VAL)
+        LD A,(SLOT_TAG)
+        CALL HEAP_PUT                ; No allocation occurs during publication.
+.PUBLISH:
+        LD HL,(SLOT_CUR)
+        LD DE,(HEAP_OBJ)
         LD A,E
         LD (HL),A                   ; Replace the payload with the cell pointer.
         INC HL
@@ -45,49 +51,49 @@ SRTPROUN:
         XOR A
         LD (HL),A                   ; The promoted cell owns the tag.
         INC HL
-        LD A,SRTSPROM
+        LD A,SLOT_PTR
         LD (HL),A                   ; Publish the representation only after the cell.
         RET
 
-; Promote every slot selected by the descriptor in SRTNEWD's capture mask.
-SRTPRALL:
-        LD HL,(SRTNEWD)
-        LD DE,SRTCAPOF
-        ADD HL,DE
-        LD (SRTMASKP),HL
+; Promote every slot selected by the descriptor in DESC_NEW's capture mask.
+SLOT_CAP:
+        LD HL,(DESC_NEW)
+        CALL DESC_CAP
+        LD (MASK_PTR),HL
+        OR A
+        RET Z                      ; Nothing is captured.
+        LD (MASK_CNT),A
         XOR A
-        LD (SRTSLOTI),A
-        LD A,SRTMASKB
-        LD (SRTMASKN),A
-SRTPRLB:
-        LD HL,(SRTMASKP)
+        LD (MASK_IDX),A
+.BYTE:
+        LD HL,(MASK_PTR)
         LD A,(HL)
         INC HL
-        LD (SRTMASKP),HL
-        LD (SRTMASKV),A
+        LD (MASK_PTR),HL
+        LD (MASK_VAL),A
         LD A,8
-        LD (SRTBITN),A
-SRTPRLBT:
-        LD A,(SRTMASKV)
+        LD (MASK_BIT),A
+.BIT:
+        LD A,(MASK_VAL)
         AND 1
-        JR Z,SRTPRLN
-        LD A,(SRTSLOTI)
-        CALL SRTPROM
-SRTPRLN:
-        LD A,(SRTMASKV)
+        JR Z,.NEXT
+        LD A,(MASK_IDX)
+        CALL SLOT_BOX
+.NEXT:
+        LD A,(MASK_VAL)
         SRL A
-        LD (SRTMASKV),A
-        LD A,(SRTSLOTI)
+        LD (MASK_VAL),A
+        LD A,(MASK_IDX)
         INC A
-        LD (SRTSLOTI),A
-        LD A,(SRTBITN)
+        LD (MASK_IDX),A
+        LD A,(MASK_BIT)
         DEC A
-        LD (SRTBITN),A
-        JR NZ,SRTPRLBT
-        LD A,(SRTMASKN)
+        LD (MASK_BIT),A
+        JR NZ,.BIT
+        LD A,(MASK_CNT)
         DEC A
-        LD (SRTMASKN),A
-        JR NZ,SRTPRLB
+        LD (MASK_CNT),A
+        JR NZ,.BYTE
         RET
 
 ; Copy captured two-byte closure pointers into four-byte active slots.

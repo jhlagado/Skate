@@ -87,9 +87,9 @@ results. They provide a second description of each contract alongside the
 assembly comments.
 
 The assembly comments explain register and flag usage beside the instructions.
-The label prefixes also identify ownership. `SC` is the scope compiler, `RT` is
-the runtime, `H` is managed storage, `N` is numeric work, `F16` is binary16
-arithmetic, `CS` is CP/M source input and `LEX` is tokenisation.
+Label names follow [docs/labels.md](labels.md): a global is `AREA_WHAT`
+(`PAIR_NEW`, `LX_NEXT`, `PUB_UNDO`), and the prefix tables there map each
+area to its files. Labels used only inside one routine are private (`.LOOP`).
 
 ## One program's journey
 
@@ -105,7 +105,7 @@ CP/M source stream
     │
     ├─ bytes, positions and CR/LF handling
     ├─ lexical tokens and literals
-    ├─ decimal and binary16 conversion
+    ├─ decimal and float24 conversion
     └─ symbols and reader events
     │
     ▼
@@ -126,8 +126,10 @@ Publication stream
     ▼
 CP/M .COM program
     │
-    ├─ native execution code
-    ├─ literal tables and roots
+    ├─ runtime image
+    ├─ fixed 1 KB global area
+    ├─ native execution code and procedure descriptors
+    ├─ static locals, quoted-list caches and literal tables
     └─ frames, managed storage, stack and heap
 ```
 
@@ -166,7 +168,7 @@ unless they start with `src/runtime/`.
 | `cpm-transport.asm` | CP/M binary record transport for compiler stages; the runtime image also includes it for file ports |
 | `src/runtime/loader.asm` | Load the checked `SKATE.RT` runtime into the staged output image; part of the compiler, not the runtime image |
 | `lexer.asm` and `lexer/` | Classify characters and produce tokens |
-| `decimal.asm` and `decimal/` | Parse exact integers and binary16 literals |
+| `decimal.asm` and `decimal/` | Parse exact integers and float24 literals |
 | `interner.asm` | Keep permanent symbol and string identities |
 | `reader.asm` | Turn tokens into structural datum events |
 
@@ -182,6 +184,7 @@ native compiler. The table follows its include order; paths are relative to
 | File or group | Responsibility |
 | --- | --- |
 | `storage/cell-contract.asm` | Four-byte value-cell layout constants; emits no bytes |
+| `core/entry.asm` and the `*/state.asm` files | The entry at 0100H, then the runtime's state ahead of its code |
 | `core.asm` and `core/` | Startup, environment, invocation and frame coordination |
 | `storage/stack-slots.asm` and `storage/slots/` | Inline local bindings and promotion of captured bindings |
 | `storage/managed.asm` | Managed closure and four-byte binding storage |
@@ -193,13 +196,15 @@ native compiler. The table follows its include order; paths are relative to
 | `output.asm` and `output/state.asm` | Value printing, port output and shared runtime state |
 | `roots.asm` and `roots/` | Root scanning, managed roots and binding roots |
 | `data.asm` and `data/` | Quoted data, the collector, the data writer and collector state |
-| `float.asm` | Binary16 value printing |
+| `float.asm` | Exact decimal printing of floats |
 | `storage/slabs.asm` | Closure pages within the runtime pool |
-| `binary16.asm` and `binary16/` | Binary16 classification, arithmetic, packing, comparison and conversion |
+| `float24.asm` and `float24/` | Float24 classification, arithmetic, rounding, comparison and conversion |
 | `numeric.asm` and `numeric/` | Exact arithmetic, division, conversion and comparison |
 | `strings.asm`, `managed-strings.asm` and `strings/` | String and character primitives and managed string storage |
 | `vectors.asm` and `vectors/` | Vector operations, storage and tracing |
 | `rest.asm`, `apply.asm` and `escape.asm` | Rest arguments, proper-list application and `call/ec` |
+| `primitives/standard.asm` | Standard procedures added after the original set: pair mutation, `equal?`, comparisons, conversions, list operations and `case` key matching |
+| `quoted.asm` | Decodes the compact encoding of quoted lists into pairs on first use |
 
 Two runtime files are not part of `image.asm`. `loader.asm` is assembled into
 the compiler, and `external-effects.asm`, the optional provider-facing CP/M
@@ -227,13 +232,55 @@ Managed strings use the same separation between operations and storage in
 their collector support only marks a leaf. The composition files retain the
 original emitted order.
 
+## Generated code
+
+Generated code is mostly calls into the runtime, so its size is dominated by
+how those calls are encoded.
+
+* **RST vectors.** Startup installs `JP` instructions at `RST 08H` to `30H`
+  (`RST_SET` in `core/invocation.asm`). The compiler's `EM_CALL` emits a
+  one-byte `RST` instead of a three-byte `CALL` for the six helpers in its
+  `.VECTORS` table in `EM_CALL`: `ARG_PUSH`, `L_LOAD`, `PRIM_OP`, `QT_PUSH`, `G_OPSH` and
+  `INV_OP`. The two tables must list the same helpers in the same order.
+  `RST 38H` is left for a debugger.
+* **Inline operands.** Helpers that name a slot or a primitive read one byte
+  after the call and return past it: `L_LOAD`, `L_STORE` and `L_SET` take a
+  procedure-local slot, `G_LOAD`, `G_STORE`, `G_SET` and `G_OPSH` a global
+  slot, and `PRIM_OP` and `PRIM_TL` a primitive's payload byte. Globals sit
+  in a fixed 1 KB area after the runtime, so the slot number is enough.
+* **Arguments.** Each argument is pushed with `ARG_PUSH`, which records an
+  exact root and pushes the value below the return address.
+* **Descriptors.** Each procedure's descriptor follows its body: body
+  address, arity, the shared slot extent (patched at the end), four formal
+  fields, a mask width `W`, then `W` bytes of owned-slot mask and `W` bytes of
+  capture mask.
+* **Quoted lists.** A quoted list is `CALL QT_BUILD`, a cache-cell word, the
+  address after the data and a compact encoding of the list, decoded into
+  pairs on first use by `quoted.asm`. The encoding is described there.
+
+## Runtime variants
+
+The runtime image is ordered core first, then the standard-procedure module
+(`primitives/standard.asm`, from `STD_MOD`) and then the I/O module (the
+datum reader, file ports and CP/M transport, from `IO_START`). Before
+compiling, `CMD_INIT` reads the whole source once. A standard procedure or
+`case` selects the core and standard module; `read` or a file opener selects
+the whole runtime; anything else loads the core alone. The compiler loads
+that prefix of `SKATE.RT` and places the global area and code straight after
+it, so a program pays only for the modules it can reach.
+
+The core must never read a module's state or run its code except through a
+primitive the scan detects. Variables the core shares with the I/O module
+live in `io-state.asm`; the exit and error paths close a file only when
+`OUT_FILE` says one is open.
+
 ## Following common features
 
 ### Arithmetic
 
 Literal parsing is in `lexer.asm` and `decimal.asm`. Literal and call emission
 is in `scope/emitter.asm`. The runtime primitive dispatches to `numeric.asm`
-and `binary16.asm`. `float.asm` handles the associated floating-point support.
+and `float24.asm`. `float.asm` prints floats.
 
 ### Lambdas, closures and tail calls
 
@@ -289,7 +336,8 @@ proofs; `deno task test:all` runs both plus `test:cpm:stress`.
 | `deno task test` | `check`, `test:effects`, `test:effects:cpm`, `test:aso`, `test:ports` and `test:runtime` |
 | `deno task test:all` | `test`, `test:cpm` and `test:cpm:stress` |
 | `deno task measure` | Compiler and runtime size budget report |
-| `deno task generate:runtime` | Reassemble `src/runtime/image.asm` and rewrite `src/runtime/values.inc` and `template.inc`; run after any runtime change |
+| `deno task census` | Compiler and runtime bytes by directory and file |
+| `deno task runtime` | Reassemble `src/runtime/image.asm` and rewrite `src/runtime/values.inc` and `template.inc`; run after any runtime change |
 | `deno task test:effects` | Host provider, terminal and bounded file tests |
 | `deno task test:effects:cpm` | CP/M byte bridge tests (`tests/cpm-effects.asm`) |
 | `deno task test:aso` | Stream validation and window-boundary patches |
@@ -307,10 +355,11 @@ proofs; `deno task test:all` runs both plus `test:cpm:stress`.
 | `deno task test:cpm:console` | Standard and file ports, datum input and source I/O helpers |
 | `deno task test:cpm:examples` | The terminal demo with its included library and the house adventure |
 | `deno task test:cpm:generated-effects` | Provider-facing generated effect bytes |
-| `deno task test:cpm:float` | Binary16 literals, arithmetic and printing |
+| `deno task test:cpm:float` | Float literals, arithmetic and printing |
 | `deno task test:cpm:includes` | Nested, import-once, cyclic, missing and bounded include trees |
 | `deno task test:cpm:release` | Release disk, examples and publication checks |
 | `deno task test:cpm:recovery` | Replacement failure and preservation of prior output |
+| `deno task test:cpm:workloads` | Larger programs in `examples/workloads`: output, COM size, heap use and collections |
 | `deno task test:cpm:stress` | `test:cpm:capacity`, `test:cpm:large` and `test:cpm:full-image` |
 | `deno task test:cpm:capacity` | Compiler capacity: 256 globals with short, long and string-valued definitions, and a 256-form `begin` |
 | `deno task test:cpm:large` | Compilation of a 6,200-form source file |

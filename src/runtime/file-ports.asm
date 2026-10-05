@@ -11,312 +11,294 @@
 ; path policy.  Opening the input file's name for output is also rejected.
 
 ; Dispatch the four file-opening primitives (runtime kinds 55 through 58).
-SRTFILE:
-        LD A,(SRTPID)
+FILE_OP:
+        LD A,(PRIM_ID)
         CP 55
-        JP Z,SRTFOPR
+        JP Z,.TEXT_IN
         CP 56
-        JP Z,SRTFOPW
+        JP Z,.TEXT_OUT
         CP 57
-        JP Z,SRTFOPB
+        JP Z,.BIN_IN
         CP 58
-        JP Z,SRTFOWB
-        JP SRTERROR
+        JP Z,.BIN_OUT
+        JP ERROR
 
 ; Open a text input file.
-SRTFOPR:
+.TEXT_IN:
         XOR A
-        LD (SRTFOMOD),A
-        JP SRTFOPI
+        LD (FILE_BIN),A
+        JP .OPEN_IN
 
 ; Open a binary input file.
-SRTFOPB:
+.BIN_IN:
         LD A,1
-        LD (SRTFOMOD),A
-SRTFOPI:
-        LD A,(SRTARGC)
+        LD (FILE_BIN),A
+.OPEN_IN:
+        LD A,(ARG_CNT)
         CP 1
-        JP NZ,SRTERROR
-        LD A,(SRTFIACT)
+        JP NZ,ERROR
+        LD A,(IN_FILE)
         OR A
-        JP NZ,SRTERROR
-        LD HL,SRTARGPK
-        CALL SRTPVAL
-        CALL SRTFBLD
-        JP C,SRTERROR
-        LD HL,SRTFCBP
-        CALL CTOPENR
-        JP C,SRTERROR
+        JP NZ,ERROR
+        LD HL,ARG_PKT
+        CALL PKT_VAL
+        CALL FILE_ARG
+        JP C,ERROR
+        LD HL,FILE_FCB
+        CALL CPM_OPEN
+        JP C,ERROR
         LD A,1
-        LD (SRTFIACT),A
-        LD A,(SRTFOMOD)
-        LD (SRTFIMOD),A
-        CALL SRTINRST              ; The new file starts with no lookahead or EOF.
+        LD (IN_FILE),A
+        LD A,(FILE_BIN)
+        LD (IN_MODE),A
+        CALL IN_RESET              ; The new file starts with no lookahead or EOF.
         LD A,8
-        LD HL,SRTFIPT
+        LD HL,FILE_IN
         PUSH IX
         RET
 
 ; Open a text output file, replacing an existing file of the same name.
-SRTFOPW:
+.TEXT_OUT:
         XOR A
-        LD (SRTFOMOD),A
-        JP SRTFOWI
+        LD (FILE_BIN),A
+        JP .OPEN_OUT
 
 ; Open a binary output file, replacing an existing file of the same name.
-SRTFOWB:
+.BIN_OUT:
         LD A,1
-        LD (SRTFOMOD),A
-SRTFOWI:
-        LD A,(SRTARGC)
+        LD (FILE_BIN),A
+.OPEN_OUT:
+        LD A,(ARG_CNT)
         CP 1
-        JP NZ,SRTERROR
-        LD A,(SRTFOACT)
+        JP NZ,ERROR
+        LD A,(OUT_FILE)
         OR A
-        JP NZ,SRTERROR
-        LD HL,SRTARGPK
-        CALL SRTPVAL
-        CALL SRTFBLD
-        JP C,SRTERROR
-        LD A,(SRTFIACT)            ; Only an open input file can share the name.
+        JP NZ,ERROR
+        LD HL,ARG_PKT
+        CALL PKT_VAL
+        CALL FILE_ARG
+        JP C,ERROR
+        LD A,(IN_FILE)             ; Only an open input file can share the name.
         OR A
-        JR Z,SRTFWNEW
-        LD HL,SRTFCBP+1            ; Compare the new name with the input FCB name.
-        LD DE,CTINFCB+1
+        JR Z,.CREATE
+        LD HL,FILE_FCB+1           ; Compare the new name with the input FCB name.
+        LD DE,CPM_RFCB+1
         LD B,11                    ; Eight name bytes and three extension bytes.
-SRTFWCMP:
+.COMPARE:
         LD A,(DE)                  ; BDOS may set attribute bits in the input FCB.
         AND 7FH
         CP (HL)
-        JR NZ,SRTFWNEW             ; A different name may be replaced safely.
+        JR NZ,.CREATE              ; A different name may be replaced safely.
         INC HL
         INC DE
-        DJNZ SRTFWCMP
-        JP SRTERROR                ; Replacing the file being read would delete it.
-SRTFWNEW:
-        LD HL,SRTFCBP
-        CALL CTOPENW
-        JP C,SRTERROR
+        DJNZ .COMPARE
+        JP ERROR                   ; Replacing the file being read would delete it.
+.CREATE:
+        LD HL,FILE_FCB
+        CALL CPM_MAKE
+        JP C,ERROR
         LD A,1
-        LD (SRTFOACT),A
-        LD A,(SRTFOMOD)
-        LD (SRTFWMDE),A
+        LD (OUT_FILE),A
+        LD A,(FILE_BIN)
+        LD (OUT_MODE),A
         XOR A
-        LD (SRTFCR),A
+        LD (OUT_CR),A
         LD A,8
-        LD HL,SRTFOPT
+        LD HL,FILE_OUT
         PUSH IX
         RET
 
 ; Read one byte from the active CP/M input stream.
-SRTFREAD:
-        LD A,(SRTFIACT)
+FILE_GET:
+        LD A,(IN_FILE)
         OR A
-        JR NZ,SRTFROK
+        JR NZ,.OPEN
         SCF
         RET
-SRTFROK:
-        JP CTREAD
+.OPEN:
+        JP CPM_READ
 
 ; Close the input stream.  A closed stream is left alone; a failed close
 ; poisons the logical port.
-SRTFCLR:
-        LD A,(SRTFIACT)
+IN_SHUT:
+        LD A,(IN_FILE)
         OR A
-        JR Z,SRTFCBAD
+        JR Z,FILE_NOP
         XOR A
-        LD (SRTFIACT),A
-        CALL SRTINRST              ; Restore console state and drop the file's state.
-        JP CTCLOSER
+        LD (IN_FILE),A
+        CALL IN_RESET              ; Restore console state and drop the file's state.
+        JP CPM_ENDR
 
 ; Close the output stream and flush its final record.
-SRTFCLW:
-        LD A,(SRTFOACT)
+OUT_SHUT:
+        LD A,(OUT_FILE)
         OR A
-        JR Z,SRTFCBAD
+        JR Z,FILE_NOP
         XOR A
-        LD (SRTFOACT),A
-        LD (SRTOUTS),A
-        JP CTCLOSEW
+        LD (OUT_FILE),A
+        LD (OUT_SEL),A
+        JP CPM_ENDW
 
-SRTFCBAD:
+FILE_NOP:
         XOR A                      ; Closing a closed port is a no-op, as in R7RS.
         RET                        ; Carry clear reports success to close-port.
 
-; Leave the program after flushing and closing any open output file, so text
-; written without close-port survives a normal exit.
-SRTEXIT:
-        CALL SRTFCLW               ; A close failure cannot be reported here.
-        JP 0                       ; Return to CP/M through the warm start.
-
 ; Write one byte to the active output stream.  Text mode turns a bare LF into
 ; CR/LF and avoids adding a second CR when newline has already emitted CR.
-SRTFWR:
-        LD A,(SRTFOACT)
+FILE_PUT:
+        LD A,(OUT_FILE)
         OR A
-        JR NZ,SRTFWMOD
+        JR NZ,.MODE
         SCF
         RET
-SRTFWMOD:
-        LD A,(SRTFWMDE)
+.MODE:
+        LD A,(OUT_MODE)
         OR A
-        JR NZ,SRTFWRAW
-        LD A,(SRTFBYTE)
+        JR NZ,.RAW
+        LD A,(OUT_BYTE)
         CP 13
-        JR Z,SRTFWCR
+        JR Z,.CR
         CP 10
-        JR Z,SRTFWLF
+        JR Z,.LF
         XOR A
-        LD (SRTFCR),A
-        JR SRTFWRAW
-SRTFWCR:
-        CALL SRTFWRAW
+        LD (OUT_CR),A
+        JR .RAW
+.CR:
+        CALL .RAW
         RET C
         LD A,1
-        LD (SRTFCR),A
+        LD (OUT_CR),A
         RET
-SRTFWLF:
-        LD A,(SRTFCR)
+.LF:
+        LD A,(OUT_CR)
         OR A
-        JR Z,SRTFWLP
+        JR Z,.CRLF
         XOR A
-        LD (SRTFCR),A
-        JR SRTFWRAW
-SRTFWLP:
+        LD (OUT_CR),A
+        JR .RAW
+.CRLF:
         LD A,13
-        LD (SRTFBYTE),A
-        CALL SRTFWRAW
+        LD (OUT_BYTE),A
+        CALL .RAW
         RET C
         LD A,10
-        LD (SRTFBYTE),A
-        JP SRTFWRAW
-SRTFWRAW:
-        LD A,(SRTFBYTE)
-        JP CTWRITE
+        LD (OUT_BYTE),A
+        JP .RAW
+.RAW:
+        LD A,(OUT_BYTE)
+        JP CPM_PUT
 
 ; Build a current-drive CP/M FCB prefix from one literal or managed string.
 ; The parser accepts NAME or NAME.EXT with an eight-character name and a
 ; three-character extension.  The FCB is padded with spaces.
-SRTFBLD:
-        CALL SRTSCHK
-        JP C,SRTERROR
+FILE_ARG:
+        CALL STR_ARG
+        JP C,ERROR
         LD A,(HL)
         OR A
-        JP Z,SRTERROR
+        JP Z,ERROR
         CP 13
-        JP NC,SRTERROR
-        LD (SRTFNLEN),A
+        JP NC,ERROR
+        LD (FILE_LEN),A
         INC HL
-        LD (SRTFFPTR),HL
+        LD (FILE_PTR),HL
         XOR A
-        LD (SRTFEXT),A
-        LD (SRTFNPOS),A
-        LD (SRTFEPOS),A
-        LD HL,SRTFCBP
+        LD (FILE_DOT),A
+        LD (FILE_POS),A
+        LD (FILE_EXT),A
+        LD HL,FILE_FCB
         LD (HL),A
         INC HL
         LD B,11
         LD A,' '
-SRTFBLK:
+.BLANK:
         LD (HL),A
         INC HL
-        DJNZ SRTFBLK
-SRTFPLP:
-        LD A,(SRTFNLEN)
+        DJNZ .BLANK
+.LOOP:
+        LD A,(FILE_LEN)
         OR A
-        JP Z,SRTFPDON
-        LD HL,(SRTFFPTR)
+        JP Z,.FINISH
+        LD HL,(FILE_PTR)
         LD A,(HL)
         INC HL
-        LD (SRTFFPTR),HL
-        LD HL,SRTFNLEN
+        LD (FILE_PTR),HL
+        LD HL,FILE_LEN
         DEC (HL)
         ; Keep the character read above in A while the remaining length is
-        ; updated.  Reloading from SRTFFPTR here would skip the first byte.
+        ; updated.  Reloading from FILE_PTR here would skip the first byte.
         CP '.'
-        JR Z,SRTFFDOT
-        LD HL,SRTFBADC             ; Search the bytes CP/M reserves in names.
+        JR Z,.DOT
+        LD HL,.RESERVED            ; Search the bytes CP/M reserves in names.
         LD BC,13                   ; The table holds thirteen reserved bytes.
         CPIR                       ; Z means A matched a reserved byte.
-        JP Z,SRTERROR              ; Reject drives, paths, wildcards and delimiters.
+        JP Z,ERROR                 ; Reject drives, paths, wildcards and delimiters.
         CP 21H                     ; Controls and space are not name bytes.
-        JP C,SRTERROR
+        JP C,ERROR
         CP 7FH                     ; DEL and high bytes are not name bytes.
-        JP NC,SRTERROR
+        JP NC,ERROR
         CP 'a'
-        JR C,SRTFCASE
+        JR C,.STORE
         CP '{'
-        JR NC,SRTFCASE
+        JR NC,.STORE
         SUB 20H
-SRTFCASE:
-        LD (SRTFCHAR),A
-        LD A,(SRTFEXT)
+.STORE:
+        LD (FILE_CHR),A
+        LD A,(FILE_DOT)
         OR A
-        JR NZ,SRTFEXC
-        LD A,(SRTFNPOS)
+        JR NZ,.EXT_CHAR
+        LD A,(FILE_POS)
         CP 8
-        JP NC,SRTERROR
+        JP NC,ERROR
         LD E,A
         LD D,0
-        LD HL,SRTFCBP+1
+        LD HL,FILE_FCB+1
         ADD HL,DE
-        LD A,(SRTFCHAR)
+        LD A,(FILE_CHR)
         LD (HL),A
-        LD A,(SRTFNPOS)
+        LD A,(FILE_POS)
         INC A
-        LD (SRTFNPOS),A
-        JP SRTFPLP
-SRTFEXC:
-        LD A,(SRTFEPOS)
+        LD (FILE_POS),A
+        JP .LOOP
+.EXT_CHAR:
+        LD A,(FILE_EXT)
         CP 3
-        JP NC,SRTERROR
+        JP NC,ERROR
         LD E,A
         LD D,0
-        LD HL,SRTFCBP+9
+        LD HL,FILE_FCB+9
         ADD HL,DE
-        LD A,(SRTFCHAR)
+        LD A,(FILE_CHR)
         LD (HL),A
-        LD A,(SRTFEPOS)
+        LD A,(FILE_EXT)
         INC A
-        LD (SRTFEPOS),A
-        JP SRTFPLP
-SRTFFDOT:
-        LD A,(SRTFEXT)
+        LD (FILE_EXT),A
+        JP .LOOP
+.DOT:
+        LD A,(FILE_DOT)
         OR A
-        JP NZ,SRTERROR
-        LD A,(SRTFNPOS)
+        JP NZ,ERROR
+        LD A,(FILE_POS)
         OR A
-        JP Z,SRTERROR
+        JP Z,ERROR
         LD A,1
-        LD (SRTFEXT),A
-        JP SRTFPLP
-SRTFPDON:
-        LD A,(SRTFNPOS)
+        LD (FILE_DOT),A
+        JP .LOOP
+.FINISH:
+        LD A,(FILE_POS)
         OR A
-        JP Z,SRTERROR
-        LD A,(SRTFEXT)
+        JP Z,ERROR
+        LD A,(FILE_DOT)
         OR A
-        JR Z,SRTFGOOD
-        LD A,(SRTFEPOS)
+        JR Z,.GOOD
+        LD A,(FILE_EXT)
         OR A
-        JP Z,SRTERROR
-SRTFGOOD:
+        JP Z,ERROR
+.GOOD:
         XOR A
         RET
 
 ; Drive, path, wildcard and CP/M command-line delimiter bytes.
-SRTFBADC:  DB ":/",5CH,"*?<>=,;[]|"
+.RESERVED:  DB ":/",5CH,"*?<>=,;[]|"
 
-SRTFOMOD: DB 0
-SRTFIACT:    DB 0
-SRTFOACT:   DB 0
-SRTFIMOD:    DB 0
-SRTFWMDE:  DB 0
-SRTFCR:       DB 0
-SRTFNLEN:     DB 0
-SRTFEXT:      DB 0
-SRTFNPOS:     DB 0
-SRTFEPOS:     DB 0
-SRTFCHAR:     DB 0
-SRTFFPTR:      DW 0
-SRTFCBP:    DS 12
+FILE_FCB:    DS 12

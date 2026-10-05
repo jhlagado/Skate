@@ -61,21 +61,26 @@ const compiler = await loadAssembly("src/compiler/scope/compiler.asm");
 const provider = await loadAssembly("src/runtime/image.asm");
 const compilerBytes = compiler.image.bytes.slice(0x0100);
 const runtimeBytes = provider.image.bytes.slice(0x0100);
-assert.equal(runtimeBytes.length, compiler.address("SRTLEN"));
+assert.equal(runtimeBytes.length, compiler.address("RT_SIZE"));
 // --fill-image=N sizes the program so the published image is exactly N bytes
 // whatever the runtime length: each top-level `1` emits FORM_BYTES and the
 // closing string literal adds one byte per character over a fixed overhead.
+// The fixed global area sits between the runtime and the generated code.
+// The program names no standard or I/O procedure, so only the core runtime
+// is loaded.
 const fillArgument = Deno.args.find((argument) =>
   argument.startsWith("--fill-image=")
 );
 if (fillArgument !== undefined) {
-  const FORM_BYTES = 5;
-  const FIXED_BYTES = 8;
+  // LD HL,1 / LD A,3 / LD C,0 per form; the literal's own load adds two.
+  const FORM_BYTES = 7;
+  const FIXED_BYTES = 10;
   const target = Number.parseInt(
     fillArgument.slice("--fill-image=".length),
     10,
   );
-  const free = target - runtimeBytes.length - FIXED_BYTES;
+  const free = target - compiler.address("RT_CORE") -
+    compiler.address("W_GLB_SZ") - FIXED_BYTES;
   count = Math.floor(free / FORM_BYTES);
   tailLength = free - count * FORM_BYTES;
 }

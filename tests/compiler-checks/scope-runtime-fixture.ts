@@ -17,71 +17,71 @@ export async function managedRuntime(withPairs = false) {
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
   const imageEnd = (assembled.image.end + 0xff) & 0xff00;
-  const closureMapBytes = assembled.address("SRTCLMK") -
-    assembled.address("SRTCLBM");
-  const bindingMapBytes = assembled.address("SRTMPEND") -
-    assembled.address("SRTBMB");
+  const closureMapBytes = assembled.address("GC_MARKS") -
+    assembled.address("CL_MAP");
+  const bindingMapBytes = assembled.address("RT_HIGH") -
+    assembled.address("BND_MAP");
   memory.fill(0, imageEnd, 0xe000);
   memory.fill(
     0,
-    assembled.address("SRTCLBM"),
-    assembled.address("SRTCLBM") + closureMapBytes,
+    assembled.address("CL_MAP"),
+    assembled.address("CL_MAP") + closureMapBytes,
   );
   memory.fill(
     0,
-    assembled.address("SRTCLMK"),
-    assembled.address("SRTCLMK") + closureMapBytes,
+    assembled.address("GC_MARKS"),
+    assembled.address("GC_MARKS") + closureMapBytes,
   );
   memory.fill(
     0,
-    assembled.address("SRTBMB"),
-    assembled.address("SRTBMB") + bindingMapBytes,
+    assembled.address("BND_MAP"),
+    assembled.address("BND_MAP") + bindingMapBytes,
   );
   memory.fill(
     0,
-    assembled.address("SRTCFREE"),
-    assembled.address("SRTCFREE") + 130,
+    assembled.address("CL_FREE"),
+    assembled.address("CL_FREE") + 130,
   );
   memory.fill(
     0,
-    assembled.address("SRTCLOWN"),
-    assembled.address("SRTCLOWN") + 128,
+    assembled.address("CL_OWNER"),
+    assembled.address("CL_OWNER") + 128,
   );
   memory.fill(
     0,
-    assembled.address("SRTCLUSE"),
-    assembled.address("SRTCLUSE") + 128,
+    assembled.address("CL_LIVE"),
+    assembled.address("CL_LIVE") + 128,
   );
   memory.fill(
     0,
-    assembled.address("SRTCLPBA"),
-    assembled.address("SRTCLPBA") + 128,
+    assembled.address("CL_PHYS"),
+    assembled.address("CL_PHYS") + 128,
   );
   memory.fill(
     0,
-    assembled.address("SRTBPGS"),
-    assembled.address("SRTBPGS") + 128,
+    assembled.address("BND_PHYS"),
+    assembled.address("BND_PHYS") + 128,
   );
-  writeWord(memory, assembled.address("SRTCLCUR"), 0);
-  writeWord(memory, assembled.address("SRTBEND"), 0);
-  writeWord(memory, assembled.address("SRTHEAPP"), 0xc000);
+  writeWord(memory, assembled.address("CL_TOP"), 0);
+  writeWord(memory, assembled.address("BND_TOP"), 0);
+  writeWord(memory, assembled.address("HEAP_LIM"), 0xc000);
   // Test descriptors live in the transient area, beyond the assembled image.
   // Keep the published-image bound above them while the allocator still uses
   // the real image end for its first managed page.
-  writeWord(memory, assembled.address("SRTIMGE"), 0xc200);
-  writeWord(memory, assembled.address("SRTGBASE"), 0);
-  writeWord(memory, assembled.address("SRTGEND"), 0);
-  writeWord(memory, assembled.address("SRTQROOT"), 0);
-  writeWord(memory, assembled.address("SRTQENDR"), 0);
-  writeWord(memory, assembled.address("SRTENV"), 0);
-  writeWord(memory, assembled.address("SRTCENV"), 0);
-  writeWord(memory, assembled.address("SRTOPS"), assembled.address("SRTOPB"));
-  writeWord(memory, assembled.address("SRTQSP"), assembled.address("SRTQBASE"));
-  memory[assembled.address("SRTSLOTS")] = 0;
-  memory[assembled.address("SRTCENVN")] = 0;
-  memory[assembled.address("SRTARGC")] = 0;
-  memory[assembled.address("SRTQACTV")] = 0;
-  memory[assembled.address("SRTCRON")] = 0;
+  writeWord(memory, assembled.address("RT_LIMIT"), 0xc200);
+  writeWord(memory, assembled.address("G_BASE"), 0);
+  writeWord(memory, assembled.address("G_END"), 0);
+  writeWord(memory, assembled.address("QT_START"), 0);
+  writeWord(memory, assembled.address("QT_STOP"), 0);
+  writeWord(memory, assembled.address("ENV_CUR"), 0);
+  writeWord(memory, assembled.address("ENV_RET"), 0);
+  writeWord(memory, assembled.address("OPS_SP"), assembled.address("RT_OPLO"));
+  writeWord(memory, assembled.address("QT_SP"), assembled.address("RT_QTLO"));
+  memory[assembled.address("SLOT_CNT")] = 0;
+  memory[assembled.address("ENV_RCNT")] = 0;
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("QT_HELD")] = 0;
+  memory[assembled.address("GC_HOLD")] = 0;
 
   function call(label: string, hl = 0) {
     cpu.h = hl >>> 8;
@@ -102,10 +102,10 @@ export async function managedRuntime(withPairs = false) {
     };
   }
 
-  assert.equal(call("SRTGPINI", imageEnd).carry, 0);
+  assert.equal(call("PAGE_INI", imageEnd).carry, 0);
 
   if (withPairs) {
-    assert.equal(call("SRTPIN").carry, 0);
+    assert.equal(call("PAIR_INI").carry, 0);
   }
 
   return { assembled, memory, cpu, call };

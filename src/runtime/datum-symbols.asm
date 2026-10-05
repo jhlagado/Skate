@@ -1,261 +1,166 @@
-; Bounded datum symbol interning.
+; Bounded datum symbol interning.  The datum reader's symbol tokeniser is
+; in datum-symbol-tokens.asm, part of the optional I/O module; interning
+; stays in the core because string->symbol uses it.
 ;
 ; Compiler-emitted symbols are length-prefixed literals.  The compiler publishes
-; a directory of their absolute addresses in SRTSYMB..SRTSYME.  New spellings
+; a directory of their absolute addresses in DR_DIR..DR_DEND.  New spellings
 ; are copied into the fixed arena below the reader frames; those records remain
 ; pinned for the life of the program and are not managed heap objects.
 
-SRTSYA EQU SRTDRFE                ; Arena follows the reader's frame band.
-SRTSYAE EQU SRTMKBS               ; Keep the collector worklist untouched.
-
-; Read one symbol token whose first byte is in SRTDRDIG.
-SRTDRSYM:
-        XOR A                     ; The token buffer starts empty.
-        LD (SRTDRLEN),A
-        LD A,(SRTDRDIG)           ; Validate the initial identifier alphabet.
-        CALL SRTSYFST
-        JP NC,SRTERROR             ; Runtime symbols follow the compiler alphabet.
-        LD A,(SRTDRDIG)           ; SRTSYFST uses A while searching punctuation.
-        CALL SRTSYPUT              ; Copy the first spelling byte.
-        JP C,SRTERROR
-SRTSYMLP:
-        CALL SRTDRPK               ; Leave the token delimiter in lookahead.
-        JR C,SRTSYMDN              ; EOF terminates the final symbol.
-        CALL SRTDISDL
-        JR Z,SRTSYMDN
-        CALL SRTDRTK               ; Consume one more spelling byte.
-        JP C,SRTERROR              ; A peeked byte cannot turn into provider EOF.
-        LD (SRTDRDIG),A
-        CP 128                     ; Raw high bytes are not symbol source bytes.
-        JP NC,SRTERROR
-        CALL SRTSYSUB              ; Validate letters, punctuation or digits.
-        JP NC,SRTERROR
-        LD A,(SRTDRDIG)
-        CALL SRTSYPUT
-        JP C,SRTERROR
-        JP SRTSYMLP
-SRTSYMDN:
-        LD HL,SRTDRSB              ; Pass the complete spelling to the interner.
-        LD A,(SRTDRLEN)
-        LD C,A
-        LD B,0
-        CALL SRTSYMIN
-        RET                         ; SRTSYMIN returns tag four and a stable pointer.
-
-; A is an initial symbol byte.  Carry means that it belongs to the alphabet.
-SRTSYFST:
-        LD C,A                     ; Preserve the original case for punctuation.
-        OR 32                      ; Fold letters only for the range comparison.
-        CP 97
-        JR C,SRTSYFUN
-        CP 123
-        JR C,SRTSYFOK
-SRTSYFUN:
-        LD HL,SRTSYPU
-        LD B,16                    ; The punctuation table has exactly sixteen bytes.
-SRTSYFPL:
-        LD A,(HL)
-        CP C
-        JR Z,SRTSYFOK
-        INC HL
-        DJNZ SRTSYFPL
-        OR A                       ; No letter or punctuation matched.
-        RET
-SRTSYFOK:
-        SCF
-        RET
-
-; A is a subsequent symbol byte.  Digits are permitted after the first byte.
-SRTSYSUB:
-        LD A,(SRTDRDIG)
-        CALL SRTSYFST
-        RET C
-        LD A,(SRTDRDIG)
-        CP '0'
-        JR C,SRTSYBAD
-        CP ':'
-        JR C,SRTSYOK
-SRTSYBAD:
-        OR A                       ; Invalid subsequent byte returns carry clear.
-        RET
-SRTSYOK:
-        SCF
-        RET
-
-; Append A to the bounded 31-byte token buffer.
-SRTSYPUT:
-        LD C,A
-        LD A,(SRTDRLEN)
-        CP 31
-        JR NC,SRTSYFUL
-        LD E,A
-        LD D,0
-        LD HL,SRTDRSB
-        ADD HL,DE
-        LD A,C
-        LD (HL),A
-        LD A,(SRTDRLEN)
-        INC A
-        LD (SRTDRLEN),A
-        OR A                       ; Clear carry after the successful append.
-        RET
-SRTSYFUL:
-        SCF
-        RET
+DR_ARENA EQU RT_DRFHI             ; Arena follows the reader's frame band.
+DR_LIMIT EQU RT_GCLO              ; Keep the collector worklist untouched.
 
 ; Intern the spelling at HL with length BC and return tag four plus its pointer.
-SRTSYMIN:
-        LD (SRTSYINP),HL
-        LD (SRTSYINL),BC
-        CALL SRTSYDIR              ; Static literals have identity precedence.
-        JR C,SRTSYTAG
-        CALL SRTSYARN            ; Search or append in the pinned arena.
-SRTSYTAG:
+DR_FIND:
+        LD (DR_NAME),HL
+        LD (DR_SPAN),BC
+        CALL .STATIC               ; Static literals have identity precedence.
+        JR C,.TAG
+        CALL DR_PIN              ; Search or append in the pinned arena.
+.TAG:
         LD A,4                     ; Symbols use the existing literal tag.
         OR A                       ; A successful interning operation clears carry.
         RET
 
 ; Search the published count-and-pointer directory for an equal spelling.
-SRTSYDIR:
-        LD HL,(SRTSYMB)
-        LD DE,(SRTSYME)
+.STATIC:
+        LD HL,(DR_DIR)
+        LD DE,(DR_DEND)
         OR A
         SBC HL,DE
         RET Z                       ; An equal zero range means no directory.
-        LD HL,(SRTSYMB)
+        LD HL,(DR_DIR)
         LD A,(HL)                   ; The first byte is the symbol count.
-        LD (SRTSYDC),A
+        LD (DR_LEFT),A
         INC HL
         OR A
         RET Z
-SRTSYDL:
+.DIR_LOOP:
         LD E,(HL)                   ; Read one absolute literal pointer.
         INC HL
         LD D,(HL)
         INC HL
         PUSH HL                     ; Preserve the next directory pointer.
         PUSH DE                     ; Preserve the candidate pointer across comparison.
-        CALL SRTSYCMP
-        JR Z,SRTSYDNM
+        CALL DR_EQUAL
+        JR Z,.DIR_NEXT
         POP DE
         POP HL
         EX DE,HL                    ; Return the matching literal pointer.
         SCF
         RET
-SRTSYDNM:
+.DIR_NEXT:
         POP DE
         POP HL
-        LD A,(SRTSYDC)
+        LD A,(DR_LEFT)
         DEC A
-        LD (SRTSYDC),A
-        JR NZ,SRTSYDL
+        LD (DR_LEFT),A
+        JR NZ,.DIR_LOOP
         OR A
         RET
 
 ; Compare the input spelling with the length-prefixed record at DE.
-SRTSYCMP:
+DR_EQUAL:
         LD A,(DE)
         LD C,A
-        LD A,(SRTSYINL)
+        LD A,(DR_SPAN)
         CP C
-        JR NZ,SRTSYCMN
+        JR NZ,.NO
         LD B,A
         INC DE
-        LD HL,(SRTSYINP)
+        LD HL,(DR_NAME)
         LD A,B
         OR A
-        JR Z,SRTSYYES
-SRTSYCL:
+        JR Z,.YES
+.LOOP:
         LD A,(DE)
         CP (HL)
-        JR NZ,SRTSYCMN
+        JR NZ,.NO
         INC DE
         INC HL
-        DJNZ SRTSYCL
-SRTSYYES:
+        DJNZ .LOOP
+.YES:
         LD A,1
         OR A                       ; Make the successful comparison nonzero.
         SCF
         RET
-SRTSYCMN:
+.NO:
         XOR A
         RET
 
 ; Search the pinned arena, then append a complete new record if needed.
-SRTSYARN:
-        LD HL,(SRTSYAP)
+DR_PIN:
+        LD HL,(DR_TOP)
         LD A,H
         OR L
-        JR NZ,SRTSYAOK
-        LD HL,SRTSYA
-        LD (SRTSYAP),HL
-SRTSYAOK:
-        LD HL,SRTSYA
-SRTSYAL:
-        LD DE,(SRTSYAP)             ; Reload the end after each comparison.
+        JR NZ,.READY
+        LD HL,DR_ARENA
+        LD (DR_TOP),HL
+.READY:
+        LD HL,DR_ARENA
+.LOOP:
+        LD DE,(DR_TOP)              ; Reload the end after each comparison.
         OR A
         SBC HL,DE
-        JR NC,SRTSYNEW
+        JR NC,.NEW
         ADD HL,DE                 ; Restore the current record cursor.
         PUSH HL
         EX DE,HL                  ; The comparator receives this record in DE.
-        CALL SRTSYCMP
-        JR Z,SRTSYANM
+        CALL DR_EQUAL
+        JR Z,.NEXT
         POP HL
         SCF
         RET
-SRTSYANM:
+.NEXT:
         POP HL
         LD A,(HL)
         INC A                     ; Skip this record's length byte and payload.
         LD C,A
         LD B,0
         ADD HL,BC
-        JR SRTSYAL
-SRTSYNEW:
-        LD HL,(SRTSYINL)
+        JR .LOOP
+.NEW:
+        LD HL,(DR_SPAN)
         INC HL                    ; One length byte plus the spelling bytes.
-        LD DE,(SRTSYAP)
+        LD DE,(DR_TOP)
         ADD HL,DE
-        LD DE,SRTSYAE
+        LD DE,DR_LIMIT
         OR A
         SBC HL,DE
-        JR C,SRTSYFIT               ; A record ending below the limit fits.
-        JR Z,SRTSYFIT               ; Equality fills the final byte exactly.
-        JP SRTERROR                 ; A record beyond the limit is a capacity error.
-SRTSYFIT:
-        LD HL,(SRTSYAP)
-        LD (SRTSYRES),HL
-        LD A,(SRTSYINL)
+        JR C,.FITS                  ; A record ending below the limit fits.
+        JR Z,.FITS                  ; Equality fills the final byte exactly.
+        JP ERROR                    ; A record beyond the limit is a capacity error.
+.FITS:
+        LD HL,(DR_TOP)
+        LD (DR_FOUND),HL
+        LD A,(DR_SPAN)
         LD (HL),A
         INC HL
         EX DE,HL                  ; DE is the destination byte cursor.
-        LD HL,(SRTSYINP)
-        LD BC,(SRTSYINL)
+        LD HL,(DR_NAME)
+        LD BC,(DR_SPAN)
         LD A,B
         OR C
-        JR Z,SRTSYCOP
+        JR Z,.COPIED
         LDIR                      ; The bounds check precedes the complete copy.
-SRTSYCOP:
-        LD HL,(SRTSYRES)
+.COPIED:
+        LD HL,(DR_FOUND)
         LD DE,1
         ADD HL,DE
-        LD DE,(SRTSYINL)
+        LD DE,(DR_SPAN)
         ADD HL,DE
-        LD (SRTSYAP),HL
-        LD HL,(SRTSYRES)
+        LD (DR_TOP),HL
+        LD HL,(DR_FOUND)
         RET
 
 ; Reset the arena pointer at program startup.  Native tests also use lazy init.
-SRTSYINI:
-        LD HL,SRTSYA
-        LD (SRTSYAP),HL
+DR_INIT:
+        LD HL,DR_ARENA
+        LD (DR_TOP),HL
         RET
 
-SRTSYPU:    DB "!$%&*/:<=>?^_~+-" ; Same initial punctuation alphabet as the lexer.
-SRTDRSB:    DS 31                  ; Maximum accepted symbol spelling.
-SRTSYDC:    DB 0                   ; Remaining entries during directory search.
-SRTSYINP:   DW 0                   ; Borrowed input spelling address.
-SRTSYINL:   DW 0                   ; Borrowed input spelling length.
-SRTSYRES:   DW 0                   ; Newly found or appended record address.
-SRTSYAP:    DW 0                   ; Next free byte in the pinned arena.
+DR_LEFT:    DB 0                   ; Remaining entries during directory search.
+DR_NAME:   DW 0                    ; Borrowed input spelling address.
+DR_SPAN:   DW 0                    ; Borrowed input spelling length.
+DR_FOUND:   DW 0                   ; Newly found or appended record address.
+DR_TOP:    DW 0                    ; Next free byte in the pinned arena.

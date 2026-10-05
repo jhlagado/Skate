@@ -1,114 +1,114 @@
 ; CP/M binary transport for compiler stages.
-; CTOPENR/CTREAD/CTCLOSER read raw bytes. CTOPENW/CTWRITE/CTFLUSH/CTCLOSEW
-; write padded records. CTDELETE and CTRENAME manage staged files.
-; CTOPENR/CTOPENW take HL -> a 12-byte drive/name/type prefix. CTREAD returns
+; CPM_OPEN/CPM_READ/CPM_ENDR read raw bytes. CPM_MAKE/CPM_PUT/CPM_SYNC/CPM_ENDW
+; write padded records. CPM_ERA and CPM_REN manage staged files.
+; CPM_OPEN/CPM_MAKE take HL -> a 12-byte drive/name/type prefix. CPM_READ returns
 ; A=byte/carry clear, carries with A=0 at physical EOF, A=2 on read failure or
-; A=4 when unopened. CTWRITE takes A=byte; CTFLUSH and the close calls return
+; A=4 when unopened. CPM_PUT takes A=byte; CPM_SYNC and the close calls return
 ; A=0/carry clear or the sticky 1=open, 2=I/O, 3=close or 4=unopened error.
-; CTDELETE takes HL -> a prefix; CTRENAME takes HL -> old and DE -> new; both
+; CPM_ERA takes HL -> a prefix; CPM_REN takes HL -> old and DE -> new; both
 ; return carry clear on success. ASO callers stop at COMMIT; other consumers
 ; may read the raw padded file. Errors are sticky until open, and public calls
 ; preserve IX, IY and SP. The adapter owns its FCBs and DMA buffers.
 
-CTOPENR:
-        LD DE,CTINFCB          ; Copy the caller's concrete FCB prefix.
+CPM_OPEN:
+        LD DE,CPM_RFCB         ; Copy the caller's concrete FCB prefix.
         LD BC,12
         LDIR
         XOR A
-        LD (CTREERR),A         ; A fresh stream forgets earlier failures.
-        LD (CTRACT),A
-        LD (CTRDONE),A
-        LD HL,CTINFCB+12
+        LD (CPM_RERR),A        ; A fresh stream forgets earlier failures.
+        LD (CPM_RACT),A
+        LD (CPM_REOF),A
+        LD HL,CPM_RFCB+12
         LD B,24                ; Extent and record fields begin at zero.
-CTRZERO:
+.ZERO:
         LD (HL),A
         INC HL
-        DJNZ CTRZERO
+        DJNZ .ZERO
         LD A,128
-        LD (CTRIDX),A          ; Force the first CTREAD to fetch a record.
-        LD DE,CTINFCB
+        LD (CPM_RIDX),A        ; Force the first CPM_READ to fetch a record.
+        LD DE,CPM_RFCB
         LD C,15                ; BDOS open file.
-        CALL CTBDOS
+        CALL CPM_BDOS
         CP 255
-        JR Z,CTROFAIL
+        JR Z,.FAIL
         LD A,1
-        LD (CTRACT),A
+        LD (CPM_RACT),A
         XOR A                   ; Success: A=0, carry clear.
         RET
-CTROFAIL:
+.FAIL:
         LD A,1                 ; Error 1: input open failed.
-        JP CTREFAIL
+        JP CPM_RBAD
 
 ; Return the next raw byte. Physical EOF is clean; ASO callers stop at
 ; COMMIT before asking for transport padding.
-CTREAD:
-        LD A,(CTRDONE)
+CPM_READ:
+        LD A,(CPM_REOF)
         OR A
-        JR NZ,CTRTERM       ; Replay EOF or the original read error.
-        LD A,(CTRACT)
+        JR NZ,.REPLAY       ; Replay EOF or the original read error.
+        LD A,(CPM_RACT)
         OR A
-        JR NZ,CTRREADY
+        JR NZ,.READY
         LD A,4                 ; Error 4: no input stream is open.
-        JP CTREFAIL
-CTRREADY:
-        LD A,(CTRIDX)
+        JP CPM_RBAD
+.READY:
+        LD A,(CPM_RIDX)
         CP 128
-        JR C,CTRBYTE        ; A cached record still owns a byte.
-        LD DE,CTRBUF
+        JR C,.BYTE          ; A cached record still owns a byte.
+        LD DE,CPM_RBUF
         LD C,26                ; Point BDOS at this stream's private record.
-        CALL CTBDOS
-        LD DE,CTINFCB
+        CALL CPM_BDOS
+        LD DE,CPM_RFCB
         LD C,20                ; Sequential read advances the FCB.
-        CALL CTBDOS
+        CALL CPM_BDOS
         OR A
-        JR Z,CTNEWREC
+        JR Z,.FRESH
         CP 1                   ; CP/M status 1 is physical EOF.
-        JR Z,CTREOF
+        JR Z,.EOF
         LD A,2                 ; Other statuses are read failures.
-        JP CTREFAIL
-CTNEWREC:
+        JP CPM_RBAD
+.FRESH:
         XOR A
-CTRBYTE:
+.BYTE:
         LD E,A                 ; Use the byte index as a 16-bit offset.
         LD D,0
         INC A
-        LD (CTRIDX),A          ; 128 records the exhausted cache.
-        LD HL,CTRBUF
+        LD (CPM_RIDX),A        ; 128 records the exhausted cache.
+        LD HL,CPM_RBUF
         ADD HL,DE
         LD A,(HL)
         OR A                   ; A byte, including zero, returns carry clear.
         RET
-CTREOF:
+.EOF:
         LD A,1                 ; Clean physical EOF is terminal status one.
-        LD (CTRDONE),A
+        LD (CPM_REOF),A
         XOR A                  ; Carry reports EOF; A remains a neutral value.
         SCF
         RET
-CTRTERM:
-        LD A,(CTREERR)
+.REPLAY:
+        LD A,(CPM_RERR)
         OR A
         SCF
         RET
 
 ; Close input and report the first failure, even if close also fails.
-CTCLOSER:
-        LD A,(CTRACT)
+CPM_ENDR:
+        LD A,(CPM_RACT)
         OR A
-        JR Z,CTRRES
+        JR Z,.RESULT
         XOR A
-        LD (CTRACT),A
-        LD DE,CTINFCB
+        LD (CPM_RACT),A
+        LD DE,CPM_RFCB
         LD C,16                ; BDOS close file.
-        CALL CTBDOS
+        CALL CPM_BDOS
         CP 255
-        JR NZ,CTRRES
-        LD A,(CTREERR)
+        JR NZ,.RESULT
+        LD A,(CPM_RERR)
         OR A
-        JR NZ,CTRRES
+        JR NZ,.RESULT
         LD A,3                 ; Error 3: close failed.
-        LD (CTREERR),A
-CTRRES:
-        LD A,(CTREERR)
+        LD (CPM_RERR),A
+.RESULT:
+        LD A,(CPM_RERR)
         OR A
         RET Z
         SCF
@@ -118,152 +118,152 @@ CTRRES:
 ;  Binary output stream
 ;-----------------------------------------------------------------------------
 
-CTOPENW:
-        LD DE,CTOUTFCB         ; Copy the caller's concrete output FCB prefix.
+CPM_MAKE:
+        LD DE,CPM_WFCB         ; Copy the caller's concrete output FCB prefix.
         LD BC,12
         LDIR
         XOR A
-        LD (CTWERR),A          ; A fresh output forgets earlier failures.
-        LD (CTWACT),A
-        LD (CTWIDX),A
-        LD HL,CTOUTFCB+12
+        LD (CPM_WERR),A        ; A fresh output forgets earlier failures.
+        LD (CPM_WACT),A
+        LD (CPM_WIDX),A
+        LD HL,CPM_WFCB+12
         LD B,24                ; Make starts with zero extent/record fields.
-CTWZERO:
+.ZERO:
         LD (HL),A
         INC HL
-        DJNZ CTWZERO
-        LD DE,CTOUTFCB
+        DJNZ .ZERO
+        LD DE,CPM_WFCB
         LD C,19                ; Delete any prior generation before making anew.
-        CALL CTBDOS             ; CP/M returns 255 when the name was absent; ignore it.
-        LD DE,CTOUTFCB
+        CALL CPM_BDOS           ; CP/M returns 255 when the name was absent; ignore it.
+        LD DE,CPM_WFCB
         LD C,22                ; BDOS make file.
-        CALL CTBDOS
+        CALL CPM_BDOS
         CP 255
-        JR Z,CTWOFAIL
+        JR Z,.FAIL
         LD A,1
-        LD (CTWACT),A
+        LD (CPM_WACT),A
         XOR A
         RET
-CTWOFAIL:
+.FAIL:
         LD A,1                 ; Error 1: output make failed.
-        LD (CTWERR),A
+        LD (CPM_WERR),A
         SCF
         RET
 
 ; Accept one byte into the private record cache.  A full cache is flushed
 ; before the new byte is stored, so exact multiples never gain an extra record.
-CTWRITE:
+CPM_PUT:
         PUSH AF                ; Keep the caller's byte across the flush.
-        LD A,(CTWACT)
+        LD A,(CPM_WACT)
         OR A
-        JR Z,CTWNOOP
-        LD A,(CTWERR)
+        JR Z,.UNOPEN
+        LD A,(CPM_WERR)
         OR A
-        JR NZ,CTWFAIL
-        LD A,(CTWIDX)
+        JR NZ,.FAIL
+        LD A,(CPM_WIDX)
         CP 128
-        JR C,CTWSTORE
-        CALL CTFLUSH            ; Preserve the pending caller byte on the stack.
-        JR C,CTWFAIL
+        JR C,.STORE
+        CALL CPM_SYNC           ; Preserve the pending caller byte on the stack.
+        JR C,.FAIL
         XOR A
-CTWSTORE:
+.STORE:
         LD E,A
         LD D,0
-        LD HL,CTWBUF
+        LD HL,CPM_WBUF
         ADD HL,DE
         POP AF
         LD (HL),A
         INC E
         LD A,E
-        LD (CTWIDX),A
+        LD (CPM_WIDX),A
         XOR A
         RET
-CTWNOOP:
-        LD A,(CTWERR)
+.UNOPEN:
+        LD A,(CPM_WERR)
         OR A
-        JR NZ,CTWFAIL          ; Preserve an earlier open/make failure.
+        JR NZ,.FAIL            ; Preserve an earlier open/make failure.
         LD A,4                 ; Error 4: no output stream is open.
-        LD (CTWERR),A
-CTWFAIL:
+        LD (CPM_WERR),A
+.FAIL:
         POP AF                 ; Discard the caller byte on a sticky failure.
-        LD A,(CTWERR)
+        LD A,(CPM_WERR)
         OR A
         SCF
         RET
 
 ; Write the pending cache.  A short final record is padded with Ctrl-Z; an
 ; empty cache is deliberately a no-op for exact record multiples.
-CTFLUSH:
-        LD A,(CTWERR)
+CPM_SYNC:
+        LD A,(CPM_WERR)
         OR A
-        JR NZ,CTWFERR
-        LD A,(CTWACT)
+        JR NZ,.FAIL
+        LD A,(CPM_WACT)
         OR A
-        JR NZ,CTWFACT
+        JR NZ,.ACTIVE
         LD A,4                 ; Error 4: no output stream is open.
-        LD (CTWERR),A
-        JR CTWFERR
-CTWFACT:
-        LD A,(CTWIDX)
+        LD (CPM_WERR),A
+        JR .FAIL
+.ACTIVE:
+        LD A,(CPM_WIDX)
         OR A
         RET Z
         LD E,A
         LD D,0
-        LD HL,CTWBUF
+        LD HL,CPM_WBUF
         ADD HL,DE              ; HL points just after the pending bytes.
         LD A,128
         SUB E                  ; Remaining bytes are the padding count.
         OR A
-        JR Z,CTWPFOK            ; A full cache needs no padding bytes.
+        JR Z,.WRITE             ; A full cache needs no padding bytes.
         LD B,A
         LD A,26                ; CP/M padding is not part of the logical stream.
-CTWPAD:
+.PAD:
         LD (HL),A
         INC HL
-        DJNZ CTWPAD
-CTWPFOK:
-        LD DE,CTWBUF
+        DJNZ .PAD
+.WRITE:
+        LD DE,CPM_WBUF
         LD C,26                ; Select the private output DMA record.
-        CALL CTBDOS
-        LD DE,CTOUTFCB
+        CALL CPM_BDOS
+        LD DE,CPM_WFCB
         LD C,21                ; Sequential write advances the FCB.
-        CALL CTBDOS
+        CALL CPM_BDOS
         OR A
-        JR Z,CTWGOOD
+        JR Z,.GOOD
         LD A,2                 ; Error 2: output record write failed.
-        LD (CTWERR),A
+        LD (CPM_WERR),A
         SCF
         RET
-CTWGOOD:
+.GOOD:
         XOR A
-        LD (CTWIDX),A          ; The cache is empty after a committed record.
+        LD (CPM_WIDX),A        ; The cache is empty after a committed record.
         RET
-CTWFERR:
-        LD A,(CTWERR)
+.FAIL:
+        LD A,(CPM_WERR)
         OR A
         SCF
         RET
 
 ; Flush, close and preserve an earlier write failure over a close failure.
-CTCLOSEW:
-        LD A,(CTWACT)
+CPM_ENDW:
+        LD A,(CPM_WACT)
         OR A
-        JR Z,CTWRES
-        CALL CTFLUSH
+        JR Z,.RESULT
+        CALL CPM_SYNC
         XOR A
-        LD (CTWACT),A
-        LD DE,CTOUTFCB
+        LD (CPM_WACT),A
+        LD DE,CPM_WFCB
         LD C,16                ; BDOS close file.
-        CALL CTBDOS
+        CALL CPM_BDOS
         CP 255
-        JR NZ,CTWRES
-        LD A,(CTWERR)
+        JR NZ,.RESULT
+        LD A,(CPM_WERR)
         OR A
-        JR NZ,CTWRES
+        JR NZ,.RESULT
         LD A,3                 ; Error 3: close failed.
-        LD (CTWERR),A
-CTWRES:
-        LD A,(CTWERR)
+        LD (CPM_WERR),A
+.RESULT:
+        LD A,(CPM_WERR)
         OR A
         RET Z
         SCF
@@ -273,89 +273,33 @@ CTWRES:
 ;  Shared BDOS entry and private state
 ;-----------------------------------------------------------------------------
 
-; Delete a file named by the caller.  CP/M reports FF when no matching file
-; exists; cleanup treats that as success so stale stage names are harmless.
-CTDELETE:
-        LD DE,CTINFCB
-        LD BC,12
-        LDIR
-        CALL CTRZFCB
-        LD DE,CTINFCB
-        LD C,19
-        CALL CTBDOS
-        OR A
-        JR Z,CTDGOOD
-        CP 255
-        JR Z,CTDGOOD
-        SCF
-        RET
-CTDGOOD:
-        XOR A
-        RET
-
-; Rename one CP/M file.  The BDOS rename FCB contains the old prefix in its
-; first 16 bytes and the new prefix at offset 16.  The two prefixes are kept
-; separate from the stream FCBs so a failed publication cannot corrupt them.
-CTRENAME:
-        PUSH HL
-        PUSH DE
-        CALL CTRZFCB
-        POP DE
-        POP HL
-        PUSH DE
-        LD DE,CTINFCB
-        LD BC,12
-        LDIR
-        POP HL
-        LD DE,CTINFCB+16
-        LD BC,12
-        LDIR
-        LD DE,CTINFCB
-        LD C,23
-        CALL CTBDOS
-        OR A
-        RET Z
-        SCF
-        RET
-
-; Clear the non-prefix bytes shared by delete and rename FCBs.
-CTRZFCB:
-        XOR A
-        LD HL,CTINFCB+12
-        LD B,24
-.FILL:
-        LD (HL),A
-        INC HL
-        DJNZ .FILL
-        RET
-
-CTBDOS:
+CPM_BDOS:
         PUSH IX                ; CP/M promises the 8080 register contract.
         PUSH IY
         CALL 5                 ; Always use the platform's BDOS vector.
         POP IY
         POP IX
-        LD (CTSTATUS),A        ; Retain the raw status for diagnostics.
+        LD (CPM_STAT),A        ; Retain the raw status for diagnostics.
         RET
 
-CTREFAIL:
-        LD (CTREERR),A
-        LD (CTRDONE),A
+CPM_RBAD:
+        LD (CPM_RERR),A
+        LD (CPM_REOF),A
         SCF
         RET
 
-CTREERR:   DB 0
-CTSTATUS:  DB 0
-CTRACT:    DB 0
-CTRDONE:   DB 0
-CTRIDX:    DB 128
-CTINFCB:   DS 36
-CTRBUF:    DS 128
+CPM_RERR:   DB 0
+CPM_STAT:  DB 0
+CPM_RACT:    DB 0
+CPM_REOF:   DB 0
+CPM_RIDX:    DB 128
+CPM_RFCB:   DS 36
+CPM_RBUF:    DS 128
 
-CTWERR:    DB 0
-CTWACT:    DB 0
-CTWIDX:    DB 0
-CTOUTFCB:  DS 36
-CTWBUF:    DS 128
+CPM_WERR:    DB 0
+CPM_WACT:    DB 0
+CPM_WIDX:    DB 0
+CPM_WFCB:  DS 36
+CPM_WBUF:    DS 128
 ; The input FCB is idle while the compiler publishes output.  Reusing it keeps
 ; the transport workspace bounded without adding a third FCB.

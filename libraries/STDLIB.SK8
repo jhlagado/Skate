@@ -1,0 +1,102 @@
+; Standard higher-order and conversion procedures, written in Skate.
+;
+; Include this file with (include "STDLIB.SK8") before the program's own
+; forms.  The procedures that do not call other procedures, such as length,
+; append, reverse, memq, assoc and equal?, are built into the runtime.
+;
+; Loops are iterative so that long lists do not exhaust the native stack:
+; results are built in reverse and then reversed once.
+
+; (map f list) or (map f list1 list2), stopping at the shorter list.
+(define (map f items . more)
+  (if (null? more)
+      (let loop ((items items) (result '()))
+        (if (null? items)
+            (reverse result)
+            (loop (cdr items) (cons (f (car items)) result))))
+      (let loop ((left items) (right (car more)) (result '()))
+        (if (or (null? left) (null? right))
+            (reverse result)
+            (loop (cdr left) (cdr right)
+                  (cons (f (car left) (car right)) result))))))
+
+; (for-each f list) or (for-each f list1 list2) for their effects.
+(define (for-each f items . more)
+  (if (null? more)
+      (let loop ((items items))
+        (when (pair? items)
+          (f (car items))
+          (loop (cdr items))))
+      (let loop ((left items) (right (car more)))
+        (when (and (pair? left) (pair? right))
+          (f (car left) (car right))
+          (loop (cdr left) (cdr right))))))
+
+; The elements of a list for which the predicate is true, in order.
+(define (filter keep? items)
+  (let loop ((items items) (result '()))
+    (cond ((null? items) (reverse result))
+          ((keep? (car items)) (loop (cdr items) (cons (car items) result)))
+          (else (loop (cdr items) result)))))
+
+; (fold-left f init list): (f (f (f init x1) x2) x3).
+(define (fold-left f result items)
+  (if (null? items)
+      result
+      (fold-left f (f result (car items)) (cdr items))))
+
+; (fold-right f init list): (f x1 (f x2 (f x3 init))).
+(define (fold-right f result items)
+  (fold-left (lambda (acc x) (f x acc)) result (reverse items)))
+
+; (reduce f default list) folds a non-empty list from its first element.
+(define (reduce f default items)
+  (if (null? items)
+      default
+      (fold-left f (car items) (cdr items))))
+
+(define (list-copy items) (append items '()))
+
+(define (last-pair items)
+  (if (pair? (cdr items)) (last-pair (cdr items)) items))
+
+; (iota count) or (iota count start): count integers from start, default 0.
+(define (iota count . start)
+  (let loop ((n (- count 1))
+             (base (if (null? start) 0 (car start)))
+             (result '()))
+    (if (< n 0)
+        result
+        (loop (- n 1) base (cons (+ base n) result)))))
+
+(define (list->vector items)
+  (let ((v (make-vector (length items))))
+    (let loop ((items items) (i 0))
+      (when (pair? items)
+        (vector-set! v i (car items))
+        (loop (cdr items) (+ i 1))))
+    v))
+
+(define (vector->list v)
+  (let loop ((i (- (vector-length v) 1)) (result '()))
+    (if (< i 0)
+        result
+        (loop (- i 1) (cons (vector-ref v i) result)))))
+
+(define (vector-fill! v x)
+  (let loop ((i 0))
+    (when (< i (vector-length v))
+      (vector-set! v i x)
+      (loop (+ i 1)))))
+
+(define (string->list s)
+  (let loop ((i (- (string-length s) 1)) (result '()))
+    (if (< i 0)
+        result
+        (loop (- i 1) (cons (string-ref s i) result)))))
+
+(define (list->string chars)
+  (let loop ((chars chars) (result ""))
+    (if (null? chars)
+        result
+        (loop (cdr chars) (string-append result (string (car chars)))))))

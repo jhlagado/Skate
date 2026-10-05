@@ -1,13 +1,13 @@
 ; CP/M byte bridge for external-effect providers.
-; SEPUT: A = byte; success returns A=0/carry clear. FF is rejected because BDOS
-; function 6 reserves it as the input selector. SEGET returns a byte or A=0 when
+; FX_PUT: A = byte; success returns A=0/carry clear. FF is rejected because BDOS
+; function 6 reserves it as the input selector. FX_GET returns a byte or A=0 when
 ; no byte is available; direct BDOS polling cannot distinguish an available zero.
 ; Both entries preserve IX, IY and SP. The provider owns framing and device
 ; meaning; this bridge carries only the byte-preserving console subset.
 
-SEPUT:
+FX_PUT:
         CP 0FFH                ; Keep the BDOS input selector out of output.
-        JR Z,SEPFAIL
+        JR Z,.FAIL
         PUSH IX                 ; BDOS may clobber the index registers.
         PUSH IY                 ; Preserve the caller's second index register.
         LD E,A                  ; Direct BDOS 6 takes its output byte in E.
@@ -18,13 +18,13 @@ SEPUT:
         XOR A                   ; The byte was accepted; return a clear status.
         RET
 
-SEPFAIL:
+.FAIL:
         LD A,1                  ; FF is unavailable on the portable console.
         SCF
         RET
 
 ; Poll one byte through direct console input without BDOS echo.
-SEGET:
+FX_GET:
         PUSH IX                 ; Preserve IX before the BDOS call.
         PUSH IY                 ; Preserve IY before the BDOS call.
         LD E,0FFH               ; BDOS 6/FF requests a direct input poll.

@@ -1,0 +1,36 @@
+(+ 1 2 3)
+  => 6
+(define square (lambda (x) (* x x)))
+  => square
+(square 12)
+  => 144
+(define fact (lambda (n) (if (< n 2) 1 (* n (fact (- n 1))))))
+  => fact
+(fact 7)
+  => 5040
+(define fib (lambda (n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))))
+  => fib
+(fib 15)
+  => 610
+(define map1 (lambda (f xs) (if (null? xs) (quote ()) (cons (f (car xs)) (map1 f (cdr xs))))))
+  => map1
+(map1 square (list 1 2 3 4 5))
+  => (1 4 9 16 25)
+(define adder (lambda (n) (lambda (x) (+ x n))))
+  => adder
+((adder 40) 2)
+  => 42
+(let ((a 3) (b 4)) (+ (square a) (square b)))
+  => 25
+(define count (lambda (n acc) (if (= n 0) acc (count (- n 1) (+ acc 1)))))
+  => count
+(count 200 0)
+  => 200
+(begin (define twice (lambda (f) (lambda (x) (f (f x))))) ((twice square) 3))
+  => 81
+(quote (a b (c d)))
+  => (a b (c d))
+(undefined-name 1)
+  => error: unbound undefined-name
+error: not a procedure #f
+#f

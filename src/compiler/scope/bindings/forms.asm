@@ -5,198 +5,198 @@
 ; their own data structures in the neighbouring binding modules.
 
 ; Parallel let: initializers see the outer locals; the body sees all new slots.
-SCLETF:
+LET_FORM:
         LD A,1                     ; Parallel let also accepts a named procedure form.
-        LD (SCLETMOD),A
-        CALL SCLETSET              ; Save local cursors and open the binding list.
+        LD (ST_NLOK),A
+        CALL LET_OPEN              ; Save local cursors and open the binding list.
         RET C                      ; Preserve a local-capacity failure.
-SCLETB:
-        CALL SCNEXT                ; Read another binding list or the list close.
-        JP C,SCLETERR              ; Unwind the saved scope cursors on source failure.
+.BINDING:
+        CALL REC_NEXT              ; Read another binding list or the list close.
+        JP C,LET_FAIL              ; Unwind the saved scope cursors on source failure.
         CP 2                       ; A close ends the parallel binding list.
-        JR Z,SCLETBD               ; Add the pending entries to the active scope.
+        JR Z,.BODY                 ; Add the pending entries to the active scope.
         CP 1                       ; Every binding is itself a two-element list.
-        JP NZ,SCLETERR             ; A bare name or scalar is not a binding.
-        CALL SCNEXT                ; Read the binding name.
-        JP C,SCLETERR              ; Unwind the saved scope cursors on source failure.
+        JP NZ,LET_FAIL             ; A bare name or scalar is not a binding.
+        CALL REC_NEXT              ; Read the binding name.
+        JP C,LET_FAIL              ; Unwind the saved scope cursors on source failure.
         CP 5                       ; Names are interned symbols.
-        JP NZ,SCLETERR             ; Reject literal or list binding names.
-        LD (SCID),HL               ; The pending entry receives this full identity.
-        CALL SCNSLOT             ; Allocate a reusable local data slot.
-        JP C,SCLETERR              ; Reject the first slot beyond the local bound.
-        LD (SCSLOT),A              ; Save the selected slot for the pending entry.
-        CALL SCPEND                ; Record the name and slot before recursive code.
-        JP C,SCLETERR              ; Pending-binding capacity is explicit.
-        CALL SCINIT                ; Initializer sees only the outer local scope.
-        JP C,SCLETERR              ; Preserve its syntax or capacity error.
-        CALL SCPREV                ; Restore this binding's slot after nested forms.
-        JP C,SCLETERR              ; The pending record must still be present.
-        LD A,(SCSLOT)              ; Recover the pending slot number.
+        JP NZ,LET_FAIL             ; Reject literal or list binding names.
+        LD (ST_SYMID),HL           ; The pending entry receives this full identity.
+        CALL BIND_NEW            ; Allocate a reusable local data slot.
+        JP C,LET_FAIL              ; Reject the first slot beyond the local bound.
+        LD (ST_SLOT),A             ; Save the selected slot for the pending entry.
+        CALL LET_PUSH              ; Record the name and slot before recursive code.
+        JP C,LET_FAIL              ; Pending-binding capacity is explicit.
+        CALL LET_INIT              ; Initializer sees only the outer local scope.
+        JP C,LET_FAIL              ; Preserve its syntax or capacity error.
+        CALL LET_PEEK              ; Restore this binding's slot after nested forms.
+        JP C,LET_FAIL              ; The pending record must still be present.
+        LD A,(ST_SLOT)             ; Recover the pending slot number.
         LD L,A                     ; Pass it to the runtime store.
         LD A,1                     ; Kind one denotes a local slot.
-        CALL SCSTORE               ; Emit the initialized flag update.
-        JP C,SCLETERR              ; A fixup failure is terminal.
-        CALL SCEXPECT              ; Close the individual binding list.
-        JP C,SCLETERR              ; Reject a missing or extra binding expression.
-        JR SCLETB                  ; Read the next binding or the outer close.
-SCLETBD:
-        CALL SCBIND                 ; Publish pending IDs in the active local scope.
-        JP C,SCLETERR              ; Reject a scope-stack overflow before body code.
-        CALL SCLEBODY              ; Compile the body, then consume its close.
-        JP C,SCLETERR              ; Preserve body failure before restoring cursors.
-        JP SCLETEND                 ; Restore old local cursors and return its value.
+        CALL EM_STORE              ; Emit the initialized flag update.
+        JP C,LET_FAIL              ; A fixup failure is terminal.
+        CALL CMD_END               ; Close the individual binding list.
+        JP C,LET_FAIL              ; Reject a missing or extra binding expression.
+        JR .BINDING                ; Read the next binding or the outer close.
+.BODY:
+        CALL BIND_ALL               ; Publish pending IDs in the active local scope.
+        JP C,LET_FAIL              ; Reject a scope-stack overflow before body code.
+        CALL LET_BODY              ; Compile the body, then consume its close.
+        JP C,LET_FAIL              ; Preserve body failure before restoring cursors.
+        JP LET_DONE                 ; Restore old local cursors and return its value.
 
 ; let* is the same syntax, but each binding becomes visible before the next one.
-SCLETSF:
+LET_STAR:
         XOR A                      ; let* has no named-procedure spelling.
-        LD (SCLETMOD),A
-        CALL SCLETSET              ; Save local cursors and open the binding list.
+        LD (ST_NLOK),A
+        CALL LET_OPEN              ; Save local cursors and open the binding list.
         RET C                      ; Preserve a local-capacity failure.
-SCLETSB:
-        CALL SCNEXT                ; Read another binding or the list close.
-        JP C,SCLETERR              ; Unwind the saved scope cursors on source failure.
+.BINDING:
+        CALL REC_NEXT              ; Read another binding or the list close.
+        JP C,LET_FAIL              ; Unwind the saved scope cursors on source failure.
         CP 2                       ; A close ends the sequential binding list.
-        JR Z,SCLETSBD              ; The body follows the final binding.
+        JR Z,.BODY                 ; The body follows the final binding.
         CP 1                       ; Every binding is a two-element list.
-        JP NZ,SCLETERR             ; Reject a malformed binding list.
-        CALL SCNEXT                ; Read this binding's name.
-        JP C,SCLETERR              ; Unwind the saved scope cursors on source failure.
+        JP NZ,LET_FAIL             ; Reject a malformed binding list.
+        CALL REC_NEXT              ; Read this binding's name.
+        JP C,LET_FAIL              ; Unwind the saved scope cursors on source failure.
         CP 5                       ; Names are interned symbols.
-        JP NZ,SCLETERR             ; Reject literal or list binding names.
-        LD (SCID),HL               ; The active local receives this full identity.
-        LD A,(SCLOCTOP)            ; The body shares only the final let* scope.
-        LD (SCLEBASE),A            ; Keep later definitions at this boundary.
-        CALL SCNSLOT             ; Allocate a local slot before its initializer.
-        JP C,SCLETERR              ; Reject the first slot beyond the local bound.
-        LD (SCSLOT),A              ; Save the selected slot for the store.
-        CALL SCPEND                ; Record the name and slot before recursive code.
-        JP C,SCLETERR              ; Pending-binding capacity is explicit.
-        CALL SCINIT                ; The initializer sees earlier let* bindings.
-        JP C,SCLETERR              ; Preserve initializer failure.
-        CALL SCPREV                ; Restore this binding's slot after nested forms.
-        JP C,SCLETERR              ; The pending record must still be present.
-        LD A,(SCSLOT)              ; Recover the selected slot number.
+        JP NZ,LET_FAIL             ; Reject literal or list binding names.
+        LD (ST_SYMID),HL           ; The active local receives this full identity.
+        LD A,(ST_LTOP)             ; The body shares only the final let* scope.
+        LD (ST_LETLO),A            ; Keep later definitions at this boundary.
+        CALL BIND_NEW            ; Allocate a local slot before its initializer.
+        JP C,LET_FAIL              ; Reject the first slot beyond the local bound.
+        LD (ST_SLOT),A             ; Save the selected slot for the store.
+        CALL LET_PUSH              ; Record the name and slot before recursive code.
+        JP C,LET_FAIL              ; Pending-binding capacity is explicit.
+        CALL LET_INIT              ; The initializer sees earlier let* bindings.
+        JP C,LET_FAIL              ; Preserve initializer failure.
+        CALL LET_PEEK              ; Restore this binding's slot after nested forms.
+        JP C,LET_FAIL              ; The pending record must still be present.
+        LD A,(ST_SLOT)             ; Recover the selected slot number.
         LD L,A                     ; Pass it to the runtime store.
         LD A,1                     ; Kind one denotes a local slot.
-        CALL SCSTORE               ; Emit the initialized flag update.
-        JP C,SCLETERR              ; A fixup failure is terminal.
-        CALL SCEXPECT              ; Close the individual binding list.
-        JP C,SCLETERR              ; Reject a missing or extra initializer.
-        CALL SCADDLOC              ; Its name and slot are saved in the pending record.
-        JP C,SCLETERR              ; Reject a local-directory overflow.
-        JR SCLETSB                 ; Read the next sequential binding.
-SCLETSBD:
-        CALL SCLEBODY              ; Compile and close the sequential body.
-        JP C,SCLETERR              ; Preserve body failure before cursor restore.
-        JP SCLETEND                 ; Restore outer bindings and return the value.
+        CALL EM_STORE              ; Emit the initialized flag update.
+        JP C,LET_FAIL              ; A fixup failure is terminal.
+        CALL CMD_END               ; Close the individual binding list.
+        JP C,LET_FAIL              ; Reject a missing or extra initializer.
+        CALL BIND_ADD              ; Its name and slot are saved in the pending record.
+        JP C,LET_FAIL              ; Reject a local-directory overflow.
+        JR .BINDING                ; Read the next sequential binding.
+.BODY:
+        CALL LET_BODY              ; Compile and close the sequential body.
+        JP C,LET_FAIL              ; Preserve body failure before cursor restore.
+        JP LET_DONE                 ; Restore outer bindings and return the value.
 
 ; letrec binds every name while its initializers are compiled.  A reference to
 ; a later name reserves a local slot immediately; the later declaration claims
 ; that slot, so mutually recursive procedures share one cell.
-SCLETRF:
+LET_REC:
         XOR A                      ; letrec has its own binding-list grammar.
-        LD (SCLETMOD),A
-        CALL SCLETSET              ; Save the enclosing local scope and cursors.
+        LD (ST_NLOK),A
+        CALL LET_OPEN              ; Save the enclosing local scope and cursors.
         RET C                      ; Preserve a local-capacity failure.
-        LD A,(SCBNDTOP)            ; Deferred slots start after outer pending records.
-        LD (SCRECPND),A
-        LD A,(SCLNEXT)             ; The recursive range starts at the next slot.
-        LD (SCRECST),A             ; Forward references stay inside this range.
-        LD (SCRECLIM),A            ; The checked range grows with recursive cells.
-        LD A,(SCCURPR)             ; Forward cells belong to the enclosing owner.
-        LD (SCRECPR),A
+        LD A,(ST_BINDS)            ; Deferred slots start after outer pending records.
+        LD (ST_RPEND),A
+        LD A,(ST_LNEXT)            ; The recursive range starts at the next slot.
+        LD (ST_RBASE),A            ; Forward references stay inside this range.
+        LD (ST_RTOP),A             ; The checked range grows with recursive cells.
+        LD A,(ST_PROC)             ; Forward cells belong to the enclosing owner.
+        LD (ST_RPROC),A
         LD A,1
-        LD (SCRECMOD),A            ; Unresolved names may become letrec slots.
-        LD (SCRECPHS),A             ; Initializers see the complete recursive scope.
-        CALL SCRECOPN               ; Save an enclosing replay before buffering.
-        JP C,SCLETERR               ; The replay-frame bound is explicit.
-        CALL SCRECBUF              ; Retain the list while all names are installed.
-        JP C,SCRECFL
-        CALL SCRECPRE              ; Make every recursive name visible to every initializer.
-        JP C,SCRECFL
-SCRECB:
-        CALL SCNEXT                ; Read a binding or the container close.
-        JP C,SCRECFL
+        LD (ST_RMODE),A            ; Unresolved names may become letrec slots.
+        LD (ST_RINIT),A             ; Initializers see the complete recursive scope.
+        CALL REC_OPEN               ; Save an enclosing replay before buffering.
+        JP C,LET_FAIL               ; The replay-frame bound is explicit.
+        CALL REC_KEEP              ; Retain the list while all names are installed.
+        JP C,.FAIL
+        CALL REC_DECL              ; Make every recursive name visible to every initializer.
+        JP C,.FAIL
+.BINDING:
+        CALL REC_NEXT              ; Read a binding or the container close.
+        JP C,.FAIL
         CP 2
-        JR Z,SCRECBD
+        JR Z,.BODY
         CP 1
-        JP NZ,SCRECFL
-        CALL SCNEXT                ; Every binding starts with one identifier.
-        JP C,SCRECFL
+        JP NZ,.FAIL
+        CALL REC_NEXT              ; Every binding starts with one identifier.
+        JP C,.FAIL
         CP 5
-        JP NZ,SCRECFL
-        LD (SCID),HL               ; Preserve the complete name identity.
-        CALL SCRECUSE              ; The replay prepass already installed this name.
-        JP C,SCRECFL
-        LD (SCSLOT),A              ; The initializer store uses this slot.
-        LD A,(SCSLOT)
+        JP NZ,.FAIL
+        LD (ST_SYMID),HL           ; Preserve the complete name identity.
+        CALL REC_SLOT              ; The replay prepass already installed this name.
+        JP C,.FAIL
+        LD (ST_SLOT),A             ; The initializer store uses this slot.
+        LD A,(ST_SLOT)
         PUSH AF
-        CALL SCINIT                ; All recursive names are visible here.
-        JP C,SCLETINI
+        CALL LET_INIT              ; All recursive names are visible here.
+        JP C,.INIT_BAD
         POP AF
-        LD (SCSLOT),A
-        CALL SCPUSH                ; Keep the value uninstalled until all initializers finish.
-        JP C,SCRECFL
-        CALL SCEXPECT              ; Close this binding pair.
-        JP C,SCRECFL
-        JR SCRECB
-SCRECBD:
-        CALL SCRECCHK              ; Reject names referenced but never declared.
-        JP C,SCRECFL
-        CALL SCRECSTO              ; Install deferred values in reverse declaration order.
-        JP C,SCRECFL
-        CALL SCRECPOP               ; Resume the enclosing stream at the body.
-        JP C,SCLETERR               ; A missing replay frame is compiler corruption.
-        CALL SCLEBODY              ; Compile the body with all cells active.
-        JP C,SCLETERR
-        JP SCLETEND
+        LD (ST_SLOT),A
+        CALL EM_PUSH               ; Keep the value uninstalled until all initializers finish.
+        JP C,.FAIL
+        CALL CMD_END               ; Close this binding pair.
+        JP C,.FAIL
+        JR .BINDING
+.BODY:
+        CALL BIND_CHK              ; Reject names referenced but never declared.
+        JP C,.FAIL
+        CALL REC_FILL              ; Install deferred values in reverse declaration order.
+        JP C,.FAIL
+        CALL REC_POP                ; Resume the enclosing stream at the body.
+        JP C,LET_FAIL               ; A missing replay frame is compiler corruption.
+        CALL LET_BODY              ; Compile the body with all cells active.
+        JP C,LET_FAIL
+        JP LET_DONE
 
-SCLETINI:
+.INIT_BAD:
         POP AF
-        LD (SCSLOT),A
+        LD (ST_SLOT),A
 
 ; A letrec failure must release its replay frame before the normal scope unwind.
-SCRECFL:
-        CALL SCRECPOP
-        JP SCLETERR
+.FAIL:
+        CALL REC_POP
+        JP LET_FAIL
 
 ; Save the active local cursors and consume the opening binding-list event.
-SCLETSET:
+LET_OPEN:
         POP DE                     ; Move the caller return below saved scope data.
-        LD A,(SCLOCTOP)            ; Definitions in this body share the let scope.
-        LD (SCLEBASE),A            ; Keep the outer active count as its base.
-        LD A,(SCRECMOD)            ; Preserve any enclosing recursive scope mode.
+        LD A,(ST_LTOP)             ; Definitions in this body share the let scope.
+        LD (ST_LETLO),A            ; Keep the outer active count as its base.
+        LD A,(ST_RMODE)            ; Preserve any enclosing recursive scope mode.
         LD C,A
         LD B,0
         PUSH BC
-        LD A,(SCRECPHS)            ; Preserve whether its initializers are active.
+        LD A,(ST_RINIT)            ; Preserve whether its initializers are active.
         LD C,A
         LD B,0
         PUSH BC
-        LD A,(SCRECST)             ; Preserve its forward-slot range start.
+        LD A,(ST_RBASE)            ; Preserve its forward-slot range start.
         LD C,A
         LD B,0
         PUSH BC
-        LD A,(SCRECLIM)            ; Preserve its recursive high-water bound.
+        LD A,(ST_RTOP)             ; Preserve its recursive high-water bound.
         LD C,A
         LD B,0
         PUSH BC
-        LD A,(SCRECPND)            ; Preserve the enclosing deferred-list marker.
+        LD A,(ST_RPEND)            ; Preserve the enclosing deferred-list marker.
         LD C,A
         LD B,0
         PUSH BC
-        LD A,(SCLOCTOP)            ; B stores the old active-binding count.
+        LD A,(ST_LTOP)             ; B stores the old active-binding count.
         LD B,A                     ; Preserve it below the parser's return frames.
-        LD A,(SCLNEXT)             ; C stores the next reusable local slot.
+        LD A,(ST_LNEXT)            ; C stores the next reusable local slot.
         LD C,A                     ; The two bytes restore the outer scope exactly.
         PUSH BC                    ; Nested lets therefore have independent cursors.
-        LD A,(SCBNDTOP)           ; Save the pending-record top for this let.
+        LD A,(ST_BINDS)           ; Save the pending-record top for this let.
         LD C,A                     ; The high byte is unused for the bounded stack.
         LD B,0                     ; Keep the marker in a normal stack word.
         PUSH BC                    ; A nested let can now append its own records.
         PUSH DE                    ; Restore the caller return above both markers.
-        CALL SCNEXT                ; The next event must open the binding list.
-        JR NC,SCLETOP               ; Continue with the first binding when present.
+        CALL REC_NEXT              ; The next event must open the binding list.
+        JR NC,.EVENT                ; Continue with the first binding when present.
         POP DE                     ; Remove the saved continuation before cleanup.
         POP BC                     ; Discard the pending-record marker.
         POP BC                     ; Discard the saved local cursors.
@@ -208,19 +208,19 @@ SCLETSET:
         PUSH DE                    ; Restore the caller continuation for the error return.
         SCF                       ; Preserve the reader failure after balanced cleanup.
         RET
-SCLETOP:
+.EVENT:
         CP 1                       ; Kind one is an opening parenthesis.
-        JR Z,SCLETOK               ; The caller now reads individual bindings.
+        JR Z,.OPENED               ; The caller now reads individual bindings.
         CP 5                       ; A symbol selects the named-let grammar.
-        JR NZ,SCLETBAD             ; Other events are malformed binding lists.
-        LD A,(SCLETMOD)
+        JR NZ,.BAD                 ; Other events are malformed binding lists.
+        LD A,(ST_NLOK)
         OR A
-        JR Z,SCLETBAD              ; let* and letrec reject a named binding.
-        LD (SCNAMID),HL             ; Keep the name while the list is consumed.
-        JP SCNAMED                  ; The named form owns the saved let frame.
-SCLETOK:
+        JR Z,.BAD                  ; let* and letrec reject a named binding.
+        LD (ST_NLID),HL             ; Keep the name while the list is consumed.
+        JP LET_NAME                 ; The named form owns the saved let frame.
+.OPENED:
         RET
-SCLETBAD:
+.BAD:
         POP DE                      ; Remove the caller return before cleanup.
         POP BC                      ; Discard the pending-record marker.
         POP BC                      ; Discard the saved local cursors.
@@ -235,78 +235,78 @@ SCLETBAD:
 
 ; Let and let* bodies share the internal-definition grammar with procedures.
 ; The helper keeps their private tail-candidate list balanced on both paths.
-SCLEBODY:
-        LD A,(SCBISOL)
+LET_BODY:
+        LD A,(ST_ALONE)
         PUSH AF
         LD A,2                      ; Let bodies share candidates but admit definitions.
-        LD (SCBISOL),A
-        CALL SCBODY
-        JR C,SCLEBERR
+        LD (ST_ALONE),A
+        CALL CMD_BODY
+        JR C,.FAIL
         POP AF
-        LD (SCBISOL),A
+        LD (ST_ALONE),A
         RET
-SCLEBERR:
+.FAIL:
         POP AF
-        LD (SCBISOL),A
+        LD (ST_ALONE),A
         SCF
         RET
 
 ; Remove a let's saved marker and cursor words before returning a compile error.
-SCLETERR:
+LET_FAIL:
         XOR A                      ; Any failed binding aborts the active replay.
-        LD (SCREP),A
+        LD (ST_PLAY),A
         POP BC                     ; Discard the pending-record marker.
         POP BC                     ; Restore neither cursor on the terminal path.
         POP BC                     ; Restore the enclosing deferred-list marker.
         LD A,C
-        LD (SCRECPND),A
+        LD (ST_RPEND),A
         POP BC                     ; Restore the enclosing recursive high-water bound.
         LD A,C
-        LD (SCRECLIM),A
+        LD (ST_RTOP),A
         POP BC                     ; Restore the enclosing recursive-range start.
         LD A,C
-        LD (SCRECST),A
+        LD (ST_RBASE),A
         POP BC                     ; Restore the enclosing recursive phase.
         LD A,C
-        LD (SCRECPHS),A
+        LD (ST_RINIT),A
         POP BC                     ; Restore the enclosing recursive mode.
         LD A,C
-        LD (SCRECMOD),A
+        LD (ST_RMODE),A
         SCF                       ; Carry identifies the syntax or capacity error.
-        RET                        ; The original SCFORM continuation remains below.
+        RET                        ; The original CMD_FORM continuation remains below.
 
 ; Restore old local cursors and the pending-record top after a let body.
-SCLETEND:
+LET_DONE:
         POP BC                     ; Recover this let's pending-record marker.
         LD A,C                     ; Discard any pending records from the body.
-        LD (SCBNDTOP),A           ; Outer scopes may reuse the released records.
+        LD (ST_BINDS),A           ; Outer scopes may reuse the released records.
         POP BC                     ; Recover the old active count and next slot.
         LD A,B                     ; Restore the outer active local count.
-        LD (SCLOCTOP),A            ; The generated code still owns inner slots.
+        LD (ST_LTOP),A             ; The generated code still owns inner slots.
         LD A,C                     ; Keep the old slot cursor across recursive state.
-        LD (SCLOCSAV),A
+        LD (ST_LSAVE),A
         POP BC                     ; Restore the enclosing deferred-list marker.
         LD A,C
-        LD (SCRECPND),A
+        LD (ST_RPEND),A
         POP BC                     ; Restore the enclosing recursive high-water bound.
         LD A,C
-        LD (SCRECLIM),A
+        LD (ST_RTOP),A
         POP BC                     ; Restore the enclosing recursive-range start.
         LD A,C
-        LD (SCRECST),A
+        LD (ST_RBASE),A
         POP BC                     ; Restore the enclosing recursive phase.
         LD A,C
-        LD (SCRECPHS),A
+        LD (ST_RINIT),A
         POP BC                     ; Restore the enclosing recursive mode.
         LD A,C
-        LD (SCRECMOD),A
-        LD A,(SCLOCSAV)             ; Reconstruct SCESCAN's old cursor argument.
+        LD (ST_RMODE),A
+        LD A,(ST_LSAVE)             ; Reconstruct BIND_ESC's old cursor argument.
         LD C,A
         LD B,0
-        CALL SCESCAN               ; Retain slots whose cells escaped in a closure.
-        JR NZ,SCLETKEP              ; An escaped slot must not be reused by a sibling.
+        CALL BIND_ESC              ; Retain slots whose cells escaped in a closure.
+        JR NZ,.RETURN               ; An escaped slot must not be reused by a sibling.
         LD A,C                     ; Restore the outer slot-allocation cursor.
-        LD (SCLNEXT),A             ; Uncaptured slots can be reused safely.
-SCLETKEP:
+        LD (ST_LNEXT),A            ; Uncaptured slots can be reused safely.
+.RETURN:
         XOR A                      ; Return carry clear with the body value intact.
         RET                        ; The caller's A/HL result is not touched.

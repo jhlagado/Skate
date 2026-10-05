@@ -19,6 +19,7 @@
 %INCLUDE "publication-recovery.asm"
 %INCLUDE "../cpm-source.asm"
 %INCLUDE "../cpm-transport.asm"
+%INCLUDE "../cpm-names.asm"
 %INCLUDE "../../runtime/loader.asm"
 %INCLUDE "../lexer.asm"
 %INCLUDE "../decimal.asm"

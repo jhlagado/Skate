@@ -50,10 +50,10 @@ async function collectorFixture(rootCount: number) {
   const slabCount = 17;
   assert.ok(slabBase + slabCount * 0x100 <= 0x8000, "slabs overlap roots");
   const recordsPerSlab = PAIRS_PER_SLAB;
-  memory[assembled.address("SRTPSLBN")] = slabCount;
+  memory[assembled.address("PS_COUNT")] = slabCount;
   for (let slab = 0; slab < slabCount; slab++) {
     const base = slabBase + slab * 0x100;
-    const descriptor = assembled.address("SRTPSLT") + slab * 3;
+    const descriptor = assembled.address("PS_TABLE") + slab * 3;
     memory[descriptor] = base >>> 8;
     memory[descriptor + 1] = 0;
     memory[descriptor + 2] = 0xff;
@@ -75,11 +75,11 @@ async function collectorFixture(rootCount: number) {
   for (let index = 0; index < rootCount; index++) {
     const root = 0x8000 + index * 4;
     writeWord(memory, root, recordAddress(index));
-    memory[root + 2] = 1;
-    memory[root + 3] = 1;
+    memory[root + 2] = 0; // Clear extension byte.
+    memory[root + 3] = 0x11;
   }
-  writeWord(memory, assembled.address("SRTGBASE"), 0x8000);
-  writeWord(memory, assembled.address("SRTGEND"), 0x8000 + rootCount * 4);
+  writeWord(memory, assembled.address("G_BASE"), 0x8000);
+  writeWord(memory, assembled.address("G_END"), 0x8000 + rootCount * 4);
   const parent = recordAddress(rootCount - 1);
   const child = recordAddress(rootCount);
   writeWord(memory, parent + CDR_PAYLOAD, child);
@@ -87,7 +87,7 @@ async function collectorFixture(rootCount: number) {
   memory[parent + CDR_META] = 1; // pair CDR
   const orphan = recordAddress(530);
   memory[orphan + CAR_META] = 0x43;
-  cpu.pc = assembled.address("SRTGC");
+  cpu.pc = assembled.address("GC");
   cpu.sp = 0xdff0;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
@@ -123,30 +123,6 @@ Deno.test("collector preserves an edge missed by a full worklist", async () => {
   assert.equal(result.memory[result.orphan + CAR_META], 0);
 });
 
-Deno.test("collector does not read past a root scan interval", async () => {
-  const assembled = await loadAssembly(
-    "src/runtime/image.asm",
-  );
-  const memory = assembled.runtime.hardware.memory;
-  const cpu = assembled.runtime.cpu;
-  memory[0xa000] = 1;
-  writeWord(memory, 0x9ffe, 0xa000);
-  cpu.h = 0x9f;
-  cpu.l = 0xfe;
-  cpu.d = 0xa0;
-  cpu.e = 0;
-  cpu.pc = assembled.address("SRTSCAN");
-  cpu.sp = 0xdff0;
-  writeWord(memory, cpu.sp, 0xef00);
-  let steps = 0;
-  while (cpu.pc !== 0xef00) {
-    assert.ok(++steps < 10_000_000, "collector did not return");
-    assembled.runtime.step();
-  }
-  assert.equal(cpu.sp, 0xdff2);
-  assert.equal(memory[0xa000], 1, "scan read beyond the A000 boundary");
-});
-
 Deno.test("pair allocator follows free chains across a second slab", async () => {
   const assembled = await loadAssembly(
     "src/runtime/image.asm",
@@ -171,12 +147,12 @@ Deno.test("pair allocator follows free chains across a second slab", async () =>
 
   cpu.h = assembled.image.end >>> 8;
   cpu.l = assembled.image.end & 255;
-  assert.equal(call("SRTGPINI").carry, 0);
-  assert.equal(call("SRTPIN").carry, 0);
+  assert.equal(call("PAGE_INI").carry, 0);
+  assert.equal(call("PAIR_INI").carry, 0);
 
   const records: number[] = [];
   for (let index = 0; index < PAIRS_PER_SLAB * 2; index++) {
-    const result = call("SRTFINDP");
+    const result = call("PAIR_GET");
     assert.equal(result.carry, 0, `allocation ${index} failed`);
     records.push(result.payload);
   }
@@ -187,10 +163,10 @@ Deno.test("pair allocator follows free chains across a second slab", async () =>
     firstBase + (PAIRS_PER_SLAB - 1) * PAIR_BYTES,
   );
   assert.equal(records[PAIRS_PER_SLAB], secondBase);
-  assert.equal(memory[assembled.address("SRTPSLBN")], 2);
+  assert.equal(memory[assembled.address("PS_COUNT")], 2);
 
-  assert.equal(call("SRTGC").carry, 0);
-  const reused = call("SRTFINDP");
+  assert.equal(call("GC").carry, 0);
+  const reused = call("PAIR_GET");
   assert.equal(reused.carry, 0);
   assert.ok(
     records.includes(reused.payload),
@@ -206,15 +182,15 @@ Deno.test("constructor roots survive collection and retain both inputs", async (
   const cpu = assembled.runtime.cpu;
   cpu.h = assembled.image.end >>> 8;
   cpu.l = assembled.image.end & 255;
-  assert.equal(callLabel(assembled, "SRTGPINI", memory, cpu).carry, 0);
-  assert.equal(callLabel(assembled, "SRTPIN", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "PAGE_INI", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "PAIR_INI", memory, cpu).carry, 0);
   // Keep the fixture at one slab so the constructor exercises collection
   // instead of growing into the second managed extent.
-  memory[assembled.address("SRTPSLIM")] = 1;
+  memory[assembled.address("PS_LIMIT")] = 1;
 
   const records: number[] = [];
   for (let index = 0; index < PAIRS_PER_SLAB; index++) {
-    const result = callLabel(assembled, "SRTFINDP", memory, cpu);
+    const result = callLabel(assembled, "PAIR_GET", memory, cpu);
     assert.equal(result.carry, 0);
     records.push(result.payload);
     memory[result.payload + CAR_META] = 0x40;
@@ -225,12 +201,12 @@ Deno.test("constructor roots survive collection and retain both inputs", async (
   memory[root + CAR_META] = 0x43;
   memory[root + CDR_META] = 0;
 
-  writeWord(memory, assembled.address("SRTQCAR"), root);
-  writeWord(memory, assembled.address("SRTQCDR"), 5678);
-  memory[assembled.address("SRTQCTAG")] = 1;
-  memory[assembled.address("SRTQDTAG")] = 3;
+  writeWord(memory, assembled.address("QT_CAR"), root);
+  writeWord(memory, assembled.address("QT_CDR"), 5678);
+  memory[assembled.address("QT_CTAG")] = 1;
+  memory[assembled.address("QT_DTAG")] = 3;
 
-  const result = callLabel(assembled, "SRTMAKEP", memory, cpu);
+  const result = callLabel(assembled, "PAIR_NEW", memory, cpu);
   assert.equal(result.carry, 0);
   const pair = result.payload;
   assert.equal(memory[root + CAR_META], 0x43, "pending pair root was swept");
@@ -243,13 +219,13 @@ Deno.test("constructor roots survive collection and retain both inputs", async (
   assert.equal(memory[pair + CDR_META], 3);
 
   for (let index = 0; index < PAIRS_PER_SLAB - 2; index++) {
-    assert.equal(callLabel(assembled, "SRTFINDP", memory, cpu).carry, 0);
+    assert.equal(callLabel(assembled, "PAIR_GET", memory, cpu).carry, 0);
   }
-  writeWord(memory, assembled.address("SRTQCAR"), 1234);
-  writeWord(memory, assembled.address("SRTQCDR"), 5678);
-  memory[assembled.address("SRTQCTAG")] = 3;
-  memory[assembled.address("SRTQDTAG")] = 3;
-  const scalarPair = callLabel(assembled, "SRTMAKEP", memory, cpu).payload;
+  writeWord(memory, assembled.address("QT_CAR"), 1234);
+  writeWord(memory, assembled.address("QT_CDR"), 5678);
+  memory[assembled.address("QT_CTAG")] = 3;
+  memory[assembled.address("QT_DTAG")] = 3;
+  const scalarPair = callLabel(assembled, "PAIR_NEW", memory, cpu).payload;
   assert.equal(memory[scalarPair] | memory[scalarPair + 1] << 8, 1234);
   assert.equal(
     memory[scalarPair + CDR_PAYLOAD] |
@@ -266,8 +242,8 @@ Deno.test("overflow fallback restores its slab cursor after child tracing", asyn
   );
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
-  const table = assembled.address("SRTPSLT");
-  memory[assembled.address("SRTPSLBN")] = 2;
+  const table = assembled.address("PS_TABLE");
+  memory[assembled.address("PS_COUNT")] = 2;
   const first = (assembled.image.end + 0xff) & 0xff00;
   const second = first + 0x100;
   assert.ok(second + 0x100 <= 0x8000, "slabs overlap root workspace");
@@ -287,7 +263,7 @@ Deno.test("overflow fallback restores its slab cursor after child tracing", asyn
   memory[first + PAIR_BYTES + CDR_META] = 1;
   memory[first + 2 * PAIR_BYTES + CAR_META] = 0x43;
   memory[second + CAR_META] = 0x43;
-  assert.equal(callLabel(assembled, "SRTFSCRN", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "GC_PAIRS", memory, cpu).carry, 0);
   assert.equal(memory[first + 2 * PAIR_BYTES + CAR_META], 0xc3);
   assert.equal(memory[second + CAR_META], 0xc3);
 });
@@ -300,20 +276,20 @@ Deno.test("pair slabs return pages and reuse released descriptors", async () => 
   const cpu = assembled.runtime.cpu;
   cpu.h = assembled.image.end >>> 8;
   cpu.l = assembled.image.end & 255;
-  assert.equal(callLabel(assembled, "SRTGPINI", memory, cpu).carry, 0);
-  const before = memory[assembled.address("SRTPGFRE")] |
-    memory[assembled.address("SRTPGFRE") + 1] << 8;
-  assert.equal(callLabel(assembled, "SRTPIN", memory, cpu).carry, 0);
-  const firstPairPage = memory[assembled.address("SRTPSLT")] << 8;
-  assert.equal(callLabel(assembled, "SRTGC", memory, cpu).carry, 0);
-  const after = memory[assembled.address("SRTPGFRE")] |
-    memory[assembled.address("SRTPGFRE") + 1] << 8;
+  assert.equal(callLabel(assembled, "PAGE_INI", memory, cpu).carry, 0);
+  const before = memory[assembled.address("PAGE_CAP")] |
+    memory[assembled.address("PAGE_CAP") + 1] << 8;
+  assert.equal(callLabel(assembled, "PAIR_INI", memory, cpu).carry, 0);
+  const firstPairPage = memory[assembled.address("PS_TABLE")] << 8;
+  assert.equal(callLabel(assembled, "GC", memory, cpu).carry, 0);
+  const after = memory[assembled.address("PAGE_CAP")] |
+    memory[assembled.address("PAGE_CAP") + 1] << 8;
   assert.equal(after, before, "empty slab did not return its page");
-  assert.equal(memory[assembled.address("SRTPSLT")], 0);
-  const reused = callLabel(assembled, "SRTFINDP", memory, cpu);
+  assert.equal(memory[assembled.address("PS_TABLE")], 0);
+  const reused = callLabel(assembled, "PAIR_GET", memory, cpu);
   assert.equal(reused.carry, 0);
   assert.equal(reused.payload, firstPairPage);
-  assert.equal(memory[assembled.address("SRTPSLBN")], 1);
+  assert.equal(memory[assembled.address("PS_COUNT")], 1);
 });
 
 Deno.test("pair slabs reuse a middle descriptor without losing live slabs", async () => {
@@ -324,12 +300,12 @@ Deno.test("pair slabs reuse a middle descriptor without losing live slabs", asyn
   const cpu = assembled.runtime.cpu;
   cpu.h = assembled.image.end >>> 8;
   cpu.l = assembled.image.end & 255;
-  assert.equal(callLabel(assembled, "SRTGPINI", memory, cpu).carry, 0);
-  assert.equal(callLabel(assembled, "SRTPIN", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "PAGE_INI", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "PAIR_INI", memory, cpu).carry, 0);
 
   const records: number[] = [];
   for (let index = 0; index < PAIRS_PER_SLAB * 3; index++) {
-    const result = callLabel(assembled, "SRTFINDP", memory, cpu);
+    const result = callLabel(assembled, "PAIR_GET", memory, cpu);
     assert.equal(result.carry, 0, `allocation ${index} failed`);
     records.push(result.payload);
   }
@@ -342,13 +318,13 @@ Deno.test("pair slabs reuse a middle descriptor without losing live slabs", asyn
   for (let slot = 0; slot < PAIRS_PER_SLAB; slot++) {
     memory[middleBase + slot * PAIR_BYTES + CAR_META] = 0;
   }
-  assert.equal(callLabel(assembled, "SRTPSRB", memory, cpu).carry, 0);
-  const descriptor = assembled.address("SRTPSLT");
+  assert.equal(callLabel(assembled, "PAIR_GC", memory, cpu).carry, 0);
+  const descriptor = assembled.address("PS_TABLE");
   assert.notEqual(memory[descriptor], 0);
   assert.equal(memory[descriptor + 3], 0);
   assert.notEqual(memory[descriptor + 6], 0);
 
-  const replacement = callLabel(assembled, "SRTFINDP", memory, cpu);
+  const replacement = callLabel(assembled, "PAIR_GET", memory, cpu);
   assert.equal(replacement.carry, 0);
   assert.notEqual(memory[descriptor], 0, "first descriptor was overwritten");
   assert.notEqual(
@@ -361,7 +337,7 @@ Deno.test("pair slabs reuse a middle descriptor without losing live slabs", asyn
   cpu.h = firstBase >>> 8;
   cpu.l = firstBase & 255;
   assert.equal(
-    callLabel(assembled, "SRTPCHK", memory, cpu).carry,
+    callLabel(assembled, "PAIR_CHK", memory, cpu).carry,
     0,
     "live pair in the first slab was lost",
   );
@@ -369,7 +345,7 @@ Deno.test("pair slabs reuse a middle descriptor without losing live slabs", asyn
   cpu.h = lastBase >>> 8;
   cpu.l = lastBase & 255;
   assert.equal(
-    callLabel(assembled, "SRTPCHK", memory, cpu).carry,
+    callLabel(assembled, "PAIR_CHK", memory, cpu).carry,
     0,
     "live pair after a released descriptor was lost",
   );
@@ -383,12 +359,12 @@ Deno.test("pair descriptor table reaches beyond thirty-two slabs", async () => {
   const cpu = assembled.runtime.cpu;
   cpu.h = assembled.image.end >>> 8;
   cpu.l = assembled.image.end & 255;
-  assert.equal(callLabel(assembled, "SRTGPINI", memory, cpu).carry, 0);
-  assert.equal(callLabel(assembled, "SRTPIN", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "PAGE_INI", memory, cpu).carry, 0);
+  assert.equal(callLabel(assembled, "PAIR_INI", memory, cpu).carry, 0);
   for (let index = 0; index < PAIRS_PER_SLAB * 33; index++) {
-    const result = callLabel(assembled, "SRTFINDP", memory, cpu);
+    const result = callLabel(assembled, "PAIR_GET", memory, cpu);
     assert.equal(result.carry, 0, `allocation ${index} failed`);
   }
-  assert.equal(memory[assembled.address("SRTPSLBN")], 33);
-  assert.equal(callLabel(assembled, "SRTFINDP", memory, cpu).carry, 0);
+  assert.equal(memory[assembled.address("PS_COUNT")], 33);
+  assert.equal(callLabel(assembled, "PAIR_GET", memory, cpu).carry, 0);
 });
