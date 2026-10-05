@@ -11,7 +11,8 @@
 ; The rest of the form is captured as replay events, the rewritten events are
 ; appended after it, and the replay of the rewritten events is compiled by
 ; LET_FORM.  When the replay runs out, REC_NEXT returns to the enclosing
-; stream and releases both event ranges.
+; stream and releases both event ranges.  The rewrite is never more than 96
+; bytes longer than the capture, so one capacity check covers every append.
 
 DO_FORM:
         LD A,(ST_PLAY)             ; A body scan may have replayed just the
@@ -41,120 +42,120 @@ DO_FORM:
         CALL REC_NEXT
         JP C,.FAIL
         OR A
-        JP Z,.FAIL                 ; EOF inside the form.
+        JR Z,.FAIL                 ; EOF inside the form.
         CALL DEF_PUT
-        JP C,.FAIL
+        JR C,.FAIL
         LD A,(ST_EVENT)
+        LD HL,ST_NEST
         CP 1
-        JP NZ,.CLOSE
-        LD HL,ST_NEST
+        JR NZ,.SHUT
         INC (HL)
-        JP .CAPTURE
-.CLOSE:
+        JR .CAPTURE
+.SHUT:
         CP 2
-        JP NZ,.CAPTURE
-        LD HL,ST_NEST
+        JR NZ,.CAPTURE
         DEC (HL)
-        JP NZ,.CAPTURE
-; Intern the names the rewritten form uses.
-        LD HL,K_IF+1
+        JR NZ,.CAPTURE
+        LD HL,(ST_PUTP)            ; The rewrite must fit after the capture.
+        LD D,H                     ; CP 2 left carry clear.
+        LD E,L
+        LD BC,(DO_FROM)
+        SBC HL,BC
+        ADD HL,DE
+        LD DE,W_REPEND-96
+        OR A
+        SBC HL,DE
+        JR NC,.CAP
+        LD HL,K_IF+1               ; Intern the names the rewrite uses.
         LD BC,2
         CALL .INTERN
-        JP C,.FAIL
         LD (DO_IF),HL
         LD HL,K_BEGIN+1
         LD BC,5
         CALL .INTERN
-        JP C,.FAIL
         LD (DO_BEGIN),HL
         LD HL,DO_NAME
         LD BC,7
         CALL .INTERN
-        JP C,.FAIL
         LD (DO_LOOP),HL
         LD HL,(ST_PUTP)
-        LD (DO_START),HL           ; The rewritten events start here.
-; The binding list: <loop> ( (var init) ... ).
-        LD HL,(DO_FROM)
+        LD (DO_START),HL
+        LD HL,(DO_FROM)            ; <loop> ( ... the bindings.
         LD A,(HL)
         CP 1
-        JP NZ,.FAIL
-        INC HL
-        INC HL
-        INC HL
-        INC HL
-        LD (DO_P),HL
+        JR NZ,.FAIL
+        CALL .ADV
         CALL .LOOPSYM
-        JP C,.FAIL
         CALL .OPEN
-        JP C,.FAIL
         XOR A
         LD (DO_VARS),A
+        JR .BINDING
+.CAP:
+        CALL ERR_CAP
+.FAIL:
+        CALL REC_POP
+        SCF
+        RET
+; Intern the spelling HL, length BC, as a symbol reference in HL.
+.INTERN:
+        LD IX,ST_SYMS
+        CALL SYM_ID
+        JR C,.LOST
+        LD A,H
+        OR 20H                     ; Symbol references carry subtype one.
+        LD H,A                     ; OR left carry clear.
+        RET
+.LOST:
+        POP AF                     ; Fail from DO_FORM itself.
+        JR .FAIL
+
+; Each binding becomes (var init); its step range is kept for the call.
 .BINDING:
-        LD HL,(DO_P)
         LD A,(HL)
         CP 2
-        JP Z,.BOUND
+        JR Z,.BOUND
         CP 1
-        JP NZ,.FAIL
-        LD A,(DO_VARS)             ; A named let takes at most a few formals.
+        JR NZ,.FAIL
+        LD A,(DO_VARS)
         CP 8
-        JP NC,ERR_CAP
-        INC HL
-        INC HL
-        INC HL
-        INC HL
-        LD A,(HL)                  ; The variable.
+        JR NC,.CAP
+        CALL .ADV
+        LD A,(HL)
         CP 5
-        JP NZ,.FAIL
+        JR NZ,.FAIL
         LD (DO_VAR),HL
         CALL .OPEN
-        JP C,.FAIL
-        LD HL,(DO_VAR)
-        LD DE,4
-        PUSH HL
-        ADD HL,DE
-        EX DE,HL
-        POP HL
-        CALL .COPY                 ; var
-        JP C,.FAIL
-        LD HL,(DO_VAR)
-        LD DE,4
-        ADD HL,DE
-        PUSH HL
-        CALL .SKIP                 ; init
-        EX DE,HL
-        POP HL
-        PUSH DE
-        CALL .COPY
-        POP HL
-        JP C,.FAIL
-        LD A,(HL)                  ; An optional step, then the close.
+        CALL .EXPR                 ; var
+        CALL .EXPR                 ; init
+        CALL .CLOSE
+        LD A,(HL)
         CP 2
-        JP Z,.NO_STEP
-        PUSH HL
+        JR Z,.SAME
+        LD D,H                     ; The step is [DE,BC).
+        LD E,L
         CALL .SKIP
-        EX DE,HL
-        POP HL
-        LD A,(DE)
+        LD A,(HL)
         CP 2
-        JP NZ,.FAIL
-        JP .KEEP
-.NO_STEP:
-        LD HL,(DO_VAR)             ; The step is the variable itself.
-        LD DE,4
-        PUSH HL
-        ADD HL,DE
-        EX DE,HL
-        POP HL
+        JR NZ,.FAIL
+        LD B,H
+        LD C,L
+        JR .KEEP
+.SAME:
+        LD DE,(DO_VAR)             ; No step: the variable itself.
+        LD B,D
+        LD C,E
+        INC BC
+        INC BC
+        INC BC
+        INC BC
 .KEEP:
-        PUSH DE                    ; Record the step range [HL,DE).
         PUSH HL
         LD A,(DO_VARS)
+        ADD A,A
+        ADD A,A
         LD L,A
         LD H,0
-        ADD HL,HL
-        ADD HL,HL
+        PUSH DE
         LD DE,DO_STEPS
         ADD HL,DE
         POP DE
@@ -162,170 +163,76 @@ DO_FORM:
         INC HL
         LD (HL),D
         INC HL
-        POP DE
-        LD (HL),E
+        LD (HL),C
         INC HL
-        LD (HL),D
+        LD (HL),B
         LD HL,DO_VARS
         INC (HL)
-        CALL .CLOSE_EV             ; End this binding.
-        JP C,.FAIL
-        LD HL,(DO_VAR)             ; Move past the source binding.
-        LD DE,4
-        ADD HL,DE
-        CALL .SKIP                 ; init
-        LD A,(HL)
-        CP 2
-        JP Z,.PAST
-        CALL .SKIP                 ; step
-.PAST:
-        INC HL                     ; the binding's close
-        INC HL
-        INC HL
-        INC HL
-        LD (DO_P),HL
-        JP .BINDING
+        POP HL
+        CALL .ADV                  ; Past the binding's close.
+        JR .BINDING
+; ) (if test result (begin body ... (<loop> step ...))))
 .BOUND:
-        INC HL
-        INC HL
-        INC HL
-        INC HL
-        LD (DO_P),HL
-        CALL .CLOSE_EV
-        JP C,.FAIL
-; The body: ( if test result (begin body ... (<loop> step ...)) ).
+        CALL .ADV
+        CALL .CLOSE
         CALL .OPEN
-        JP C,.FAIL
-        LD HL,(DO_IF)
-        CALL .SYMBOL
-        JP C,.FAIL
-        LD HL,(DO_P)               ; The test clause.
+        CALL .IF
         LD A,(HL)
         CP 1
         JP NZ,.FAIL
-        INC HL
-        INC HL
-        INC HL
-        INC HL
-        PUSH HL
-        CALL .SKIP                 ; test
-        EX DE,HL
-        POP HL
-        PUSH DE
-        CALL .COPY
-        POP HL
-        JP C,.FAIL
-        LD A,(HL)
-        CP 2
-        JP NZ,.RESULTS
-        PUSH HL                    ; No results: (if #f #f).
+        CALL .ADV
+        CALL .EXPR                 ; test
         CALL .OPEN
-        JP C,.FAIL_POP
-        LD HL,(DO_IF)
-        CALL .SYMBOL
-        JP C,.FAIL_POP
+        LD A,(HL)
+        CP 2
+        JR NZ,.RESULT
+        CALL .IF                   ; (if #f #f) is the unspecified value.
         CALL .FALSE
-        JP C,.FAIL_POP
         CALL .FALSE
-        JP C,.FAIL_POP
-        CALL .CLOSE_EV
-        JP C,.FAIL_POP
-        POP HL
-        JP .AFTER
-.FAIL_POP:
-        POP HL
-        JP .FAIL
-.RESULTS:
-        PUSH HL                    ; (begin res ...).
+        JR .TESTED
+.RESULT:
+        CALL .BEGIN
+        CALL .UPTO
+.TESTED:
+        CALL .CLOSE
+        CALL .ADV                  ; Past the test clause's close.
         CALL .OPEN
-        JP C,.FAIL_POP
-        LD HL,(DO_BEGIN)
-        CALL .SYMBOL
-        JP C,.FAIL_POP
-        POP HL
-        PUSH HL
-.RES_END:
-        LD A,(HL)
-        CP 2
-        JP Z,.RES_COPY
-        CALL .SKIP
-        JP .RES_END
-.RES_COPY:
-        EX DE,HL
-        POP HL
-        PUSH DE
-        CALL .COPY
-        POP HL
-        JP C,.FAIL
-        PUSH HL
-        CALL .CLOSE_EV
-        POP HL
-        JP C,.FAIL
-.AFTER:
-        INC HL                     ; Past the test clause's close.
-        INC HL
-        INC HL
-        INC HL
-        PUSH HL
-        CALL .OPEN                 ; (begin body ...
-        JP C,.FAIL_POP
-        LD HL,(DO_BEGIN)
-        CALL .SYMBOL
-        JP C,.FAIL_POP
-        POP HL
-        PUSH HL
-.BODY_END:
-        LD A,(HL)
-        CP 2
-        JP Z,.BODY_CPY
-        CALL .SKIP
-        JP .BODY_END
-.BODY_CPY:
-        EX DE,HL
-        POP HL
-        CALL .COPY
-        JP C,.FAIL
-        CALL .OPEN                 ; (<loop> step ...)
-        JP C,.FAIL
+        CALL .BEGIN
+        CALL .UPTO                 ; body ...
+        CALL .OPEN
         CALL .LOOPSYM
-        JP C,.FAIL
         LD HL,DO_STEPS
-        LD (DO_P),HL
 .STEP:
         LD A,(DO_VARS)
         OR A
-        JP Z,.STEPPED
+        JR Z,.STEPPED
         DEC A
         LD (DO_VARS),A
-        LD HL,(DO_P)
         LD E,(HL)
         INC HL
         LD D,(HL)
         INC HL
-        PUSH DE
-        LD E,(HL)
+        LD C,(HL)
         INC HL
-        LD D,(HL)
+        LD B,(HL)
         INC HL
-        LD (DO_P),HL
-        POP HL
+        PUSH HL
+        EX DE,HL
+        LD D,B
+        LD E,C
         CALL .COPY
-        JP C,.FAIL
-        JP .STEP
+        POP HL
+        JR .STEP
 .STEPPED:
         LD B,4                     ; Close the call, begin, if and let.
 .CLOSES:
         PUSH BC
-        CALL .CLOSE_EV
+        CALL .CLOSE
         POP BC
-        JP C,.FAIL
         DJNZ .CLOSES
-; Replay the rewritten events into the let compiler.
-        LD A,(ST_PLAY)
+        LD A,(ST_PLAY)             ; Replay the rewrite into the let compiler.
         OR A
-        JP Z,.REPLAY
-        CALL REC_SAVE              ; Preserve the enclosing replay cursor.
-.REPLAY:
+        CALL NZ,REC_SAVE           ; Preserve an enclosing replay cursor.
         LD HL,(DO_START)
         LD (ST_GETP),HL
         LD HL,(ST_PUTP)
@@ -334,81 +241,87 @@ DO_FORM:
         LD (ST_BACK),A             ; REC_NEXT returns to the saved stream.
         LD (ST_PLAY),A
         JP LET_FORM
-.FAIL:
-        CALL REC_POP
-        SCF
-        RET
 
-; Intern the spelling HL, length BC, as a symbol reference in HL.
-.INTERN:
-        LD IX,ST_SYMS
-        CALL SYM_ID
-        RET C
-        LD A,H
-        OR 20H                     ; Symbol references carry subtype one.
-        LD H,A
-        OR A
-        RET
-
-; Append one event: kind A, tag B, payload HL.
+; Append events: kind A, tag B, payload DE.  HL is kept.
+.OPEN:
+        LD A,1
+.PUNCT:
+        LD B,0
+        LD DE,0
 .EVENT:
         LD (ST_EVENT),A
         LD A,B
         LD (ST_EVTAG),A
-        LD (ST_EVVAL),HL
+        LD (ST_EVVAL),DE
         XOR A
         LD (ST_EVEXT),A
-        JP REC_PUT
-.OPEN:
-        LD A,1
-        JR .PUNCT
-.CLOSE_EV:
+        PUSH HL
+        CALL REC_PUT
+        POP HL
+        RET
+.CLOSE:
         LD A,2
-.PUNCT:
-        LD B,0
-        LD HL,0
-        JR .EVENT
+        JR .PUNCT
+.FALSE:
+        LD A,7                     ; The scalar #f.
+        JR .PUNCT
+.IF:
+        LD DE,(DO_IF)
+        JR .SYMBOL
+.BEGIN:
+        LD DE,(DO_BEGIN)
+        JR .SYMBOL
 .LOOPSYM:
-        LD HL,(DO_LOOP)
+        LD DE,(DO_LOOP)
 .SYMBOL:
         LD A,5
         LD B,1
         JR .EVENT
-.FALSE:
-        LD A,7                     ; The scalar #f.
-        LD B,0
-        LD HL,0
-        JR .EVENT
+
+; Copy the expression at HL; return HL past it.
+.EXPR:
+        PUSH HL
+        CALL .SKIP
+        JR .FOUND
+
+; Copy the expressions from HL up to a close; return HL at the close.
+.UPTO:
+        PUSH HL
+.UNTIL:
+        LD A,(HL)
+        CP 2
+        JR Z,.FOUND
+        CALL .SKIP
+        JR .UNTIL
+.FOUND:
+        EX DE,HL
+        POP HL
+        PUSH DE
+        CALL .COPY
+        POP HL
+        RET
 
 ; Copy the captured events [HL,DE) to the end of the replay stream.
 .COPY:
         PUSH HL
         EX DE,HL
         OR A
-        SBC HL,DE                  ; The byte count.
+        SBC HL,DE
         LD B,H
         LD C,L
-        LD HL,(ST_PUTP)
-        ADD HL,BC
-        LD DE,W_REPEND
-        OR A
-        SBC HL,DE
         POP HL
-        JP NC,ERR_CAP
         LD A,B
         OR C
         RET Z
         LD DE,(ST_PUTP)
         LDIR
         LD (ST_PUTP),DE
-        OR A
         RET
 
-; Return HL past the expression whose first event is at HL.
+; Return HL past the expression at HL.  DE is kept.
 .SKIP:
         LD A,(HL)
-        LD DE,4
-        ADD HL,DE
+        CALL .ADV
         CP 3                       ; A quote prefix covers the next expression.
         JR Z,.SKIP
         CP 1
@@ -416,7 +329,7 @@ DO_FORM:
         LD B,1
 .NESTED:
         LD A,(HL)
-        ADD HL,DE
+        CALL .ADV
         CP 1
         JR NZ,.NOT_OPEN
         INC B
@@ -427,10 +340,17 @@ DO_FORM:
         DJNZ .NESTED
         RET
 
+; Advance HL over one four-byte event.
+.ADV:
+        INC HL
+        INC HL
+        INC HL
+        INC HL
+        RET
+
 DO_NAME:  DB "do loop"
 DO_FROM:  DW 0                     ; The captured form's events.
 DO_START: DW 0                     ; The rewritten events.
-DO_P:     DW 0                     ; A cursor in the captured events.
 DO_VAR:   DW 0                     ; The current binding's variable event.
 DO_VARS:  DB 0                     ; Bindings, and steps still to emit.
 DO_IF:    DW 0                     ; Symbol references used by the rewrite.

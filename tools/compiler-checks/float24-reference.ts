@@ -263,7 +263,8 @@ export function sqrt(bits: number): number {
   if (x.negative) return NAN;
   // sqrt(num/den) with den a power of two: scale to an even power, take
   // an integer root with plenty of extra bits and round once.
-  let num = x.num, den = x.den;
+  let num = x.num;
+  const den = x.den;
   const shift = 120n;
   num <<= shift;
   let k = BigInt(bitLength(den) - 1) + shift; // value = num / 2^k
