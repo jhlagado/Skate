@@ -25,7 +25,7 @@ The built-in procedures are:
 | --- | --- |
 | Pairs and lists | `cons` `car` `cdr` `set-car!` `set-cdr!` `list` `length` `append` `reverse` `list-tail` `list-ref` `memq` `member` `assq` `assoc` `list?` `pair?` `null?` |
 | Equivalence | `eq?` `eqv?` `equal?` |
-| Numbers | `+` `-` `*` `/` `quotient` `remainder` `modulo` `abs` `=` `<` `>` `<=` `>=` `zero?` `number?` `number->string` |
+| Numbers | `+` `-` `*` `/` `quotient` `remainder` `modulo` `abs` `=` `<` `>` `<=` `>=` `zero?` `number?` `number->string` `min` `max` `gcd` `lcm` `expt` `sqrt` `floor` `ceiling` `truncate` `round` `exact->inexact` `inexact->exact` `exact` `inexact` `even?` `odd?` `positive?` `negative?` `exact?` `inexact?` `integer?` |
 | Characters | `char=?` `char<?` `char>?` `char<=?` `char>=?` `char-upcase` `char-downcase` `char-alphabetic?` `char-numeric?` `char-whitespace?` `char->integer` `integer->char` `char?` |
 | Strings and symbols | `string` `string-length` `string-ref` `string-copy` `string-append` `substring` `string=?` `string<?` `string>?` `string<=?` `string>=?` `symbol->string` `string->symbol` `string?` `symbol?` |
 | Vectors | `vector` `make-vector` `vector-length` `vector-ref` `vector-set!` `vector?` |
@@ -124,8 +124,10 @@ bounds. Exceeding one stops compilation with `CAP` (a few report
 | Pending elements while building one quoted datum | 64 |
 | Distinct symbols | 320 |
 
-The runtime is loaded in one of three sizes: the core alone, the core and the
-standard procedures, or everything with the datum reader and file ports. The
+The runtime is loaded in one of four sizes: the core alone, the core and the
+standard procedures, those and the numeric procedures (`sqrt`, `expt`,
+`round` and the rest added with the 24-bit float), or everything with the
+datum reader and file ports. The
 compiler reads the source once before compiling it and loads the smallest
 runtime that covers the procedures it names, so a program that uses neither
 `read` nor files is about 3.6 KB smaller and one that also uses no standard

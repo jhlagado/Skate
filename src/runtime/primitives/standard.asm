@@ -41,6 +41,10 @@ STD_DISP:
         DW STD_MEMQ,STD_ASSQ,STD_MEMB,STD_ASSO,STD_PROP ; 83..87
         DW STD_UP,STD_DOWN,STD_ATOZ,STD_0TO9,STD_SPC    ; 88..92
         DW STD_SUBS                                     ; 93
+        DW STD_INEX,STD_EXAC,STD_FLOR,STD_CEIL,STD_TRNC ; 94..98
+        DW STD_ROND,STD_MIN,STD_MAX,STD_EVEN,STD_ODD    ; 99..103
+        DW STD_POS,STD_NEGP,STD_EXQ,STD_INXQ,STD_INTQ   ; 104..108
+        DW STD_GCD,STD_LCM,STD_EXPT,STD_SQRT            ; 109..112
 
 ; ---- Packet and result helpers --------------------------------------------
 
@@ -482,9 +486,12 @@ STD_NUM:
         LD A,1
         CALL PKT_NARG
         CALL PKT_ARG0
+        CP 9
+        JR Z,.FLOAT
         CP 3
         JP NZ,ERROR
         CALL NUM_TEXT              ; HL is the decimal text and B its length.
+.TEXT:
         LD A,B
         LD (STR_LEN),A
         LD (STD_PTR),HL
@@ -499,6 +506,35 @@ STD_NUM:
         LD B,0
         LDIR
         JP STR_RET
+; A float is spelled by the float printer into .BUF, with FLT_PUT pointed
+; at .APPEND for the duration.
+.FLOAT:
+        PUSH HL
+        LD HL,.APPEND
+        LD (FLT_PUT+1),HL
+        LD HL,.BUF
+        LD (.BUFP),HL
+        POP HL
+        CALL FLT_EMIT
+        LD HL,OUT_CHAR
+        LD (FLT_PUT+1),HL
+        LD HL,(.BUFP)
+        LD DE,.BUF
+        OR A
+        SBC HL,DE
+        LD B,L
+        EX DE,HL
+        JR .TEXT
+.APPEND:
+        PUSH HL
+        LD HL,(.BUFP)
+        LD (HL),A
+        INC HL
+        LD (.BUFP),HL
+        POP HL
+        RET
+.BUFP:  DW 0
+.BUF:   DS 84                      ; The longest float spelling is 81 bytes.
 
 ; ---- Arithmetic -----------------------------------------------------------
 

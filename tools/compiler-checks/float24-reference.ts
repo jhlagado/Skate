@@ -233,3 +233,55 @@ export function parse(text: string): number | null {
 export function hex(bits: number): string {
   return bits.toString(16).padStart(6, "0").toUpperCase() + "H";
 }
+
+/** Round a float to an integral float: floor, ceiling, truncate or round. */
+export function roundIntegral(
+  bits: number,
+  mode: "floor" | "ceiling" | "truncate" | "round",
+): number {
+  const x = decode(bits);
+  if (x.kind !== "finite") return x.kind === "nan" ? NAN : bits;
+  const q = x.num / x.den, r = x.num - q * x.den;
+  let n = q;
+  if (r !== 0n) {
+    if (mode === "floor" && x.negative) n += 1n;
+    if (mode === "ceiling" && !x.negative) n += 1n;
+    if (mode === "round") {
+      const twice = 2n * r;
+      if (twice > x.den || (twice === x.den && (q & 1n) === 1n)) n += 1n;
+    }
+  }
+  return n === 0n ? (x.negative ? SIGN : 0) : roundToFloat24(x.negative, n, 1n);
+}
+
+/** Correctly rounded square root; negative nonzero inputs give NaN. */
+export function sqrt(bits: number): number {
+  const x = decode(bits);
+  if (x.kind === "nan") return NAN;
+  if (x.kind === "inf") return x.negative ? NAN : bits;
+  if (x.num === 0n) return bits; // sqrt(-0) is -0.
+  if (x.negative) return NAN;
+  // sqrt(num/den) with den a power of two: scale to an even power, take
+  // an integer root with plenty of extra bits and round once.
+  let num = x.num, den = x.den;
+  const shift = 120n;
+  num <<= shift;
+  let k = BigInt(bitLength(den) - 1) + shift; // value = num / 2^k
+  if (k % 2n !== 0n) {
+    num <<= 1n;
+    k += 1n;
+  }
+  let root = 1n << BigInt(Math.ceil(bitLength(num) / 2));
+  for (;;) {
+    const next = (root + num / root) >> 1n;
+    if (next >= root) break;
+    root = next;
+  }
+  while (root * root > num) root -= 1n;
+  // root / 2^(k/2) is the root truncated; add a sticky half-ulp when inexact.
+  const exact = root * root === num;
+  const scale = 1n << (k / 2n);
+  return exact
+    ? roundToFloat24(false, root, scale)
+    : roundToFloat24(false, root * 2n + 1n, scale * 2n);
+}

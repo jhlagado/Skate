@@ -212,10 +212,10 @@ CMD_INIT:
         RET                       ; Return with all compiler state initialised.
 
 ; Read the whole source once before compiling it and choose the runtime prefix
-; to load: the core alone, the core and the standard-procedure module, or the
-; whole runtime with the I/O module.  A standard procedure or case needs the
-; standard module; read or a file opener needs the I/O module, which follows
-; it.  A source or syntax error selects the whole runtime; the compiling pass
+; to load: the core alone, then the standard-procedure module, the numeric
+; procedures and the I/O module, each following the one before.  A standard
+; procedure or case needs the standard module, a numeric procedure (kind 95
+; and up) the numeric module, and read or a file opener the whole runtime.  A source or syntax error selects the whole runtime; the compiling pass
 ; reports the error.  Symbols interned here are found again by that pass.
 .SCAN:
         LD HL,RT_CORE
@@ -240,8 +240,10 @@ CMD_INIT:
         CALL CMD_SAME
         JR Z,.STD
         CALL GLB_PRIM              ; A is the primitive kind, or zero.
+        CP 95
+        JR NC,.NUMS                ; Kinds 95 and up are numeric procedures.
         CP 61
-        JR NC,.STD                 ; Kinds 61 and up are standard procedures.
+        JR NC,.STD                 ; Kinds 61 to 94 are standard procedures.
         CP 54
         JR Z,.FULL                 ; read.
         CP 56
@@ -252,10 +254,20 @@ CMD_INIT:
         LD HL,RT_SIZE              ; Kinds 56..59 open files.
         LD (ST_RTLEN),HL
         JR .DONE
+.NUMS:
+        LD HL,RT_NUMS
+        JR .WIDEN
 .STD:
         LD HL,RT_STD
+.WIDEN:
+        LD DE,(ST_RTLEN)           ; Keep the larger prefix.
+        PUSH HL
+        OR A
+        SBC HL,DE
+        POP HL
+        JR C,.NEXT
         LD (ST_RTLEN),HL
-        JR .NEXT                   ; Keep looking for the I/O module.
+        JR .NEXT                   ; Keep looking for a larger module.
 .DONE:
         CALL SRC_END               ; The compiling pass opens the source again.
         LD HL,M_ERROR              ; A scan error must not select a diagnostic.

@@ -56,4 +56,4 @@ GLB_PRIM:
         XOR A                      ; Ordinary names receive no primitive mark.
         RET
 
-GLB_ROWS  EQU 93                ; Records in NAME_TAB.
+GLB_ROWS  EQU 114                ; Records in NAME_TAB.

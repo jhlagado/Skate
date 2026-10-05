@@ -7,6 +7,11 @@
 ; exact value, so reading it back gives the same float.  A subnormal needs
 ; 78 fractional places and at most 61 digits.
 
+; Every character goes through FLT_PUT, a jump that number->string points
+; at its own buffer while it formats a float.  It must keep BC, DE and HL.
+FLT_PUT:
+        JP OUT_CHAR
+
 ; Print the float A:CHL in a source-compatible decimal spelling.
 FLT_EMIT:
         LD A,C                      ; An all-ones exponent is infinity or NaN.
@@ -116,11 +121,11 @@ FLT_EMIT:
         JR .POINT
 .NO_INT:
         LD A,'0'
-        CALL OUT_CHAR
+        CALL FLT_PUT
         CALL .TOP
 .POINT:
         LD A,'.'
-        CALL OUT_CHAR
+        CALL FLT_PUT
         LD A,(.PLACES)
         OR A
         JR Z,.DOT_ZERO
@@ -128,22 +133,22 @@ FLT_EMIT:
         JP .REVERSE
 .DOT_ZERO:
         LD A,'0'                    ; An integer-valued float ends in .0.
-        JP OUT_CHAR
+        JP FLT_PUT
 .ZERO_PT:
         LD A,'.'
-        CALL OUT_CHAR
+        CALL FLT_PUT
         JR .DOT_ZERO
 ; A value below one: 0. then the zeroes between the point and the digits.
 .SMALL:
         NEG
         LD B,A
         LD A,'0'
-        CALL OUT_CHAR
+        CALL FLT_PUT
         LD A,'.'
-        CALL OUT_CHAR
+        CALL FLT_PUT
 .ZEROS:
         LD A,'0'
-        CALL OUT_CHAR
+        CALL FLT_PUT
         DJNZ .ZEROS
         CALL .TOP
         LD A,(.COUNT)
@@ -153,7 +158,7 @@ FLT_EMIT:
 .ZERO:
         CALL .MINUS
         LD A,'0'
-        CALL OUT_CHAR
+        CALL FLT_PUT
         JR .ZERO_PT
 
 ; Write a minus sign for a negative value.
@@ -162,7 +167,7 @@ FLT_EMIT:
         OR A
         RET Z
         LD A,'-'
-        JP OUT_CHAR
+        JP FLT_PUT
 
 ; Return HL at the most-significant live digit.
 .TOP:
@@ -180,7 +185,7 @@ FLT_EMIT:
 ; Write B digits from HL downward.
 .REVERSE:
         LD A,(HL)
-        CALL OUT_CHAR               ; OUT_CHAR keeps B and HL.
+        CALL FLT_PUT                ; FLT_PUT keeps B and HL.
         DEC HL
         DJNZ .REVERSE
         RET
@@ -241,7 +246,12 @@ FLT_EMIT:
         JR Z,.MESSAGE
         LD DE,.NEG_MSG
 .MESSAGE:
-        JP OUT_TEXT
+        LD A,(DE)                   ; Send a $-terminated spelling.
+        CP '$'
+        RET Z
+        CALL FLT_PUT
+        INC DE
+        JR .MESSAGE
 
 .NAN_MSG: DB "+nan.0$"
 .POS_MSG: DB "+inf.0$"
