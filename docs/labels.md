@@ -97,6 +97,6 @@ area, each byte-identical to the image before it. The commits that
 introduced the names are the record of what each old name became.
 
 The few labels `demote.ts` still reports are kept global on purpose:
-`CPM_REN` and `CPM_WIPE` are private in the runtime image but called across
-files in the compiler image; the `INC_` routines are separate routines with
-their own headers; `FRM_CELL` is currently unreferenced.
+`CPM_WIPE` is shared by `CPM_ERA` and `CPM_REN` in `src/compiler/cpm-names.asm`
+(the runtime no longer carries them), and the `INC_` routines are separate
+routines with their own headers.

@@ -1,5 +1,5 @@
 ; Scope runtime argument packets, slots and procedure returns.
-; Entry points: FRM_PACK, FRM_CELL, FRM_LOAD/FRM_INIT and FRM_RET.
+; Entry points: FRM_PACK, FRM_LOAD/FRM_INIT and FRM_RET.
 ; Included in runtime order by ../core.asm.
 
 ; Move the reverse-pushed argument values into ARG_PKT.  The callee remains
