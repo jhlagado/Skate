@@ -4,24 +4,6 @@
 ; remains separate from pair and literal output so each path has one clear
 ; responsibility and the main runtime module stays within the source limit.
 
-; Return #t for zero and #f for every other exact integer.
-NUM_ZERO:
-        CP 3                     ; The predicate is defined only for exact integers.
-        JP NZ,ERROR               ; Preserve the runtime type contract.
-        LD A,C                   ; Combine the three payload bytes for the zero test.
-        OR H
-        OR L                     ; Z means the exact integer is zero.
-        JR Z,.TRUE                ; Return canonical true for zero.
-        XOR A                    ; Tag zero identifies a boolean value.
-        LD C,A
-        LD HL,0FE00H             ; #f has the reserved false payload.
-        RET                      ; Return the false predicate result.
-.TRUE:
-        XOR A                    ; Tag zero identifies a boolean value.
-        LD C,A
-        LD HL,0FE01H             ; #t has the reserved true payload.
-        RET                      ; Return the true predicate result.
-
 ; Dispatch the final value printer.  Pair and literal values use the compact
 ; writer; the established decimal path remains for exact integers.
 OUT_SHOW:

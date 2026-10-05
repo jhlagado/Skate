@@ -284,3 +284,10 @@ Each step keeps every existing proof passing with unchanged results.
    bit-exact host reference, and `tests/compiler-checks/float24_test.ts`
    checks the runtime against it. The runtime came out 41 bytes smaller
    than with binary16 (24,165 bytes).
+
+After the four steps, removing routines nothing called any more (the old
+inline arithmetic helpers, the direct `cons`/`car`/`cdr`/`pair?`/`null?`
+entries, `NUM_ZERO`, `FRM_CELL` and the conservative scanner `GC_SCAN`) and
+moving the compiler-only delete and rename out of the shared CP/M transport
+brought the runtime to 23,823 bytes and the core to 18,325, below where the
+migration started. A core-only program again keeps 2,720 live pairs.

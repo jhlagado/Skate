@@ -248,38 +248,6 @@ GC_PAIRS:
         DJNZ .SLAB
         RET
 
-; Scan a half-open byte range for the three-byte pattern payload,tag-one.
-; The cursor may stop at end-3, but never at either of the two positions
-; whose payload or tag byte would lie beyond the declared range.
-GC_SCAN:
-        LD (GC_SCANP),HL
-        LD (GC_LIMIT),DE
-.LOOP:
-        LD HL,(GC_SCANP)
-        LD DE,(GC_LIMIT)
-        LD BC,2
-        ADD HL,BC
-        OR A
-        SBC HL,DE
-        JR NC,.DONE
-        LD HL,(GC_SCANP)
-        LD E,(HL)
-        INC HL
-        LD D,(HL)
-        INC HL
-        LD A,(HL)
-        CP 1
-        JR NZ,.NEXT
-        EX DE,HL
-        CALL GC_MARK
-.NEXT:
-        LD HL,(GC_SCANP)
-        INC HL
-        LD (GC_SCANP),HL
-        JR .LOOP
-.DONE:
-        RET
-
 ; Mark one pair and queue it for child scanning.
 GC_MARK:
         LD A,1                      ; Validate the candidate as a pair value.

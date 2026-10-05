@@ -63,9 +63,9 @@ if (Deno.args.includes("--data")) {
 }
 
 // Pin the live-pair ceiling of four-byte pair cells.  This program loads only
-// the core runtime and keeps 2,688 pairs (84 full 32-record pair pages) live;
+// the core runtime and keeps 2,720 pairs (85 full 32-record pair pages) live;
 // one more pair must stop with RUNTIME ERROR rather than corrupt the heap.
-const livePairCeiling = 2688;
+const livePairCeiling = 2720;
 function livePairSource(count) {
   return `(define build (lambda (n acc) (if (zero? n) acc (build (- n 1) (cons n acc))))) (define len (lambda (l n) (if (null? l) n (len (cdr l) (+ n 1))))) (define keep (build ${count} '())) (begin (write (len keep 0)) (newline))`;
 }

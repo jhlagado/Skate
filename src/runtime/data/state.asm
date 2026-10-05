@@ -95,8 +95,6 @@ BND_MASK:  DB 0                 ; Binding bitmap bit during sweep.
 GC_QTOP:  DW RT_GCLO
 GC_OVER: DB 0                     ; Nonzero means the bounded mark queue filled.
 GC_FOUND:  DB 0                   ; Nonzero means a fallback pass marked an object.
-GC_SCANP:   DW 0
-GC_LIMIT:   DW 0
 GC_QPAIR:  DW 0
 .TAG:  DB 0
 .WR_PTR:   DW 0

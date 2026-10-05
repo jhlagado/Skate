@@ -2,7 +2,6 @@
 ; These definitions remain after output code to preserve the image layout.
 RT_TAG:  DB 0                 ; Original tag retained by RT_TEST.
 RT_BOOL:      DB 0                 ; Branch decision retained while restoring A.
-RT_OP:        DB 0                 ; Selected checked arithmetic operation.
 PRIM_ID:       DB 0                ; Predefined primitive kind for the active call.
 ARG_CNT:      DB 0                 ; Number of values in the current call packet.
 REST_ON:     DB 0                  ; High-bit policy for the active procedure.

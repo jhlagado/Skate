@@ -115,36 +115,6 @@ function callRoutine(
   return runEntry(assembled, label, memory, cpu, () => {}, undefined, limit);
 }
 
-Deno.test("direct cons preserves both scalar inputs through collection", async () => {
-  const assembled = await loadAssembly(
-    "src/runtime/image.asm",
-  );
-  const memory = assembled.runtime.hardware.memory;
-  const cpu = assembled.runtime.cpu as CpuState;
-  const pairPage = initialiseSinglePairPage(assembled, memory, cpu);
-  const result = runEntry(
-    assembled,
-    "CONS",
-    memory,
-    cpu,
-    () => {
-      writeWord(memory, 0xdff2, 0x5678);
-      writeWord(memory, 0xdff4, 0x0300);
-      writeWord(memory, 0xdff6, 0x1234);
-      writeWord(memory, 0xdff8, 0x0300);
-    },
-    () => fillSinglePairPage(assembled, memory, pairPage),
-  );
-  assert.equal(result.gcCount, 1);
-  assert.equal(result.forcedCount, 1);
-  assert.equal(result.sp, 0xdffa);
-  assert.equal(result.carry, 0);
-  assert.equal(readWord(memory, result.payload), 0x1234);
-  assert.equal(readWord(memory, result.payload + CDR_PAYLOAD), 0x5678);
-  assert.equal(memory[result.payload + CAR_META], 0x43);
-  assert.equal(memory[result.payload + CDR_META], 3);
-});
-
 Deno.test("packet cons preserves both scalar inputs through collection", async () => {
   const assembled = await loadAssembly(
     "src/runtime/image.asm",

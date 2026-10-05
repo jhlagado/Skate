@@ -123,30 +123,6 @@ Deno.test("collector preserves an edge missed by a full worklist", async () => {
   assert.equal(result.memory[result.orphan + CAR_META], 0);
 });
 
-Deno.test("collector does not read past a root scan interval", async () => {
-  const assembled = await loadAssembly(
-    "src/runtime/image.asm",
-  );
-  const memory = assembled.runtime.hardware.memory;
-  const cpu = assembled.runtime.cpu;
-  memory[0xa000] = 1;
-  writeWord(memory, 0x9ffe, 0xa000);
-  cpu.h = 0x9f;
-  cpu.l = 0xfe;
-  cpu.d = 0xa0;
-  cpu.e = 0;
-  cpu.pc = assembled.address("GC_SCAN");
-  cpu.sp = 0xdff0;
-  writeWord(memory, cpu.sp, 0xef00);
-  let steps = 0;
-  while (cpu.pc !== 0xef00) {
-    assert.ok(++steps < 10_000_000, "collector did not return");
-    assembled.runtime.step();
-  }
-  assert.equal(cpu.sp, 0xdff2);
-  assert.equal(memory[0xa000], 1, "scan read beyond the A000 boundary");
-});
-
 Deno.test("pair allocator follows free chains across a second slab", async () => {
   const assembled = await loadAssembly(
     "src/runtime/image.asm",

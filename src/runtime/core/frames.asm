@@ -46,26 +46,6 @@ FRM_PACK:
         PUSH IX                  ; Restore the FRM_PACK call return.
         RET                      ; The caller selects closure or primitive dispatch.
 
-; Convert a logical slot number in A into its shared cell pointer.
-FRM_CELL:
-        LD L,A                    ; Widen the zero-based slot index.
-        LD H,0
-        ADD HL,HL                 ; Two bytes hold each cell pointer.
-        LD DE,(ENV_CUR)
-        ADD HL,DE
-        LD E,(HL)                 ; Recover the cell pointer low byte.
-        INC HL
-        LD D,(HL)                 ; Recover the cell pointer high byte.
-        EX DE,HL
-        LD A,H                    ; A null pointer denotes an unbound slot.
-        OR L
-        JR NZ,.OK
-        SCF
-        RET
-.OK:
-        XOR A                     ; Carry clear reports a valid cell pointer.
-        RET
-
 ; Load a procedure-local value through its current activation map.
 FRM_LOAD:
         JP SLOT_GET                ; A contains the compiler-emitted slot index.

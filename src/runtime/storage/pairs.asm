@@ -1,28 +1,9 @@
-; Construct a pair from the two scratch values used by both cons and lists.
+; Pair slabs.
 ;
 ; The class table stores one three-byte descriptor per slab: page number, next
 ; available-slab index and free-record head offset.  A free record's two CAR
 ; bytes hold the next free offset, with FFH as the end marker.  These links are
 ; never visible after the allocation bit is published.
-CONS:
-        POP IX                     ; Preserve the generated continuation.
-        POP DE                     ; Recover the CDR payload.
-        POP BC                     ; Recover the CDR tag in B, byte 2 in C.
-        LD (QT_CDR),DE
-        LD A,B
-        LD (QT_DTAG),A
-        LD A,C
-        LD (QT_DEXT),A
-        POP HL                     ; Recover the CAR payload.
-        POP BC                     ; Recover the CAR tag and byte 2.
-        LD (QT_CAR),HL
-        LD A,B
-        LD (QT_CTAG),A
-        LD A,C
-        LD (QT_CEXT),A
-        CALL PAIR_NEW
-        PUSH IX
-        RET
 
 ; Initialise the pair class and reserve its first managed page.
 PAIR_INI:
@@ -362,16 +343,7 @@ PAIR_GET:
         SCF
         RET
 
-; car and cdr selectors.
-CAR:
-        POP IX
-        POP HL
-        POP AF
-        CALL PAIR_CAR
-        JP C,ERROR
-        PUSH IX
-        RET
-
+; Read the CAR or CDR of the pair A:HL into A:CHL; carry reports a non-pair.
 PAIR_CAR:
         LD (QT_ACC),HL
         LD (QT_ATAG),A
@@ -390,15 +362,6 @@ PAIR_CAR:
         OR A                       ; Pair access reports success with carry clear.
         EX DE,HL
         RET
-CDR:
-        POP IX
-        POP HL
-        POP AF
-        CALL PAIR_CDR
-        JP C,ERROR
-        PUSH IX
-        RET
-
 PAIR_CDR:
         LD (QT_ACC),HL
         LD (QT_ATAG),A
@@ -420,36 +383,10 @@ PAIR_CDR:
         EX DE,HL
         RET
 
-; Return booleans for pair? and null?.
-PAIR_IS:
-        POP IX
-        POP HL
-        POP AF
-        CALL PAIR_CHK
-        JR C,PAIR_NO
-        XOR A
-        LD C,A
-        LD HL,0FE01H
-        PUSH IX
-        RET
+; Return #f to the primitive continuation.
 PAIR_NO:
         XOR A
         LD C,A
         LD HL,0FE00H
-        PUSH IX
-        RET
-PAIR_NIL:
-        POP IX
-        POP HL
-        POP AF
-        OR A
-        JR NZ,PAIR_NO
-        LD DE,0FE02H
-        OR A
-        SBC HL,DE
-        JR NZ,PAIR_NO
-        XOR A
-        LD C,A
-        LD HL,0FE01H
         PUSH IX
         RET
