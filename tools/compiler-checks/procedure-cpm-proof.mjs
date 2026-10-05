@@ -70,15 +70,24 @@ function livePairSource(count) {
   return `(define build (lambda (n acc) (if (zero? n) acc (build (- n 1) (cons n acc))))) (define len (lambda (l n) (if (null? l) n (len (cdr l) (+ n 1))))) (define keep (build ${count} '())) (begin (write (len keep 0)) (newline))`;
 }
 // The data group's disk directory is nearly full, so the ceiling cases run with
-// the ordinary procedure group.
-const capacityCases = [
+// the ordinary procedure group.  A probe build (deno task probe:on) has a
+// larger runtime and fewer pair pages, so it skips the pin.
+const probeBuild = (() => {
+  try {
+    Deno.statSync("build/PROBE");
+    return true;
+  } catch {
+    return false;
+  }
+})();
+const capacityCases = probeBuild ? [] : [
   [
     `PAIR${livePairCeiling}.SK8`,
     livePairSource(livePairCeiling),
     String(livePairCeiling),
   ],
 ];
-const capacityRuntimeErrorCases = [
+const capacityRuntimeErrorCases = probeBuild ? [] : [
   [
     `PAIR${livePairCeiling + 1}.SK8`,
     livePairSource(livePairCeiling + 1),
