@@ -1,8 +1,12 @@
 ; Native lexer booleans and character literals.
 ; Entry points: LX_HASH, .CLASSIFY, .NAMED and .BOOL.
-; Hash tokens are booleans or byte characters; other Scheme extensions reject.
+; Hash tokens are booleans, byte characters or the vector opening #( (kind
+; 11); other Scheme extensions reject.
 LX_HASH:  CALL LX_TAKE       ; Consume the next hash-selector or character byte.
         JP C,LX_BAD      ; The hash or character prefix requires another source byte.
+        CP 40            ; #( opens a vector literal.
+        LD B,11
+        JP Z,LX_PUNCT
         CP 116           ; Lowercase t selects the true singleton.
         LD HL,0FE01H     ; Prepare the true scalar payload without changing Z.
         JP Z,.BOOL         ; Require a delimiter before returning this boolean.

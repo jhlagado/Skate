@@ -729,6 +729,29 @@ const integerRuntimeErrorCases = [
 // references from procedures, formal shadowing, if nesting capacity and
 // control bytes inside tokens.
 const regressionCases = [
+  // Vector literals are self-evaluating quoted data, alone, quoted, nested
+  // in lists and vectors, empty, at the 63-element quoted-datum limit, as
+  // case results and under equal?.
+  [
+    "VECLIT.SK8",
+    `(write #(1 2 3))
+(newline)
+(write '#(a "b" #\\c 1.5 -70000))
+(newline)
+(write '(1 #(2 (3)) #()))
+(newline)
+(write (vector-ref #(#(1 2) #(3 4)) 1))
+(newline)
+(write (vector-length '#(0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62)))
+(newline)
+(define (f) #(9 8))
+(write (eq? (f) (f)))
+(write (equal? #(1 (2)) (vector 1 (list 2))))
+(newline)
+(write (case 2 ((1) #(one)) ((2) #(two))))
+(newline)`,
+    '#(1 2 3)\r\n#(a "b" #\\c 1.5 -70000)\r\n(1 #(2 (3)) #())\r\n#(3 4)\r\n63\r\n#t#t\r\n#(two)',
+  ],
   // do loops are rewritten to named lets: results, missing steps and
   // results, nesting, a do as a body's first form, and constant-stack loops.
   [
@@ -810,6 +833,7 @@ const regressionCases = [
   ],
 ];
 const regressionErrorCases = [
+  ["VECDOT.SK8", "(write '#(1 . 2))", "COMPILE ERROR\r\n"],
   ["IF33.SK8", "(if #t ".repeat(33) + "1" + " 2)".repeat(33), "CAP\r\n"],
   ["CTLTOKEN.SK8", "(quote ab\x01c)", "COMPILE ERROR\r\n"],
   ["NULTOKEN.SK8", "(write +inf.0\x00-inf.0)", "COMPILE ERROR\r\n"],

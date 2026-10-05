@@ -3,7 +3,8 @@
 ; RD_NEXT: A = event kind; RD_TAG:CHL carries value events (C is byte 2 of an
 ; exact integer and zero otherwise); carry reports an error.
 ; EOF and errors remain terminal until RD_INIT. Events are EOF, list open/close,
-; quote, dot, symbol, scalar and string (0, 1, 2, 3, 4, 5, 7 and 8).
+; quote, dot, symbol, scalar, string and vector open (0, 1, 2, 3, 4, 5, 7, 8
+; and 11).
 ; Error codes 128..133 identify syntax, capacity, integer range, encoding,
 ; source-position and protocol failures. IX/IY are preserved and SP is balanced.
 ; The symbol and string contexts must already be initialised, disjoint, and
@@ -58,6 +59,8 @@ RD_NEXT:
     LD A,(RD_EVENT)         ; Recover the kind after the parent-state check.
     CP 1                    ; Opening a list adds a new structural frame.
     JR Z,.OPEN                 ; Push an empty-list frame.
+    CP 11                   ; #( opens a vector frame, which takes no dot.
+    JR Z,.VECTOR
     CP 3                    ; Apostrophe needs exactly one following datum.
     JR Z,.QUOTE               ; Push a pending quote frame.
     CP 6                    ; Numeric tokens still need exact conversion.
@@ -122,6 +125,9 @@ RD_NEXT:
 .OPEN:
     XOR A                   ; A newly opened list contains no completed datum.
     JR .PUSH                   ; Push its state on the bounded structure stack.
+.VECTOR:
+    LD A,40H                ; A vector frame keeps this state to its close.
+    JR .PUSH
 .QUOTE:
     LD A,80H                ; A quote prefix waits for one complete datum.
 .PUSH:
@@ -187,6 +193,8 @@ RD_DATUM:
 .PARENT:
     CP 0FFH                 ; No parent means one top-level datum is complete.
     RET Z                   ; No structure is retained between top-level datums.
+    CP 40H                  ; A vector frame never becomes a dotted list.
+    RET Z
     CP 3                    ; Is this the required dotted-tail datum?
     LD A,1                  ; Default to an ordinary nonempty-list state.
     JR NZ,.STORE            ; Ordinary elements only set the has-element state.

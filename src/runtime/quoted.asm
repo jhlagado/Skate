@@ -20,6 +20,7 @@
 ;     07 lo hi           a string literal
 ;     08 lo hi ext       an exact integer with three payload bytes
 ;     09 lo hi ext       a float with three payload bytes
+;     0A values... 02    a vector
 
 QUO_LIST  EQU 1
 QUO_END   EQU 2
@@ -28,6 +29,7 @@ QUO_IMM   EQU 4
 QUO_BYTE  EQU 5
 QUO_INT   EQU 8
 QUO_FLT   EQU 9
+QUO_VEC   EQU 0AH
 
 QT_BUILD:
         POP HL                     ; The cache word follows the CALL.
@@ -67,6 +69,8 @@ QT_BUILD:
         JR Z,.INT
         CP QUO_FLT
         JR Z,.FLT
+        CP QUO_VEC
+        JR Z,.VECTOR
         SUB 2                      ; Codes 6 and 7 are tags 4 and 5.
         LD E,(HL)
         INC HL
@@ -134,5 +138,51 @@ QT_BUILD:
         LD A,B
         LD B,C
         JP QT_FOLD
+
+; Push each element, allocate the vector while they are roots, then move
+; them into its cells.
+.VECTOR:
+        LD B,0                     ; Elements pushed so far.
+.V_ITEM:
+        LD HL,(.PTR)
+        LD A,(HL)
+        CP QUO_END
+        JR Z,.V_BUILD
+        PUSH BC
+        CALL .VALUE
+        CALL QT_PUSH
+        POP BC
+        INC B
+        JR .V_ITEM
+.V_BUILD:
+        INC HL                     ; Past the end code.
+        LD (.PTR),HL
+        LD A,B
+        LD (VEC_REQ),A
+        CALL VEC_NEW               ; May collect; the elements are QT roots.
+        JP C,ERROR
+        LD A,(VEC_REQ)
+        LD (HL),A                  ; The length byte.
+        INC HL
+        EX DE,HL                   ; DE is the first cell.
+        LD L,A                     ; The elements are the top A records.
+        LD H,0
+        ADD HL,HL
+        ADD HL,HL
+        LD B,H
+        LD C,L
+        LD HL,(QT_SP)
+        OR A
+        SBC HL,BC
+        LD (QT_SP),HL              ; Pop them,
+        LD A,B
+        OR C
+        JR Z,.V_DONE
+        LDIR                       ; and copy them in order.
+.V_DONE:
+        LD HL,(VEC_OBJ)
+        LD C,0
+        LD A,7
+        RET
 
 .PTR: DW 0                         ; Next encoding byte.

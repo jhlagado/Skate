@@ -99,8 +99,8 @@ The compiler writes a checked `.COM` program for use from a CP/M prompt. Any
 intermediate publication data is an implementation detail of the build.
 
 Skate deliberately leaves general macros and quasiquote, reusable
-continuations and `eval` outside this small core. Quoted vector literals are
-not supported; use `vector`. File names currently use
+continuations and `eval` outside this small core. Vector literals
+(`#(1 2 3)`) are self-evaluating constants. File names currently use
 current-drive CP/M 8.3 spelling; append, seeking and multiple handles per
 direction are not implemented. `libraries/io.sk8` provides line input, line
 output, prompting and stream copying with explicit ports.

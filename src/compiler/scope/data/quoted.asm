@@ -16,6 +16,7 @@ QUO_IMM   EQU 4
 QUO_BYTE  EQU 5
 QUO_INT   EQU 8
 QUO_FLT   EQU 9
+QUO_VEC   EQU 0AH
 
 ; Compile the explicit (quote datum) form.
 QUO_FORM:
@@ -123,6 +124,8 @@ QUO_DATA:
         JP Z,.STRING
         CP 1                       ; An opening parenthesis starts a data list.
         JP Z,.LIST
+        CP 11                      ; #( starts a vector.
+        JP Z,.VECTOR
         CP 3                       ; Quoted shorthand inside data is a pair.
         JP Z,QUO_NEST              ; Construct (quote datum) without collapsing it.
         JP ERR_BAD                 ; Close, dot and EOF are invalid datum starts.
@@ -311,6 +314,51 @@ QUO_DATA:
         OR A                       ; POP AF restored stale flags.
         RET
 .FAIL:
+        POP AF
+        LD (QUO_LEN),A
+        SCF
+        RET
+
+; Encode a vector: code 10, its elements, code 2.  An outermost vector opens
+; and closes its own encoding.
+.VECTOR:
+        LD A,(QUO_ENC)
+        OR A
+        JR NZ,.VEC_BODY
+        CALL QUO_HEAD
+        RET C
+        CALL .VEC_BODY
+        RET C
+        JP QUO_FOOT
+.VEC_BODY:
+        LD A,(QUO_LEN)             ; Keep the enclosing list's element count.
+        PUSH AF
+        XOR A
+        LD (QUO_LEN),A
+        LD A,QUO_VEC
+        CALL SINK_PUT
+        JR C,.VEC_FAIL
+.VEC_NEXT:
+        CALL REC_NEXT
+        JR C,.VEC_FAIL
+        CP 2
+        JR Z,.VEC_END
+        CP 4                       ; The reader already rejects a dot here.
+        JR Z,.VEC_FAIL
+        OR A
+        JR Z,.VEC_FAIL
+        CALL .ELEMENT
+        JR C,.VEC_FAIL
+        JR .VEC_NEXT
+.VEC_END:
+        LD A,QUO_END
+        CALL SINK_PUT
+        JR C,.VEC_FAIL
+        POP AF
+        LD (QUO_LEN),A
+        OR A
+        RET
+.VEC_FAIL:
         POP AF
         LD (QUO_LEN),A
         SCF

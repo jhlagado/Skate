@@ -322,6 +322,8 @@ CMD_EXPR:
         JR Z,CMD_NUM               ; Emit an exact integer literal.
         CP 87H                     ; Float source literals carry a replay marker.
         JP Z,EM_FLOAT              ; Emit their tag-zero payload unchanged.
+        CP 11                      ; A vector literal evaluates to itself.
+        JP Z,QUO_DATA
         CP 5                       ; Symbol events carry an interned reference.
         JR Z,CMD_REF               ; Resolve a local or package-global slot.
         CP 8                       ; String events become copied immutable literals.
