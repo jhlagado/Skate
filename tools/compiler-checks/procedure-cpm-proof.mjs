@@ -729,6 +729,27 @@ const integerRuntimeErrorCases = [
 // references from procedures, formal shadowing, if nesting capacity and
 // control bytes inside tokens.
 const regressionCases = [
+  // do loops are rewritten to named lets: results, missing steps and
+  // results, nesting, a do as a body's first form, and constant-stack loops.
+  [
+    "DOLOOPS.SK8",
+    `(write (do ((i 0 (+ i 1)) (acc '() (cons i acc))) ((= i 5) acc)))
+(newline)
+(write (do ((vec (make-vector 5)) (i 0 (+ i 1))) ((= i 5) vec) (vector-set! vec i i)))
+(newline)
+(write (let ((x '(1 3 5 7 9))) (do ((x x (cdr x)) (sum 0 (+ sum (car x)))) ((null? x) sum))))
+(newline)
+(define (count n) (do ((i 0 (+ i 1))) ((= i n)) (display i)))
+(count 3)
+(newline)
+(write (do ((i 0 (+ i 1))) ((= i 3) (display "done") 'end)))
+(newline)
+(write (do ((i 0 (+ i 1)) (j 10)) ((= i 2) (list i j)) (do ((k 0 (+ k 1))) ((= k 2)) (display k))))
+(newline)
+(write (do ((i 0 (+ i 1)) (s 0 (+ s i))) ((= i 3000) s)))
+(newline)`,
+    "(4 3 2 1 0)\r\n#(0 1 2 3 4)\r\n25\r\n012\r\ndoneend\r\n0101(2 10)\r\n4498500",
+  ],
   // A nested procedure body must not overwrite the enclosing body's pending
   // tail-call records: a non-final named let or a lambda after a tail call
   // once returned from the enclosing procedure.

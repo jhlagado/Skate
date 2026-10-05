@@ -6,3 +6,4 @@
 %INCLUDE "command/forms.asm"
 %INCLUDE "command/conditionals.asm"
 %INCLUDE "command/body.asm"
+%INCLUDE "command/do.asm"

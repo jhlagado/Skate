@@ -52,6 +52,9 @@ CMD_FORM:
         LD DE,K_CASE
         CALL CMD_SAME
         JP Z,IF_CASE
+        LD DE,K_DO                 ; do is rewritten to a named let.
+        CALL CMD_SAME
+        JP Z,DO_FORM
         LD DE,K_AND                ; Compare with the short-circuit conjunction.
         CALL CMD_SAME              ; The two operands are evaluated left to right.
         JP Z,IF_AND                ; Preserve the first false value.

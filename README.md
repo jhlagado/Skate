@@ -9,7 +9,7 @@ a 64K machine, with a native compiler, a compact runtime and CP/M disk tools.
 The current source supports exact signed 24-bit integers, 24-bit floats
 numbers, booleans, byte characters, symbols, strings, quoted data, pairs,
 lists and vectors. It provides lexical `let`, `let*`, `letrec` and named
-`let`, `if`, `begin`, `cond`, `case`, `when`, `unless`, `and`, `or`, `set!`,
+`let`, `do`, `if`, `begin`, `cond`, `case`, `when`, `unless`, `and`, `or`, `set!`,
 fixed-arity procedures, dotted rest parameters, bounded `apply`, closures,
 internal definitions, proper tail calls and one-shot `call/ec`. Standard input,
 output and error ports support character and datum I/O. Sequential text and
@@ -99,8 +99,8 @@ The compiler writes a checked `.COM` program for use from a CP/M prompt. Any
 intermediate publication data is an implementation detail of the build.
 
 Skate deliberately leaves general macros and quasiquote, reusable
-continuations and `eval` outside this small core. `do` loops and quoted vector
-literals are not supported; use named `let` and `vector`. File names currently use
+continuations and `eval` outside this small core. Quoted vector literals are
+not supported; use `vector`. File names currently use
 current-drive CP/M 8.3 spelling; append, seeking and multiple handles per
 direction are not implemented. `libraries/io.sk8` provides line input, line
 output, prompting and stream copying with explicit ports.

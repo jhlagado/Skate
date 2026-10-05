@@ -64,12 +64,13 @@ W_TAIL_N   EQU 64                 ; Tail candidates per body expression scope.
 W_CONDS   EQU 0CC00H             ; End-jump patches for cond clauses.
 W_CBASES  EQU 0CD00H             ; Saved cond patch-table bases by nesting depth.
 W_CTOPS  EQU 0CD20H              ; Saved cond patch counts by nesting depth.
-; Literal records and bytes use the compiler-only band below the private stack.
-W_LITREC EQU 0D140H               ; Four bytes per copied symbol or string.
-W_LITBUF EQU 0D240H             ; One kilobyte of literal spelling storage.
-W_LITOUT EQU 0D640H               ; Staged output address for each literal record.
+; Literal records and bytes use the compiler-only band after the replay
+; frames, and the replay event buffer (REC_BUF) follows them to W_REPEND.
+W_LITREC EQU 0CF00H               ; Four bytes per copied symbol or string.
+W_LITBUF EQU 0D000H             ; One kilobyte of literal spelling storage.
+W_LITOUT EQU 0D400H               ; Staged output address for each literal record.
 W_LITCAP EQU W_LITOUT-W_LITBUF   ; Capacity check for copied literal spellings.
-W_LITEND EQU 0D740H               ; End of the fixed compiler workspace.
+W_LITEND EQU 0D500H               ; End of the fixed compiler workspace.
 W_END   EQU W_REPEND              ; Replay workspace ends at the guarded-stack floor.
 
 ; Compiler entry and terminal paths.
