@@ -23,7 +23,7 @@ The built-in procedures are:
 
 | Group | Procedures |
 | --- | --- |
-| Pairs and lists | `cons` `car` `cdr` `set-car!` `set-cdr!` `list` `length` `append` `reverse` `list-tail` `list-ref` `memq` `member` `assq` `assoc` `list?` `pair?` `null?` |
+| Pairs and lists | `cons` `car` `cdr` `caar` … `cdddr` (two and three levels) `set-car!` `set-cdr!` `list` `length` `append` `reverse` `list-tail` `list-ref` `memq` `memv` `member` `assq` `assv` `assoc` `list?` `pair?` `null?` |
 | Equivalence | `eq?` `eqv?` `equal?` |
 | Numbers | `+` `-` `*` `/` `quotient` `remainder` `modulo` `abs` `=` `<` `>` `<=` `>=` `zero?` `number?` `number->string` `min` `max` `gcd` `lcm` `expt` `sqrt` `floor` `ceiling` `truncate` `round` `exact->inexact` `inexact->exact` `exact` `inexact` `even?` `odd?` `positive?` `negative?` `exact?` `inexact?` `integer?` |
 | Characters | `char=?` `char<?` `char>?` `char<=?` `char>=?` `char-upcase` `char-downcase` `char-alphabetic?` `char-numeric?` `char-whitespace?` `char->integer` `integer->char` `char?` |

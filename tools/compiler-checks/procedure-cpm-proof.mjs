@@ -708,6 +708,7 @@ integerCases.push([
   ].join("\r\n"),
 ]);
 const integerRuntimeErrorCases = [
+  ["CXRBAD.SK8", "(cadr '(1))", "RUNTIME ERROR\r\n"],
   ["INTDIV0.SK8", "(quotient 7 0)", "RUNTIME ERROR\r\n"],
   ["INTREM0.SK8", "(remainder 7 0)", "RUNTIME ERROR\r\n"],
   ["INTTYPE.SK8", "(+ 1 #t)", "RUNTIME ERROR\r\n"],
@@ -729,6 +730,20 @@ const integerRuntimeErrorCases = [
 // references from procedures, formal shadowing, if nesting capacity and
 // control bytes inside tokens.
 const regressionCases = [
+  // caar through cdddr, and memv and assv as the eqv? forms of memq and assq.
+  [
+    "CXR.SK8",
+    `(define x '((1 2) (3 4 5) 6 7))
+(write (list (caar x) (cadr x) (cdar x) (cddr x)))
+(newline)
+(write (list (caadr x) (caddr x) (cdadr x) (cdddr x)))
+(newline)
+(write (list (caaar '(((a)))) (cadar '((a b))) (cdaar '(((a b)))) (cddar '((a b c)))))
+(newline)
+(write (list (memv 70000 '(1 70000 3)) (assv 2 '((1 . a) (2 . b))) (memv 9 '(1))))
+(newline)`,
+    "(1 (3 4 5) (2) (6 7))\r\n(3 6 (4 5) (7))\r\n(a b (b) (c))\r\n((70000 3) (2 . b) #f)",
+  ],
   // Vector literals are self-evaluating quoted data, alone, quoted, nested
   // in lists and vectors, empty, at the 63-element quoted-datum limit, as
   // case results and under equal?.

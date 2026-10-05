@@ -45,6 +45,9 @@ STD_DISP:
         DW STD_ROND,STD_MIN,STD_MAX,STD_EVEN,STD_ODD    ; 99..103
         DW STD_POS,STD_NEGP,STD_EXQ,STD_INXQ,STD_INTQ   ; 104..108
         DW STD_GCD,STD_LCM,STD_EXPT,STD_SQRT            ; 109..112
+        DW STD_CXR,STD_CXR,STD_CXR,STD_CXR,STD_CXR      ; 113..117 c[ad]{2,3}r
+        DW STD_CXR,STD_CXR,STD_CXR,STD_CXR,STD_CXR      ; 118..122
+        DW STD_CXR,STD_CXR                              ; 123..124
 
 ; ---- Packet and result helpers --------------------------------------------
 
@@ -845,6 +848,52 @@ OPS_GET:
         AND 0FH
         EX DE,HL
         RET
+
+; caar through cdddr: each table byte holds the number of steps in its high
+; nibble and, from bit 0, a 1 for each cdr step in the order applied.
+STD_CXR:
+        LD A,(PRIM_ID)
+        SUB 113
+        LD E,A
+        LD D,0
+        LD HL,.STEPS
+        ADD HL,DE
+        LD A,(HL)
+        LD B,A
+        AND 0FH
+        LD (STD_MODE),A            ; The cdr bits, next step lowest.
+        LD A,B
+        RRCA
+        RRCA
+        RRCA
+        RRCA
+        AND 0FH
+        LD (STD_CNT),A             ; The number of steps.
+        LD A,1
+        CALL PKT_NARG
+        CALL PKT_ARG0
+.STEP:
+        LD B,A
+        LD A,(STD_MODE)
+        RRA                        ; The next step's bit leaves in carry.
+        LD (STD_MODE),A
+        LD A,B
+        JR C,.CDR
+        CALL PAIR_CAR
+        JR .TAKEN
+.CDR:
+        CALL PAIR_CDR
+.TAKEN:
+        JP C,ERROR
+        LD B,A
+        LD A,(STD_CNT)
+        DEC A
+        LD (STD_CNT),A
+        LD A,B
+        JR NZ,.STEP
+        PUSH IX
+        RET
+.STEPS: DB 20H,21H,22H,23H,30H,31H,32H,33H,34H,35H,36H,37H
 
 ; list-tail and list-ref.
 STD_TAIL:
