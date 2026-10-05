@@ -1,6 +1,6 @@
 {
   "tasks": {
-    "check": "deno fmt --check tools tests && deno lint tools tests && deno check --config deno.runtime.json tools/compiler-checks/scope-budget.ts tests/compiler-checks/scope-budget_test.ts tests/cpm-effects_test.ts && deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services tests/compiler-checks/scope-budget_test.ts",
+    "check": "deno fmt --check tools tests && deno lint tools tests && deno check --config deno.runtime.json tools/compiler-checks/scope-budget.ts tools/compiler-checks/generate-scope-runtime.ts tests/compiler-checks/scope-budget_test.ts tests/cpm-effects_test.ts && deno test --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services tests/compiler-checks/scope-budget_test.ts && deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services tools/compiler-checks/generate-scope-runtime.ts --check",
     "test": "deno task check && deno task test:effects && deno task test:effects:cpm && deno task test:aso && deno task test:ports && deno task test:runtime",
     "test:all": "deno task test && deno task test:cpm && deno task test:cpm:stress",
     "test:cpm": "deno task test:cpm:core && deno task test:cpm:procedures && deno task test:cpm:runtime-errors && deno task test:cpm:data && deno task test:cpm:features && deno task test:cpm:integers && deno task test:cpm:regressions && deno task test:cpm:edge && deno task test:cpm:console && deno task test:cpm:examples && deno task test:cpm:generated-effects && deno task test:cpm:float && deno task test:cpm:includes && deno task test:cpm:release && deno task test:cpm:recovery",
@@ -24,6 +24,7 @@
     "test:cpm:large": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych tools/compiler-checks/scope-large-cpm-proof.mjs --count=6200",
     "test:cpm:full-image": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych tools/compiler-checks/scope-large-cpm-proof.mjs --fill-image=65280 --expect-image=65280 --expect-com=65280",
     "measure": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services tools/compiler-checks/scope-budget.ts",
+    "generate:runtime": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services --allow-write=src/runtime tools/compiler-checks/generate-scope-runtime.ts",
     "fmt": "deno fmt",
     "lint": "deno lint",
     "test:effects": "deno test --allow-read=. --ignore=tools/compiler-checks tools/",

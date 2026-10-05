@@ -285,10 +285,11 @@ proofs; `deno task test:all` runs both plus `test:cpm:stress`.
 
 | Command | What it checks |
 | --- | --- |
-| `deno task check` | Formatting, lint, types and compiler budget |
+| `deno task check` | Formatting, lint, types, compiler budget and freshness of the generated runtime files |
 | `deno task test` | `check`, `test:effects`, `test:effects:cpm`, `test:aso`, `test:ports` and `test:runtime` |
 | `deno task test:all` | `test`, `test:cpm` and `test:cpm:stress` |
 | `deno task measure` | Compiler and runtime size budget report |
+| `deno task generate:runtime` | Reassemble `src/runtime/image.asm` and rewrite `src/runtime/values.inc` and `template.inc`; run after any runtime change |
 | `deno task test:effects` | Host provider, terminal and bounded file tests |
 | `deno task test:effects:cpm` | CP/M byte bridge tests (`tests/cpm-effects.asm`) |
 | `deno task test:aso` | Stream validation and window-boundary patches |
