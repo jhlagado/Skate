@@ -244,6 +244,7 @@ INV_GO:
         LD H,0
         ADD HL,HL
         LD (FRM_CLEN),HL
+INV_NEW:
         CALL ENV_NEW               ; Build an activation map below the stack.
         CALL REST_ARG              ; Copy packet values into the formal slots.
         JP C,ERROR                 ; A descriptor slot outside the image is invalid.
@@ -368,14 +369,33 @@ INV_TLGO:
         LD A,(SLOT_CNT)
         CP B
         JR Z,.FITS                 ; An equal shape fits the active map exactly.
-        JR NC,.BAD                 ; A larger target cannot fit the active map.
-        JR .FITS                   ; A target smaller than the current map also fits.
+        JR NC,.GROW                ; A larger target needs a new map.
 .FITS:
         CALL ENV_COPY              ; Replace captured pointers from the target closure.
         CALL ENV_OWN               ; Reuse owned cells or allocate missing entries.
         JR .ARGS
-.BAD:
-        JP ERROR                   ; Reject a tail shape that cannot fit in place.
+.GROW:
+        POP DE                     ; Discard the current body epilogue address.
+        POP HL                     ; The caller's descriptor, environment and
+        LD (DESC_RET),HL           ; stack boundary become the new frame's.
+        POP HL
+        LD (ENV_RET),HL
+        LD (FRM_BASE),HL           ; A collection now walks from the caller.
+        POP HL
+        LD (FRM_SP),HL
+        POP IX                     ; The caller's return.
+        LD SP,HL                   ; Release the current map.
+        LD HL,(DESC_RET)           ; The caller's map extent, or none at the
+        LD A,H                     ; top level.
+        OR L
+        JR Z,.RCNT
+        INC HL
+        INC HL
+        INC HL
+        LD A,(HL)
+.RCNT:
+        LD (ENV_RCNT),A
+        JP INV_NEW               ; Enter as an ordinary call from the caller.
 .ARGS:
         CALL REST_ARG              ; Install the target's formal values.
         JP C,ERROR                ; Reject an invalid descriptor slot.

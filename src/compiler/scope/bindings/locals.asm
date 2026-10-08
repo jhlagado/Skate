@@ -50,7 +50,7 @@ BIND_NEW:
         CP C                       ; Existing maximum already covers this count?
         JR NC,.OWNER               ; No update is needed when the maximum is higher.
         LD A,C                     ; Publish the new high-water count.
-        LD (ST_LMAX),A             ; Finalisation sizes the local data area from it.
+        LD (ST_LMAX),A             ; Finalisation sizes the static local area from it.
 .OWNER:
         LD A,B                     ; Record the owner before returning the slot.
         CALL CAP_OWN                ; Procedure bodies receive cell-backed slots.

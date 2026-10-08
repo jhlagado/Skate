@@ -38,7 +38,6 @@ W_STRTAB  EQU 0BB00H             ; String descriptor table required by RD_INIT.
 W_STRBUF  EQU 0BC00H             ; String pool leaves room below procedure tables.
 W_PBASE  EQU 0C000H              ; Procedure tables stay outside reader tables.
 W_PDESC  EQU 0C000H              ; Emitted descriptor address for each procedure.
-W_PARITY EQU 0C100H              ; Published arity byte for each procedure.
 W_POPEN  EQU 0C180H              ; Procedure index of each open metadata record.
 W_PRECS  EQU 0C190H              ; Metadata records for the open procedures.
 W_PTMP   EQU 0C3CCH              ; Scratch record for a lookup of a closed index.

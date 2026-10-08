@@ -142,8 +142,6 @@ PUB_END:
         JR .CELL
 .FINISH:
         LD HL,(ST_PC)              ; The sink owns the logical output cursor.
-        CALL PUB_DESC              ; Patch the slot extent into every descriptor.
-        RET C                      ; Preserve the staged-image capacity guard.
         CALL LIT_EMIT             ; Append copied symbol and string literals.
         RET C                      ; Preserve the staged-image capacity guard.
         LD HL,(ST_PC)              ; Literal data advances the final image cursor.

@@ -838,6 +838,30 @@ const regressionCases = [
     "(define (nest n acc) (if (zero? n) acc (nest (- n 1) (cons acc '())))) (write (equal? (nest 100 '(1)) (nest 100 '(1)))) (write (equal? (nest 100 '(1)) (nest 100 '(2))))",
     "#t#f",
   ],
+  // Each procedure's frame holds only its own slots: a procedure with many
+  // locals no longer shrinks every other procedure's recursion depth, tail
+  // calls move between small and large frames in constant stack, closures
+  // nest across frame sizes, and a frame can grow while collections run.
+  [
+    "FRAMES.SK8",
+    `(define (wide) (let* ((v0 0) (v1 1) (v2 2) (v3 3) (v4 4) (v5 5) (v6 6) (v7 7) (v8 8) (v9 9) (v10 10) (v11 11) (v12 12) (v13 13) (v14 14) (v15 15) (v16 16) (v17 17) (v18 18) (v19 19) (v20 20) (v21 21) (v22 22) (v23 23) (v24 24) (v25 25) (v26 26) (v27 27) (v28 28) (v29 29)) (+ v0 v29)))
+(define (depth n) (if (= n 0) 0 (+ 1 (depth (- n 1)))))
+(write (depth 180))
+(write (wide))
+(newline)
+(define (small n) (if (= n 0) 'done (large n)))
+(define (large n) (let* ((a 1) (b 2) (c 3) (d 4) (e 5) (f 6)) (small (- n (- a 0)))))
+(write (small 5000))
+(newline)
+(define (mk x) (let ((y (+ x 1))) (lambda (z) (let ((w (* z 2))) (+ x y z w)))))
+(write ((mk 1) 3))
+(newline)
+(define (thin n acc) (if (= n 0) (length acc) (thick n acc)))
+(define (thick n acc) (let ((a (cons n acc)) (b 2) (c 3) (d 4)) (let ((g (lambda () a))) (thin (- n 1) (g)))))
+(write (thin 1500 '()))
+(newline)`,
+    "18029\r\ndone\r\n12\r\n1500",
+  ],
   // A nested procedure body must not overwrite the enclosing body's pending
   // tail-call records: a non-final named let or a lambda after a tail call
   // once returned from the enclosing procedure.

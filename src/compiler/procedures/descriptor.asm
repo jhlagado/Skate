@@ -156,8 +156,8 @@ PROC_ARG:
         JP ERR_CAP                 ; The procedure arity is a checked capacity.
 
 ; Save the body address, emit the finished descriptor after the body, release
-; its record and patch the jump over both.  Byte three, the shared slot
-; extent, is only known at the end of the program; PUB_DESC patches it.
+; its record and patch the jump over both.  Byte three is the procedure's own
+; slot extent: its frame holds every slot it owns or captures.
 PROC_END:
         LD HL,(ST_PBODY)           ; Recover the staged body start recorded above.
         CALL BR_ABS                ; Convert the body pointer to a COM address.
@@ -167,17 +167,7 @@ PROC_END:
         LD (HL),E                  ; Store the low body byte.
         INC HL                     ; Advance to the high body byte.
         LD (HL),D                  ; Complete the body address field.
-        INC HL
-        LD C,(HL)                  ; C is the published arity byte.
-        INC HL
-        XOR A
-        LD (HL),A                  ; Byte three is patched once the extent is known.
         LD A,(ST_DESC)             ; Record where this descriptor is emitted.
-        LD L,A
-        LD H,0
-        LD DE,W_PARITY
-        ADD HL,DE
-        LD (HL),C                  ; The final patch rewrites arity with the extent.
         LD L,A
         LD H,0
         ADD HL,HL
@@ -188,19 +178,26 @@ PROC_END:
         LD D,(HL)
         PUSH DE
         LD DE,(ST_PC)              ; The descriptor starts at the current cursor.
-        LD (HL),D                  ; Keep its address for the final extent patch.
+        LD (HL),D                  ; Keep its address.
         DEC HL
         LD (HL),E
         POP HL
         CALL SINK_FIX              ; Point the closure creation at the descriptor.
         RET C
+        CALL PROC_REC              ; The masks are only as wide as needed.
+        CALL .MEASURE
+        LD (.WIDTH),A
+        CALL PROC_REC
+        INC HL
+        INC HL
+        INC HL
+        LD A,(.EXTENT)
+        LD (HL),A                  ; Byte three: the frame's slot extent.
         CALL PROC_REC              ; Body, arity, extent and formal fields.
         LD A,W_OWNOFF
         CALL .EMIT
         RET C
-        CALL PROC_REC              ; The masks are only as wide as needed.
-        CALL .MEASURE
-        LD (.WIDTH),A
+        LD A,(.WIDTH)
         CALL SINK_PUT
         RET C
         CALL PROC_REC
@@ -257,10 +254,25 @@ PROC_END:
         DEC HL
         DJNZ .SCAN
 .FOUND:
+        LD C,A                     ; The highest nonzero byte gives the extent:
+        LD A,B                     ; one past its highest set bit.
+        OR A
+        JR Z,.EMPTY
+        DEC A
+        ADD A,A
+        ADD A,A
+        ADD A,A
+.BITS:
+        INC A
+        SRL C
+        JR NZ,.BITS
+.EMPTY:
+        LD (.EXTENT),A
         LD A,B
         RET
 
 .WIDTH: DB 0                       ; Mask width of the descriptor being emitted.
+.EXTENT: DB 0                      ; Slot extent of the descriptor being emitted.
 
 ; Compile set!, preserving the selected slot while the value expression runs.
 BIND_SET:
