@@ -108,21 +108,28 @@ output, prompting and stream copying with explicit ports.
 ### Program limits
 
 The compiler works in fixed tables, so a program must stay within these
-bounds. Exceeding one stops compilation with `CAP` (a few report
-`COMPILE ERROR`).
+bounds. Exceeding one stops compilation with `CAP` or, for several front-end
+tables, `COMPILE ERROR`. The [limits register](docs/limits.md) lists every
+limit, its reason and what is planned for it.
 
 | Limit | Value |
 | --- | --- |
-| Exact integers | -8,388,608 to 8,388,607; overflow is a runtime error |
-| Procedures (`lambda`, procedure `define`, named `let`) | 128 per program, 13 nested |
-| Fixed parameters per procedure | 4, plus an optional rest parameter |
-| Arguments in one call | 8 |
+| Exact integers | -8,388,608 to 8,388,607; an out-of-range literal is a compile error and overflow a runtime error |
+| Procedures (`lambda`, procedure `define`, named `let`, `do`) | 128 per program, 13 nested |
+| Fixed parameters per procedure | 4, plus an optional rest parameter; so at most 4 named `let` or `do` variables |
+| Arguments in one call, and values spread by `apply` | 8 |
 | Global names | 256 |
 | Simultaneous local bindings | 128 |
 | Address fixups (literals in code and quoted data, top-level `let` locals) | 320 |
-| Distinct string and symbol literals | 64 |
-| Pending elements while building one quoted datum | 64 |
+| Distinct string literals | 64, 1,024 bytes in all |
+| Distinct strings and symbols in quoted data | 64, 1,023 bytes in all |
+| Elements in one level of a quoted list or vector | 63 |
 | Distinct symbols | 320 |
+| A `do` form, a `letrec` binding list, or leading internal definitions | 200 reader events (an atom or parenthesis each) |
+| String length | 255 |
+| Vector length | 64 |
+| Non-tail recursion | about 200 levels, fewer when the program has a procedure with many locals |
+| Program size that runs | about 36 KB of `.COM`; a larger image compiles but stops at start-up |
 
 The runtime is loaded in one of four sizes: the core alone, the core and the
 standard procedures, those and the numeric procedures (`sqrt`, `expt`,
