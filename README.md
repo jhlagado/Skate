@@ -114,17 +114,17 @@ limit, its reason and what is planned for it.
 | Limit | Value |
 | --- | --- |
 | Exact integers | -8,388,608 to 8,388,607; an out-of-range literal is a compile error and overflow a runtime error |
-| Procedures (`lambda`, procedure `define`, named `let`, `do`) | 128 per program, 13 nested |
+| Procedures (`lambda`, procedure `define`, named `let`, `do`) | 255 per program, 26 nested |
 | Fixed parameters per procedure, and named `let` or `do` variables | 32, plus an optional rest parameter |
 | Arguments in one call, and values spread by `apply` | 32 |
 | Global names | 256 |
 | Simultaneous local bindings | 128 |
-| Address fixups (literals in code and quoted data, top-level `let` locals) | 320 |
-| Distinct string literals | 64, 1,024 bytes in all |
-| Distinct strings and symbols in quoted data | 64, 1,023 bytes in all |
+| Address fixups (literals in code and quoted data, top-level `let` locals) | 640 |
+| Distinct string literals | 128, 2,048 bytes in all |
+| Distinct strings and symbols in quoted data | 128, 2,047 bytes in all |
 | Elements in one level of a quoted list or vector | 63 |
-| Distinct symbols | 320 |
-| A `do` form, a `letrec` binding list, or leading internal definitions | 200 reader events (an atom or parenthesis each) |
+| Distinct symbols | 640 |
+| A `do` form, a `letrec` binding list, or leading internal definitions | 1,504 reader events (an atom or parenthesis each); a `do` needs room for its rewrite too |
 | String length | 255 |
 | Vector length | 64 |
 | Non-tail recursion | about 200 levels |

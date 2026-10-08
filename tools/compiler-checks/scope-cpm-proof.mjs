@@ -276,8 +276,9 @@ const errorCases = [
     "EXPECT\r\n",
   ],
   ["TOOLONG.SK8", "1 ".repeat(11000), "CAP\r\n"],
-  // Front-end tables report CAP: a 33rd formal or argument, an over-long identifier and
-  // a 65th distinct string literal.
+  // Front-end tables report CAP: a 33rd formal or argument, an over-long identifier,
+  // a 129th string, a 641st symbol, a 129th quoted literal, a 256th
+  // procedure and a 27th nested lambda.
   [
     "FORMAL33.SK8",
     "(define (f a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23 a24 a25 a26 a27 a28 a29 a30 a31 a32 a33) a1)",
@@ -290,10 +291,34 @@ const errorCases = [
   ],
   ["LONGSYM.SK8", `(define ${"a".repeat(32)} 1)`, "CAP\r\n"],
   [
-    "STR65.SK8",
-    Array.from({ length: 65 }, (_, i) => `(display "s${i}")`).join(" "),
+    "STR129.SK8",
+    Array.from({ length: 129 }, (_, i) => `(display "s${i}")`).join(" "),
     "CAP\r\n",
   ],
+  [
+    "SYM650.SK8",
+    `(define (m) ${
+      Array.from({ length: 650 }, (_, i) => `(let ((a${i} 0)) a${i})`).join(" ")
+    })`,
+    "CAP\r\n",
+  ],
+  [
+    "LIT129.SK8",
+    `(list ${
+      ["q", "r", "t"].map((p) =>
+        `'(${Array.from({ length: 43 }, (_, i) => `${p}${i}`).join(" ")})`
+      ).join(" ")
+    })`,
+    "CAP\r\n",
+  ],
+  [
+    "PROC256.SK8",
+    `(define (g) ${
+      Array.from({ length: 256 }, (_, i) => `(lambda () ${i})`).join(" ")
+    })`,
+    "CAP\r\n",
+  ],
+  ["OPEN27.SK8", `${"(lambda () ".repeat(27)}7${")".repeat(27)}`, "CAP\r\n"],
   ["LATEINC.SK8", '(display 1) (include "LIST.SK8")', "COMPILE ERROR\r\n"],
   [
     "INCBAD.SK8",

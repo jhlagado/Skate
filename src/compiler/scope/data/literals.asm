@@ -60,7 +60,7 @@ LIT_ADD:
         POP BC                     ; Keep the source length for a new record.
         JP C,.POINTER             ; Existing symbols and strings keep identity.
         LD A,(LIT_CNT)
-        CP 64
+        CP W_LIT_N
         JP NC,ERR_CAP             ; Only a genuinely new literal needs a record.
         LD HL,(LIT_USED)
         LD (LIT_POS),HL

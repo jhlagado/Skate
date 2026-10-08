@@ -8,7 +8,7 @@ export const SCOPE_ALLOCATION_LIMIT = 57_120;
 export const SCOPE_STACK_TOP = 0xe020;
 export const SCOPE_STACK_RESERVE = 2_048;
 export const SCOPE_STAGE_GUARD = 256;
-export const SCOPE_STRING_POOL_BYTES = 1_024;
+export const SCOPE_STRING_POOL_BYTES = 2_048;
 
 export interface ScopeControlBudget {
   readonly imageEnd: number;
@@ -46,11 +46,17 @@ export function measureScopeControlBudget(
   }
   const stagedOutputLimit = address("W_IMGEND") - address("W_STAGE");
   const fixedTableBytes = address("W_END") - address("W_GKEYS");
+  // The replay events and the interners share the staging window while the
+  // source is compiled, after the sink's 128-byte IMAGE run.
   const stringPoolEnd = address("W_STRBUF") + SCOPE_STRING_POOL_BYTES;
   const stackFloor = SCOPE_STACK_TOP - SCOPE_STACK_RESERVE;
-  if (stringPoolEnd > address("W_PBASE")) {
+  if (
+    address("W_RECBUF") < address("W_STAGE") + 128 ||
+    address("W_RECEND") > address("W_SYMTAB") ||
+    stringPoolEnd > address("W_IMGEND")
+  ) {
     throw new RangeError(
-      `string pool crosses procedure metadata at $${
+      `compile-time tables leave the staging window at $${
         stringPoolEnd.toString(16)
       }`,
     );
@@ -85,10 +91,10 @@ export function measureScopeControlBudget(
     fixedTableBytes,
     globalSlotCapacity: 256,
     localSlotCapacity: 128,
-    fixupCapacity: 320,
+    fixupCapacity: address("W_FIX_N"),
     procedureCapacity: address("W_PROC_N"),
     procedureDepth: address("W_OPEN_N"),
-    symbolCapacity: 320,
+    symbolCapacity: 640,
   };
 }
 

@@ -125,7 +125,7 @@ ST_NLREC:    DB 0                  ; First temporary name record for named let.
 ST_NLPOS:   DB 0                   ; Cursor while adding named-let formals.
 ST_NLOWN:    DB 0                  ; Enclosing descriptor while a named body opens.
 ST_NLNEW:    DB 0                  ; Descriptor allocated by the active named form.
-ST_SYMS:     DW W_SYMTAB,320,W_SYMBUF,4800,0,0
+ST_SYMS:     DW W_SYMTAB,640,W_SYMBUF,6144,0,0
             DB 0,0                  ; Symbol context kind and ready flag.
-ST_STRS:     DW W_STRTAB,64,W_STRBUF,1024,0,0
+ST_STRS:     DW W_STRTAB,128,W_STRBUF,2048,0,0
             DB 1,0                  ; String context kind and ready flag.

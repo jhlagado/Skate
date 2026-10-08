@@ -67,7 +67,7 @@ DO_FORM:
         LD DE,52
         ADD HL,DE
         LD (DO_NEED),HL
-        LD DE,W_REPEND
+        LD DE,W_RECEND
         OR A
         SBC HL,DE
         JR NC,.CAP
@@ -151,7 +151,7 @@ DO_FORM:
         LD DE,4
         ADD HL,DE
         LD (DO_NEED),HL
-        LD DE,W_REPEND
+        LD DE,W_RECEND
         OR A
         SBC HL,DE
         POP HL

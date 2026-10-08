@@ -448,7 +448,7 @@ IF_OPEN:
         LD B,A
         LD A,(ST_CONDS)
         ADD A,B
-        CP 64
+        CP 128                     ; W_CONDS holds 128 words.
         JP NC,ERR_CAP
         LD (ST_CBASE),A
         XOR A
@@ -482,12 +482,12 @@ IF_POP:
 IF_SAVE:
         LD (ST_PATCH),HL
         LD A,(ST_CONDS)
-        CP 64
+        CP 128                     ; W_CONDS holds 128 words.
         JP NC,ERR_CAP
         LD C,A
         LD A,(ST_CBASE)
         ADD A,C
-        CP 64
+        CP 128                     ; W_CONDS holds 128 words.
         JP NC,ERR_CAP
         LD L,A
         LD H,0

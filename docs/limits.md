@@ -51,15 +51,11 @@ which they should be dealt with.
 | --- | --- | --- | --- |
 | Runnable program size | 36,352 bytes of `.COM` (an image ending at `8F00H`); a larger image is `CAP` | Rework | Compute the runtime memory map from the TPA instead of fixed bands (§6.2) |
 | Non-tail recursion depth | about 210 levels of a one-argument procedure | Rework | Each frame is now sized by its own procedure. The depth is bound by the 3,840-byte stack; a computed map (§6.2) can give it more |
-| Size of a `do`, a `letrec` binding list, or leading internal definitions | 200 reader events in all; a `do` body of about 10 short forms | Rework / Raise | They are buffered in an 800-byte replay area. Move it into the idle staging window (§6.1) for 4 KB or more, or stream these forms |
-| Distinct quoted symbols and strings copied to output | 64, and 1,023 bytes | Raise | Double in the staging window |
-| String literals | 64 distinct, 1,024 bytes | Raise | Double; text-heavy programs hit this first |
+| Size of a `do` | 1,504 reader events for the form and its rewrite: a body of about 140 short forms | Keep | The replay buffer now lives in the staging window (§6.1) |
 | Elements per level of a quoted list or vector | 63 | Raise | Tied to the 255-record runtime quote stack; raise to 255 with a nesting check |
 | Vector length | 64 | Rework | `make-vector` uses one closure-slab class; longer vectors need page runs |
 | Active `call/ec` escapes | 8 | Raise | 21 bytes a slot; 16 slots cost 168 bytes |
 | Open file ports | 1 input and 1 output | Raise | One FCB and one 128-byte record buffer a port |
-| `cond`/`case` clauses, `and`/`or` operands, tail calls pending in one expression | 64 each | Raise | The tables are already twice the size used; doubling is free |
-| Procedures per program | 128 | Raise | 255 costs 384 workspace bytes; beyond needs a wider index |
 | String length | 255 | Keep | One length byte; a Language limit, like Basie's 253 |
 | Global names | 256 | Keep for now | One-byte slot operands in generated code; a Rework if programs grow past it |
 
@@ -118,23 +114,23 @@ The compiler works in fixed tables between `W_STAGE` (`5800H`) and its stack
 | Capacity | Value | Table | When exceeded | Verdict |
 | --- | --- | --- | --- | --- |
 | Global names | 256 | `W_GKEYS`, `W_GSLOTS`, `W_GPRIM` (4 bytes a name) and a 1 KB runtime area | `CAP` | Keep. Generated code names a global with a one-byte operand. Built-in procedures that are not redefined take no slot |
-| Procedures (`lambda`, procedure `define`, named `let`, `do`) | 128 | `W_PDESC`, `W_PARITY`, 3 bytes each | `CAP` | Raise to 255 (+384 bytes); beyond that the procedure index must widen |
-| Procedures open at once | 13 | `W_PRECS`, 44 bytes each | `CAP` | Raise (+572 bytes for 26) |
+| Procedures (`lambda`, procedure `define`, named `let`, `do`) | 255 | `W_PDESC`, 2 bytes each; a one-byte index | `CAP` (pinned by `PROC256`) | Keep; more needs a wider index |
+| Procedures open at once | 26 | `W_PRECS`, 37 bytes each | `CAP` (pinned by `OPEN27`) | Keep |
 | Local bindings in scope | 128 slots, counting every enclosing procedure's locals | `W_LKEYS`, `W_BKEYS`, `W_LOWNER` and others; the runtime's 16-byte slot masks | `CAP` | Keep the count. The cost is in the runtime (§5.2) |
-| Address fixups | 320 | `W_FIXUPS`, 4 bytes each | `CAP` | Raise (+1,280 bytes for 640). Each use of a string or symbol literal, each quoted constant and each reference to a top-level `let` local takes one |
-| Distinct symbols | 320 names; 4,800 bytes of spelling | `W_SYMTAB`, `W_SYMBUF` | `CAP` | Raise. Keywords and every identifier count; `STDLIB.SK8` alone uses about 61 |
-| Distinct string literals | 64; 1,024 bytes | `W_STRTAB`, `W_STRBUF` | `CAP` (pinned by `STR65`) | Raise. The first limit a text-heavy program meets |
-| Literals copied to the output (symbols and strings in quoted data) | 64; 1,023 bytes | `W_LITREC`, `W_LITBUF`, `W_LITOUT` | `CAP` (measured: two quoted lists of 40 symbols) | Raise |
+| Address fixups | 640 | `W_FIXUPS`, 4 bytes each | `CAP` | Keep. Each use of a string or symbol literal, each quoted constant and each reference to a top-level `let` local takes one |
+| Distinct symbols | 640 names; 6,144 bytes of spelling | `W_SYMTAB`, `W_SYMBUF`, in the staging window | `CAP` (pinned by `SYM650`; `SYMS600` compiles) | Keep. Keywords and every identifier count; `STDLIB.SK8` alone uses about 61 |
+| Distinct string literals | 128; 2,048 bytes | `W_STRTAB`, `W_STRBUF`, in the staging window | `CAP` (pinned by `STR129`) | Keep |
+| Literals copied to the output (symbols and strings in quoted data) | 128; 2,047 bytes | `W_LITREC`, `W_LITBUF`, `W_LITOUT` | `CAP` (pinned by `LIT129`; `TABLES` uses 128) | Keep |
 | Elements in one level of a quoted list or vector | 63 | `quoted.asm` | `CAP` | Raise, with a check on the runtime quote stack (255 records shared by every nesting level) |
 | Quoted constants in a program | 255 | One-byte cache index | `CAP` | Rework if met |
-| Replay events | 800 bytes, 200 events | `REC_BUF` to `W_REPEND` | `CAP` | Rework or Raise. Bounds `letrec` binding lists, leading internal definitions with the first body form, and whole `do` forms (about 85 events once the rewrite is appended). Measured: a `do` body of 8 `(write (+ i 0))` compiles and 12 does not; an internal `define` of 30 short forms compiles and 45 does not |
+| Replay events | 6,016 bytes, 1,504 events | `REC_BUF` (`W_RECBUF` to `W_RECEND`), in the staging window | `CAP` | Keep. Bounds `letrec` binding lists, leading internal definitions with the first body form, and whole `do` forms with their rewrite. Measured: a `do` body of 140 short forms compiles and 150 does not; internal definitions and `letrec` lambdas of 250 forms compile |
 | Nested replay scopes | 16 | `W_REPLAY` | `CAP` | Keep |
 | `do` variables | 32 | The named let it becomes; step ranges in `W_DOSTEP` | `CAP` | Keep |
-| Pending `and`/`or` operands, `case` datums and quoted-list ends | 64 | `W_BRANCH` (half used) | `CAP` | Raise, free |
-| Nested `if`, `when`, `unless` | 32 | `W_IFALSE`, `W_IFEND` (half used) | `CAP` | Raise, free, once the stack is guarded |
+| Pending `and`/`or` operands, `case` datums and quoted-list ends | 128 | `W_BRANCH` | `CAP` | Keep |
+| Nested `if`, `when`, `unless` | 64 | `W_IFALSE`, `W_IFEND` | `CAP` | Keep |
 | `cond`/`case` nesting | 32 | `W_CBASES`, `W_CTOPS` | `CAP` | Raise (+64 bytes) |
-| `cond`/`case` clauses pending | 64 across all open forms | `W_CONDS` (half used) | `CAP` (measured: 65 clauses) | Raise, free |
-| Tail calls pending in one body expression | 64 | `W_TCALLS`, `W_TAILOP` | `CAP` (measured: a `cond` of 65 clauses ending in calls) | Raise (+192 bytes, needs a new place) |
+| `cond`/`case` clauses pending | 128 across all open forms | `W_CONDS` | `CAP` (`TABLES` has 120) | Keep |
+| Tail calls pending in one body expression | 128 | `W_TCALLS`, `W_TAILOP` | `CAP` | Keep. A body's earlier expressions no longer hold records, so a body may have any number of calls |
 | Compiler stack | 2,048 bytes | `D820H`–`E020H` | `CAP` when a form starts with less than 256 bytes left | Keep |
 | Includes | Depth 8, 32 files | In the compiler image | `INCLUDE ERROR` | Keep; each file costs image bytes |
 
@@ -165,32 +161,22 @@ grows with a larger TPA.
 
 | Range | Bytes | Contents |
 | --- | ---: | --- |
-| `0100H`–`55A8H` | 21,672 | Code and module workspaces |
-| `55A8H`–`5800H` | 600 | Headroom; the budget test requires 256 |
-| `5800H`–`9980H` | 16,768 | `W_STAGE`: the window in which publication assembles the image. While the source is compiled only its first 128 bytes, the sink's image run, appear to be used |
+| `0100H`–`55C5H` | 21,701 | Code and module workspaces |
+| `55C5H`–`5800H` | 571 | Headroom; the budget test requires 256 |
+| `5800H`–`9980H` | 16,768 | `W_STAGE`: the window in which publication assembles the image. While the source is compiled it holds the sink's 128-byte image run, then the replay events (`5880H`), the symbol table and spellings (`7000H`) and the string table and bytes (`8F80H`), none of which publication reads |
 | `9980H`–`9F80H` | 1,536 | Globals, locals and pending bindings |
-| `9F80H`–`A480H` | 1,280 | Fixups |
-| `A480H`–`BB00H` | 5,760 | Symbol table and spellings |
-| `BB00H`–`C000H` | 1,280 | String table and bytes |
-| `C000H`–`C700H` | 1,792 | Procedure descriptors, open procedures, per-slot tables |
-| `C700H`–`CE00H` | 1,792 | Lambda frames, primitive kinds, branch, `if`, tail and `cond` stacks; `CD40H`–`CE00H` (192 bytes) free |
-| `CE00H`–`D500H` | 1,792 | Replay scopes and the literal tables |
-| `D500H`–`D820H` | 800 | Replay events |
+| `9F80H`–`A980H` | 2,560 | Fixups |
+| `A980H`–`B480H` | 2,816 | Literal records, spellings and output addresses |
+| `B480H`–`BA87H` | 1,543 | Procedure descriptors and open procedure records |
+| `C000H`–`C100H` | 256 | Tail-call candidates |
+| `C400H`–`C700H` | 768 | Per-slot tables |
+| `C700H`–`CE00H` | 1,792 | Lambda frames, primitive kinds, branch, `if`, tail flags, `cond` stacks, `do` steps |
+| `CE00H`–`CF00H` | 256 | Replay scopes |
 | `D820H`–`E020H` | 2,048 | Stack, guarded by `CMD_FORM` |
 
-**Where room can come from.** The compiler image has 600 bytes of headroom,
-so a Raise must find its memory in the workspace, not in code.
-
-1. The staging window is about 16 KB that compilation barely touches. Tables
-   used only while compiling can live there: replay events and scopes,
-   locals and bindings, and the branch, `if`, `cond` and tail stacks.
-   Tables that publication reads cannot: fixups, procedure descriptors,
-   primitive kinds and the literal tables. Whether the interner can move
-   depends on whether publication still reads it; that needs checking.
-2. The window can also shrink: each 8 KB less costs one more pass over the
-   image during publication, which is disk time only.
-3. The branch, `if`, `cond` and tail tables already have twice the room they
-   use.
+Free: `BA87H`–`C000H`, `C100H`–`C400H` and `CF00H`–`D820H`, about 3.8 KB in
+all. The compiler image has 571 bytes of headroom, so a Raise must find its
+memory in the workspace, not in code.
 
 ### 6.2 Runtime
 
@@ -252,8 +238,8 @@ decimal exponent saturating, and runtime symbols that are never freed.
 
 ## 9. Tests
 
-Limits pinned by a test: 256 globals (`GLOB256`), 33 nested `if`s
-(`IF33`), a 64-element quoted list (`REVQCAP`), 2,720 live pairs, recursion
+Limits pinned by a test: 256 globals (`GLOB256`), 65 nested `if`s
+(`IF65`), a 64-element quoted list (`REVQCAP`), 2,720 live pairs, recursion
 (`DEEPOK`, `DEEPREC`), `apply` of 33 values (`APPCOUNT`), `(make-vector 65)`
 (`VLONGERR`), stale escapes (`ECSTALE`, `ECREUSE`), 11,000 top-level forms
 (`TOOLONG`), deep `write` (`DEEPNEST`), 255- and 256-byte strings, and an
@@ -261,13 +247,14 @@ out-of-range integer literal.
 
 Also pinned: the runnable image size (`test:cpm:full-image`), a 33rd
 formal (`FORMAL33`) and argument (`ARGS33`), 32 of each (`ARGS32`), frames
-of different sizes (`FRAMES`), a 32-byte identifier (`LONGSYM`), a 65th string
-(`STR65`), a late `include` (`LATEINC`), `string-ref` with a large index
+of different sizes (`FRAMES`), a 32-byte identifier (`LONGSYM`), a 129th string
+(`STR129`), a 641st symbol (`SYM650`), a 129th quoted literal (`LIT129`), a
+256th procedure (`PROC256`), a 27th nested lambda (`OPEN27`), the raised
+tables in use (`TABLES`, `SYMS600`), a late `include` (`LATEINC`), `string-ref` with a large index
 (`STRREFW`), `equal?` depth (`DEEPEQ`, `EQDEPTH`) and refused source names.
 
-Not pinned: 129 procedures, 14 open procedures, 320 fixups,
-320 symbols, 65 literals in quoted data, the replay buffer, 64 tail calls,
-`cond` clauses and branches, 255 quoted constants, 8 escapes, the file
+Not pinned: 640 fixups, the replay buffer, 128 tail calls, `cond` clauses
+and branches, 255 quoted constants, 8 escapes, the file
 ports, the runtime symbol area and the `read` limits. Each limit that is kept
 should get a test at its boundary, and each that is raised a test at the new
 one.
@@ -281,9 +268,9 @@ In order of value to a programmer:
 2. **Per-procedure frame size.** Done.
 3. **32 formals and 32-argument calls,** for procedures, named `let`, `do`,
    `apply`, `list`, `vector` and `string`. Done.
-4. **Move compile-only tables into the staging window,** then raise the
-   replay buffer, literals, strings, symbols and fixups to at least twice
-   their size, and the half-used stacks to their full tables.
+4. **Compile-only tables in the staging window.** Done: the replay buffer,
+   symbols, strings, literals, fixups, procedures and the branch, `if`,
+   `cond` and tail stacks are all at least twice their former size.
 5. **A computed runtime memory map,** giving the stack and heap whatever the
    TPA holds and the program does not use.
 6. Long vectors, more file ports and escapes, `read` of long lists and

@@ -50,7 +50,7 @@ BR_ABS:
 BR_PUSH:
         LD (ST_PATCH),HL           ; Preserve the staged patch address while indexing.
         LD A,(ST_BRTOP)            ; The byte-sized branch stack is bounded.
-        CP 64                      ; Nested forms consume at most 64 entries.
+        CP 128                     ; W_BRANCH holds 128 words.
         JP NC,ERR_CAP              ; Reject a source nesting depth beyond the bound.
         LD L,A                     ; Widen the record index to a word.
         LD H,0                     ; Each branch record is one word.
@@ -90,7 +90,7 @@ BR_PATCH:
 BR_IFNEW:
         LD (ST_PATCH),HL           ; Preserve the staged false patch address.
         LD A,(ST_IFTOP)            ; The if stack is bounded by reader nesting.
-        CP 32                      ; Two words per form fit in the reserved area.
+        CP 64                      ; W_IFALSE and W_IFEND hold 64 words each.
         JP NC,ERR_CAP              ; Reject a nesting depth without a safe patch.
         LD L,A                     ; Widen the form index.
         LD H,0                     ; Each false stack record occupies two bytes.

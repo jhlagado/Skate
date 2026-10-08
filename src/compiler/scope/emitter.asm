@@ -298,7 +298,7 @@ EM_HOLD:
 EM_FIXUP:
         LD (ST_FADDR),HL          ; Preserve the patch address while indexing.
         LD HL,(ST_FIXES)          ; The table admits the full global fixup target.
-        LD DE,320                 ; Leave one guarded region before the tables.
+        LD DE,W_FIX_N             ; The table holds W_FIX_N records.
         OR A                      ; Clear carry before the capacity comparison.
         SBC HL,DE                 ; A carry-free result means the table is full.
         JP NC,ERR_CAP             ; A full fixup table is a capacity error.
@@ -396,7 +396,7 @@ EM_PLAIN:
         INC B                      ; Advance to the next tail candidate.
         JR .LOOP
 .DONE:
-        LD A,B                     ; Discard the records just rewritten.
+        LD A,(ST_MARK)             ; Discard the records just rewritten.
         LD (ST_TAILS),A
         XOR A
         RET

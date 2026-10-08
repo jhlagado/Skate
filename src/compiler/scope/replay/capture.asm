@@ -84,7 +84,7 @@ REC_KEEP:
 ; bytes and the tag implied.
 REC_PUT:
         LD HL,(ST_PUTP)
-        LD DE,W_REPEND
+        LD DE,W_RECEND
         OR A
         SBC HL,DE
         JP NC,ERR_CAP

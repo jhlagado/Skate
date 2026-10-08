@@ -6,7 +6,7 @@
 ; are installed.  The frame stack lets a nested letrec append a temporary
 ; range, then resume the enclosing replay at the event after its list.
 
-REC_BUF  EQU W_LITEND           ; 800 bytes: four per retained reader event.
+REC_BUF  EQU W_RECBUF           ; Four bytes per retained reader event.
 
 ; Dispatch compiler reads either to the source reader or to the retained list.
 REC_NEXT:

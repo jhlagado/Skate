@@ -22,9 +22,18 @@ W_GLB_SZ  EQU 1024               ; Four bytes for each of the 256 global slots.
 ; The global area follows the loaded runtime, whose length .SCAN selects, so
 ; its base is ST_GBASE rather than a constant; generated code follows it.
 W_IMGEND   EQU 09980H            ; Replay window ends before compiler tables.
+; While the source is compiled, the window holds only the sink's 128-byte
+; IMAGE run, so the tables that publication never reads live in the rest of
+; it: replay events and the symbol and string interners.
+W_RECBUF  EQU 05880H              ; Replay events, four bytes each.
+W_RECEND  EQU 07000H              ; 1,504 events.
+W_SYMTAB EQU 07000H              ; 640 three-byte symbol descriptors.
+W_SYMBUF EQU 07780H              ; 6,144-byte symbol spelling pool.
+W_STRTAB  EQU 08F80H             ; 128 four-byte string descriptors.
+W_STRBUF  EQU 09180H             ; 2,048-byte string pool, ending at W_IMGEND.
 W_REPLAY  EQU 0CE00H              ; Nested binding-list replay frames.
 W_REP_SZ EQU 16                   ; One saved replay scope record.
-W_REPEND EQU 0D820H               ; Replay workspace ends above the stack guard.
+W_REPEND EQU 0D820H               ; The fixed workspace ends at the stack.
 W_GKEYS  EQU 09980H              ; Two-byte interner IDs for package globals.
 W_GSLOTS EQU 09B80H              ; One-byte slot number for each global ID.
 W_LKEYS EQU 09C80H               ; Two-byte IDs for active local bindings.
@@ -32,17 +41,19 @@ W_LSLOTS EQU 09D80H              ; Active local binding slot numbers.
 W_BKEYS EQU 09E00H               ; Two-byte IDs for pending let bindings.
 W_BSLOTS EQU 09F00H              ; Pending let binding slot numbers.
 W_FIXUPS EQU 09F80H              ; Four-byte address/kind/slot fixup records.
-W_SYMTAB EQU 0A480H              ; Symbol descriptor table for the reader.
-W_SYMBUF EQU 0A840H              ; 4,800-byte symbol spelling pool.
-W_STRTAB  EQU 0BB00H             ; String descriptor table required by RD_INIT.
-W_STRBUF  EQU 0BC00H             ; String pool leaves room below procedure tables.
-W_PBASE  EQU 0C000H              ; Procedure tables stay outside reader tables.
-W_PDESC  EQU 0C000H              ; Emitted descriptor address for each procedure.
-W_POPEN  EQU 0C180H              ; Procedure index of each open metadata record.
-W_PRECS  EQU 0C190H              ; Metadata records for the open procedures.
-W_PTMP   EQU 0C3CCH              ; Scratch record for a lookup of a closed index.
-W_PROC_N  EQU 128                ; Procedures per program.
-W_OPEN_N  EQU 13                 ; Procedures open at once (nesting depth).
+W_FIX_N   EQU 640                ; Fixup records, ending at 0A980H.
+W_LITREC EQU 0A980H               ; Four bytes per copied symbol or string.
+W_LITBUF EQU 0AB80H             ; Two kilobytes of literal spelling storage.
+W_LITOUT EQU 0B380H               ; Staged output address for each literal record.
+W_LITCAP EQU W_LITOUT-W_LITBUF   ; Capacity check for copied literal spellings.
+W_LIT_N   EQU 128                ; Literal records.
+W_PDESC  EQU 0B480H              ; Emitted descriptor address for each procedure.
+W_POPEN  EQU 0B680H              ; Procedure index of each open metadata record.
+W_PRECS  EQU 0B6A0H              ; Metadata records for the open procedures.
+W_PTMP   EQU 0BA62H              ; Scratch record for a lookup of a closed index.
+W_PROC_N  EQU 255                ; Procedures per program; 0FFH means none.
+W_OPEN_N  EQU 26                 ; Procedures open at once (nesting depth).
+W_TCALLS EQU 0C000H              ; Tail-call target words awaiting body closure.
 W_LOWNER EQU 0C400H              ; Owner procedure for each reusable local slot.
 W_DECLS EQU 0C500H               ; Declaration flags for the active letrec range.
 W_PRECSZ   EQU 37                ; Body, arity, slots, base slot and two masks.
@@ -57,21 +68,13 @@ W_GPRIM  EQU 0C800H              ; One predefined-primitive kind per global slot
 W_BRANCH EQU 0C900H              ; Generic short-circuit branch patch stack.
 W_IFALSE EQU 0CA00H              ; False-branch patch words for nested if forms.
 W_IFEND  EQU 0CA80H              ; End-branch patch words for nested if forms.
-W_TCALLS EQU 0CB00H              ; Tail-call target words awaiting body closure.
 W_TAILOP  EQU 0CB80H             ; One flag records a saved side-stack operator.
-W_TAIL_N   EQU 64                 ; Tail candidates per body expression scope.
+W_TAIL_N   EQU 128                ; Tail candidates per body expression scope.
 W_CONDS   EQU 0CC00H             ; End-jump patches for cond clauses.
 W_CBASES  EQU 0CD00H             ; Saved cond patch-table bases by nesting depth.
 W_CTOPS  EQU 0CD20H              ; Saved cond patch counts by nesting depth.
 W_DOSTEP EQU 0CD40H              ; Step ranges of the do being compiled, 4 bytes each.
-; Literal records and bytes use the compiler-only band after the replay
-; frames, and the replay event buffer (REC_BUF) follows them to W_REPEND.
-W_LITREC EQU 0CF00H               ; Four bytes per copied symbol or string.
-W_LITBUF EQU 0D000H             ; One kilobyte of literal spelling storage.
-W_LITOUT EQU 0D400H               ; Staged output address for each literal record.
-W_LITCAP EQU W_LITOUT-W_LITBUF   ; Capacity check for copied literal spellings.
-W_LITEND EQU 0D500H               ; End of the fixed compiler workspace.
-W_END   EQU W_REPEND              ; Replay workspace ends at the guarded-stack floor.
+W_END   EQU W_REPEND              ; The fixed workspace ends at the stack floor.
 
 ; Compiler entry and terminal paths.
 CMD_MAIN:
