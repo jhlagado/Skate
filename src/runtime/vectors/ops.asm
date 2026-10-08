@@ -91,7 +91,7 @@ VEC_PRIM:
 ; Construct a vector from the current packet, limited by its eight records.
 .VECTOR:
         LD A,(ARG_CNT)             ; The short constructor accepts zero through eight.
-        CP 9                       ; Eight values fill the packet exactly.
+        CP ARG_MAX+1               ; A full packet of values.
         JP NC,ERROR                ; Only a malformed caller can exceed the packet.
         LD (VEC_REQ),A             ; Preserve the request across a collection retry.
         CALL VEC_NEW                ; Packet values remain roots across a retry.

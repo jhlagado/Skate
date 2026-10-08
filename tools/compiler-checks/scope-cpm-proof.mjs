@@ -276,9 +276,18 @@ const errorCases = [
     "EXPECT\r\n",
   ],
   ["TOOLONG.SK8", "1 ".repeat(11000), "CAP\r\n"],
-  // Front-end tables report CAP: a fifth formal, an over-long identifier and
+  // Front-end tables report CAP: a 33rd formal or argument, an over-long identifier and
   // a 65th distinct string literal.
-  ["FORMAL5.SK8", "(define (f a b c d e) a)", "CAP\r\n"],
+  [
+    "FORMAL33.SK8",
+    "(define (f a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23 a24 a25 a26 a27 a28 a29 a30 a31 a32 a33) a1)",
+    "CAP\r\n",
+  ],
+  [
+    "ARGS33.SK8",
+    "(list 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33)",
+    "CAP\r\n",
+  ],
   ["LONGSYM.SK8", `(define ${"a".repeat(32)} 1)`, "CAP\r\n"],
   [
     "STR65.SK8",

@@ -862,6 +862,29 @@ const regressionCases = [
 (newline)`,
     "18029\r\ndone\r\n12\r\n1500",
   ],
+  // Calls pass up to 32 arguments and procedures take up to 32 formals, so
+  // named let and do loops are no longer limited to four variables.
+  [
+    "ARGS32.SK8",
+    `(define (ten a b c d e f g h i j) (list a b c d e f g h i j))
+(write (ten 1 2 3 4 5 6 7 8 9 10))
+(write (list 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32))
+(define (iota n acc) (if (= n 0) acc (iota (- n 1) (cons n acc))))
+(write (apply + (iota 32 '())))
+(newline)
+(define (rst a b c d e . r) (list e r))
+(write (rst 1 2 3 4 5 6 7))
+(define (mk a b c d e f) (lambda () (+ a f)))
+(write ((mk 1 2 3 4 5 6)))
+(write (let loop ((a 0) (b 1) (c 2) (d 3) (e 4) (n 5)) (if (= n 0) (list a b c d e) (loop b c d e a (- n 1)))))
+(write (do ((i 0 (+ i 1)) (a 1) (b 2) (c 3) (d 4) (e 5) (s 0 (+ s i))) ((= i 4) (list s a e))))
+(define (all . r) (length r))
+(write (apply all (iota 32 '())))
+(define (f32 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23 a24 a25 a26 a27 a28 a29 a30 a31 a32) (+ a1 a32))
+(write (f32 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32))
+(newline)`,
+    "(1 2 3 4 5 6 7 8 9 10)(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32)528\r\n(5 (6 7))7(0 1 2 3 4)(6 1 5)3233",
+  ],
   // A nested procedure body must not overwrite the enclosing body's pending
   // tail-call records: a non-final named let or a lambda after a tail call
   // once returned from the enclosing procedure.

@@ -70,36 +70,25 @@ CAP_REST:
         XOR A                      ; Carry clear reports a complete rest binding.
         RET
 
-; Mark a rest descriptor and store its local slot in a reserved high byte.
-; Fixed descriptors keep the old all-zero high bytes and remain byte-stable.
+; Mark a rest descriptor.  Formals take consecutive slots from the base in
+; byte four, so the rest slot follows the fixed ones; an all-rest procedure's
+; base is its rest slot.
 CAP_META:
         LD A,(ST_REST)
         OR A
         RET Z                       ; A fixed procedure needs no metadata change.
-        CALL PROC_REC               ; Locate the current forty-four-byte record.
-        INC HL                      ; Skip the body address low byte.
-        INC HL                      ; Skip the body address high byte.
-        LD A,(HL)                   ; The low seven bits retain the fixed arity.
-        OR 80H                       ; The high bit selects minimum-arity dispatch.
-        LD (HL),A                   ; Publish the rest policy in the existing byte.
-        AND 7FH                      ; The low bits select the reserved slot field.
-        INC HL                      ; Skip the arity byte to the first formal low byte.
+        CALL PROC_REC
+        INC HL                      ; Skip the body address.
         INC HL
-        CP 4                         ; Four fixed formals use field three's high byte.
-        JR Z,.LAST
-        ADD A,A                      ; Each earlier formal occupies two bytes.
-        LD E,A
-        LD D,0
-        ADD HL,DE
-        INC HL                      ; Select the reserved high byte.
-        JR .STORE
-.LAST:
-        LD DE,7                      ; Field three's high byte is seven bytes ahead.
-        ADD HL,DE
-.STORE:
-        LD A,(ST_RLIST)              ; The runtime reads this as the rest local slot.
+        LD A,(HL)                   ; The low seven bits retain the fixed arity.
+        OR 80H                      ; The high bit selects minimum-arity dispatch.
         LD (HL),A
-        XOR A                        ; Carry clear reports valid descriptor metadata.
+        AND 7FH                     ; Carry is clear.
+        RET NZ
+        INC HL                      ; Byte four is the base slot.
+        INC HL
+        LD A,(ST_RLIST)
+        LD (HL),A
         RET
 
 ; Return carry when ST_SYMID names one of the current procedure's formal slots.
@@ -108,49 +97,27 @@ CAP_FORM:
         CP 0FFH
         RET Z
         CALL PROC_REC              ; Locate the active descriptor metadata.
-        INC HL                     ; Skip the body address low byte.
-        INC HL                     ; Skip the body address high byte.
-        LD A,(HL)                  ; The high bit marks a procedure with a rest formal.
-        LD (ST_ARITY),A            ; Keep the policy while the fixed fields are scanned.
-        AND 7FH                    ; B counts only the fixed formal names.
-        LD B,A                      ; B is the number of fixed formal slots.
-        INC HL                     ; Skip the formal-count byte.
-        INC HL                     ; Skip the capture-mask byte.
-        LD A,B
-        OR A                       ; Preserve a clear result for a nullary procedure.
-        JR Z,.NO_FIXED             ; An all-rest procedure has no fixed fields.
-.LOOP:
-        LD C,(HL)                  ; Read one formal's local slot number.
+        INC HL                     ; Skip the body address.
         INC HL
-        INC HL                     ; Skip the reserved high slot byte.
-        CALL .HAS                  ; Is ST_SYMID bound to that slot in an active record?
-        RET C                      ; Carry: ST_SYMID names this formal.
-        DJNZ .LOOP
-        LD A,(ST_ARITY)            ; Fixed names were absent; inspect the rest slot.
-        AND 80H
-        RET Z                      ; A fixed procedure has no further formal name.
-        LD A,(ST_ARITY)
+        LD A,(HL)                  ; The fixed arity, and bit 7 for a rest formal.
+        LD B,A
         AND 7FH
-        CP 4
-        JR Z,.REST_4TH             ; Four fixed names leave field three's high byte.
-        INC HL                     ; Earlier arities leave the next field's high byte.
-        JR .REST
-.REST_4TH:
-        DEC HL                     ; The fourth fixed field is the reserved rest slot.
-.REST:
-        XOR A                      ; Clear the marker so one rest scan terminates.
-        LD (ST_ARITY),A
-        LD B,1                      ; Reuse the ordinary slot comparison once.
-        JR .LOOP
-.NO_FIXED:
-        LD A,(ST_ARITY)
-        AND 80H
-        RET Z                      ; A nullary fixed procedure has no formal names.
-        INC HL                     ; The first field's high byte stores the rest slot.
-        XOR A                      ; Clear the marker so one rest scan terminates.
-        LD (ST_ARITY),A
-        LD B,1
-        JR .LOOP
+        BIT 7,B
+        JR Z,.COUNT
+        INC A                      ; The rest slot follows the fixed formals.
+.COUNT:
+        OR A
+        RET Z                      ; No formals; carry is clear.
+        LD B,A
+        INC HL                     ; Byte four is the first formal's slot.
+        INC HL
+        LD C,(HL)
+.LOOP:
+        CALL .HAS                  ; Is ST_SYMID bound to slot C in an active record?
+        RET C                      ; Carry: ST_SYMID names this formal.
+        INC C
+        DJNZ .LOOP
+        RET
 
 ; Return carry when an active binding record for local slot C holds ST_SYMID.
 ; W_LKEYS and W_LSLOTS are parallel by active-record position, not by slot.

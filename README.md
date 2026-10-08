@@ -115,8 +115,8 @@ limit, its reason and what is planned for it.
 | --- | --- |
 | Exact integers | -8,388,608 to 8,388,607; an out-of-range literal is a compile error and overflow a runtime error |
 | Procedures (`lambda`, procedure `define`, named `let`, `do`) | 128 per program, 13 nested |
-| Fixed parameters per procedure | 4, plus an optional rest parameter; so at most 4 named `let` or `do` variables |
-| Arguments in one call, and values spread by `apply` | 8 |
+| Fixed parameters per procedure, and named `let` or `do` variables | 32, plus an optional rest parameter |
+| Arguments in one call, and values spread by `apply` | 32 |
 | Global names | 256 |
 | Simultaneous local bindings | 128 |
 | Address fixups (literals in code and quoted data, top-level `let` locals) | 320 |
@@ -127,7 +127,7 @@ limit, its reason and what is planned for it.
 | A `do` form, a `letrec` binding list, or leading internal definitions | 200 reader events (an atom or parenthesis each) |
 | String length | 255 |
 | Vector length | 64 |
-| Non-tail recursion | about 200 levels, fewer when the program has a procedure with many locals |
+| Non-tail recursion | about 200 levels |
 | Program size | 36,352 bytes of `.COM`; a larger image is `CAP` |
 
 The runtime is loaded in one of four sizes: the core alone, the core and the

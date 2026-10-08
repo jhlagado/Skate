@@ -2,8 +2,8 @@
 ;
 ; A descriptor stores its minimum fixed arity in byte two.  Bit seven marks
 ; a rest procedure; the low seven bits remain the required argument count.
-; The compiler records the rest binding's local slot in a reserved high byte
-; of the formal-slot area.  The packet remains a GC root while the surplus
+; Byte four is the slot of the first formal; the others, and the rest
+; formal, follow it in consecutive slots.  The packet remains a GC root while the surplus
 ; values are folded into a proper list.
 
 ; Validate the descriptor's minimum arity and retain its address in DESC_CUR.
@@ -52,17 +52,9 @@ REST_ARG:
         OR A
         JR Z,.FIX_DONE         ; An all-rest procedure starts with no fixed slots.
         LD C,0                   ; C selects packet values in source order.
-        LD HL,(DESC_CUR)         ; HL begins at the descriptor body address.
-        LD DE,4                  ; Formal slot indexes begin at descriptor offset four.
-        ADD HL,DE                ; HL points at the first two-byte slot index.
-        LD (DESC_PTR),HL         ; Preserve the descriptor cursor across packet work.
+        CALL .BASE
+        LD (REST_NXT),A         ; The first formal's slot.
 .FORMAL:
-        LD HL,(DESC_PTR)         ; Resume at the next formal slot record.
-        LD A,(HL)                ; Read the compiler slot index from the descriptor.
-        LD (SLOT_NUM),A          ; Keep the slot index while the loop counts formals.
-        INC HL                   ; Advance to the high index byte.
-        INC HL                   ; The next formal slot follows by two bytes.
-        LD (DESC_PTR),HL         ; Keep the cursor while loading this argument.
         LD A,C                   ; Address packet index C.
         LD L,A                   ; Widen the packet index.
         LD H,0                   ; Each packet value occupies four bytes.
@@ -82,13 +74,15 @@ REST_ARG:
         LD (SLOT_TAG),A          ; Keep the tag while selecting the active slot.
         EX DE,HL                 ; HL receives the payload expected by SLOT_PUT.
         PUSH BC                   ; Preserve the formal and packet cursors.
-        LD A,(SLOT_NUM)
+        LD A,(REST_NXT)
         LD B,A                   ; The active slot helper receives its index in B.
         LD A,(REST_EXT)
         LD C,A
         LD A,(SLOT_TAG)
         CALL SLOT_PUT             ; Publish the value in the active four-byte slot.
         POP BC                    ; Continue with the remaining formal slots.
+        LD HL,REST_NXT           ; The next formal has the next slot.
+        INC (HL)
         INC C                    ; Advance to the next source argument.
         DJNZ .FORMAL             ; Fill every formal slot.
 .FIX_DONE:
@@ -159,23 +153,19 @@ REST_ARG:
         EX DE,HL
         RET
 
-; Read the rest slot from the reserved high byte of the descriptor.
+; Return the rest slot in A: it follows the fixed formals.
 .SLOT:
-        LD HL,(DESC_CUR)
-        LD DE,4
-        ADD HL,DE                 ; First two-byte formal slot field.
-        LD A,(REST_MIN)
-        CP 4
-        JR Z,.LAST
-        ADD A,A
-        LD E,A
-        LD D,0
-        ADD HL,DE
-        INC HL                    ; Select the reserved high byte.
-        LD A,(HL)
+        CALL .BASE
+        LD HL,REST_MIN
+        ADD A,(HL)
         RET
-.LAST:
-        LD DE,7                   ; Four fixed formals use field three's high byte.
-        ADD HL,DE
+
+; Return the first formal's slot, descriptor byte four, in A.
+.BASE:
+        LD HL,(DESC_CUR)
+        INC HL
+        INC HL
+        INC HL
+        INC HL
         LD A,(HL)
         RET

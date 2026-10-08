@@ -45,9 +45,9 @@ W_PROC_N  EQU 128                ; Procedures per program.
 W_OPEN_N  EQU 13                 ; Procedures open at once (nesting depth).
 W_LOWNER EQU 0C400H              ; Owner procedure for each reusable local slot.
 W_DECLS EQU 0C500H               ; Declaration flags for the active letrec range.
-W_PRECSZ   EQU 44                ; Body, arity, slots and two 128-bit masks.
-W_OWNOFF  EQU 12                 ; Owned-slot mask begins after four formals.
-W_CAPOFF  EQU 28                 ; Captured-slot mask follows the owned mask.
+W_PRECSZ   EQU 37                ; Body, arity, slots, base slot and two masks.
+W_OWNOFF  EQU 5                  ; Owned-slot mask follows the base slot.
+W_CAPOFF  EQU 21                 ; Captured-slot mask follows the owned mask.
 W_MASKSZ  EQU 16                 ; One mask covers the 128 local slots.
 W_ESCAPE  EQU 0C600H             ; One escape flag belongs to each local slot.
 W_BODY EQU 0C700H                ; Nested body lookahead records use this area.
@@ -63,6 +63,7 @@ W_TAIL_N   EQU 64                 ; Tail candidates per body expression scope.
 W_CONDS   EQU 0CC00H             ; End-jump patches for cond clauses.
 W_CBASES  EQU 0CD00H             ; Saved cond patch-table bases by nesting depth.
 W_CTOPS  EQU 0CD20H              ; Saved cond patch counts by nesting depth.
+W_DOSTEP EQU 0CD40H              ; Step ranges of the do being compiled, 4 bytes each.
 ; Literal records and bytes use the compiler-only band after the replay
 ; frames, and the replay event buffer (REC_BUF) follows them to W_REPEND.
 W_LITREC EQU 0CF00H               ; Four bytes per copied symbol or string.

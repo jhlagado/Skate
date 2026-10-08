@@ -26,8 +26,8 @@ RT_TOP   EQU 0E400H               ; Stack ceiling: the TPA must extend at least 
 ; A descriptor's owned and capture masks are each W bytes, where the width W
 ; at offset DESC_LEN covers that procedure's highest owned or captured slot.
 ; The owned mask follows the width; the capture mask follows the owned mask.
-DESC_LEN    EQU 12                 ; Descriptor offset of the mask width.
-DESC_MAP   EQU 13                  ; Descriptor offset of the owned-slot mask.
+DESC_LEN    EQU 5                  ; Descriptor offset of the mask width.
+DESC_MAP   EQU 6                   ; Descriptor offset of the owned-slot mask.
 DESC_MAX   EQU 16                  ; At most sixteen bytes cover 128 local slots.
 
 RT_BOOT:                          ; START in entry.asm set the boot stack.

@@ -96,20 +96,18 @@ PROC_REC:
         JR NZ,.FIND
         LD L,B                     ; B is the record's position in the stack.
         POP BC
-        LD H,0                     ; Each record carries two 128-bit masks.
+        LD H,0                     ; Records are W_PRECSZ, 37, bytes.
         LD D,H                     ; Keep the original index for the final add.
         LD E,L
         ADD HL,HL                  ; Two times the index.
         ADD HL,HL                  ; Four times the index.
         PUSH HL                    ; Keep four times the index.
         ADD HL,HL                  ; Eight times the index.
-        PUSH HL                    ; Keep eight times the index.
         ADD HL,HL                  ; Sixteen times the index.
         ADD HL,HL                  ; Thirty-two times the index.
-        POP DE                     ; Recover eight times the index.
-        ADD HL,DE                  ; Forty times the index.
+        ADD HL,DE                  ; Thirty-three times the index.
         POP DE                     ; Recover four times the index.
-        ADD HL,DE                  ; Complete the forty-four-byte offset.
+        ADD HL,DE                  ; Complete the thirty-seven-byte offset.
         LD DE,W_PRECS              ; Add the open-record base address.
         ADD HL,DE                  ; Return the record address in HL.
         LD A,(ST_DESC)             ; Callers may rely on A holding the index.
@@ -120,37 +118,29 @@ PROC_REC:
         LD A,(ST_DESC)
         RET
 
-; Save the formal slot number in the current descriptor and advance its arity.
+; Count one formal and advance the arity.  Formals take consecutive slots,
+; so only the first one's slot is kept, in byte four.
 PROC_ARG:
         PUSH AF                    ; Preserve the slot number returned by BIND_NEW.
-        CALL PROC_REC              ; Locate the current descriptor metadata.
-        INC HL                     ; Skip the body address low byte.
-        INC HL                     ; Skip the body address high byte.
+        CALL PROC_REC
+        INC HL                     ; Skip the body address.
+        INC HL
         LD A,(HL)                  ; Read the current formal count.
-        CP 4                       ; Four fixed arguments keep descriptors compact.
-        JR NC,.FULL                ; Reject a fifth formal before table overflow.
-        LD E,A                     ; E is the formal index within the record.
-        INC A                      ; Publish the new arity.
-        LD (HL),A                  ; The runtime uses this count during dispatch.
-        LD A,E                     ; Reconstruct the slot field offset four plus index.
-        INC HL                     ; Move to the capture mask at offset three.
-        INC HL                     ; Move to the first formal slot at offset four.
-        LD B,A                     ; The old arity is the number of slots to skip.
-        LD A,B                     ; Keep the loop count in the DJNZ register.
-        OR A                       ; Zero formals select the first slot directly.
-        JR Z,.STORE                ; Avoid a wrapped DJNZ count for arity zero.
-.SKIP:
-        INC HL                     ; Skip the low byte of one recorded formal.
-        INC HL                     ; Skip its reserved high byte as well.
-        DJNZ .SKIP                 ; Stop at the slot for the new formal.
-.STORE:
-        POP AF                     ; Recover the compiler-local slot number.
-        LD (HL),A                  ; Runtime publication resolves its address later.
-        INC HL                     ; The descriptor keeps a fixed two-byte slot field.
-        XOR A                      ; The current compiler slot range fits in one byte.
-        LD (HL),A                  ; Keep the high byte reserved and deterministic.
+        CP ARG_MAX                 ; A call can pass at most ARG_MAX values.
+        JR NC,.FULL
+        INC (HL)
+        INC HL                     ; Byte four is the base slot.
+        INC HL
+        OR A
+        JR NZ,.KEPT                ; Later formals follow the base.
+        POP AF
+        LD (HL),A
         OR A                       ; Carry clear reports a complete formal record.
-        RET                        ; The lambda parser reads the next name.
+        RET
+.KEPT:
+        POP AF
+        OR A
+        RET
 .FULL:
         POP AF                     ; Keep the compiler stack balanced on rejection.
         JP ERR_CAP                 ; The procedure arity is a checked capacity.

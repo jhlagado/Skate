@@ -71,9 +71,9 @@ PKT_NULL:
 
 ; list consumes the bounded packet in source order and folds it into pairs.
 PKT_LIST:
-        LD A,(ARG_CNT)             ; The packet holds zero through eight values.
-        CP 9                       ; Eight is the full packet, not an overflow.
-        JP NC,ERROR                ; Reject only a count beyond the eight records.
+        LD A,(ARG_CNT)             ; The packet holds zero through ARG_MAX values.
+        CP ARG_MAX+1
+        JP NC,ERROR
         LD (PKT_LEFT),A
         LD HL,ARG_PKT
         LD (PKT_PTR),HL

@@ -10,7 +10,7 @@ STR_RET:
 ; Construct a managed string from zero through eight byte characters.
 STR_MAKE:
         LD A,(ARG_CNT)             ; The compiler packet supports at most eight values.
-        CP 9                       ; Eight characters fill the packet exactly.
+        CP ARG_MAX+1               ; A full packet of characters.
         JP NC,ERROR                ; Keep the runtime safe for a malformed caller.
         LD (STR_LEN),A            ; The argument count is the resulting byte length.
         LD B,A                     ; Validate every packet value before allocating.

@@ -25,9 +25,9 @@ CALL_ARG:
         LD (ST_AVAL),HL            ; Save the reader payload before CMD_EXPR reads it.
         LD A,(RD_TAG)              ; The scalar tag is one byte in the reader state.
         LD (ST_ATAG),A             ; Preserve it while CMD_EXPR reads the argument.
-        LD A,(ST_ARGS)             ; The packet has a deliberately small bound.
-        CP 8                       ; Eight values cover the first procedure tests.
-        JP NC,ERR_CAP              ; A larger call would overrun the runtime packet.
+        LD A,(ST_ARGS)             ; The runtime's packet holds ARG_MAX values.
+        CP ARG_MAX
+        JP NC,ERR_CAP
         XOR A                      ; The argument expression is not tail-position.
         LD (ST_TAIL),A             ; Nested calls therefore retain their return.
         LD A,(ST_ATAG)             ; Restore the reader's scalar tag byte.

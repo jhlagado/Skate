@@ -66,6 +66,7 @@ SLOT_CUR:      DW 0                ; Active four-byte slot address.
 SLOT_VAL:      DW 0                ; Value payload held by a slot helper.
 SLOT_TAG:     DB 0                 ; Value tag held by a slot helper.
 REST_EXT:     DB 0                 ; Byte 2 of a rest-binding argument.
+REST_NXT:  DB 0                    ; Slot of the next formal being installed.
 SLOT_REP:      DB 0                ; Active-slot flags held by a slot helper.
 SLOT_NUM:      DB 0                ; Slot number held across promotion.
 DESC_PTR:      DW 0                ; Descriptor cursor during argument transfer.
@@ -87,7 +88,7 @@ QT_START:     DW 0                 ; Absolute start of quoted-list cache records
 QT_STOP:     DW 0                  ; Exclusive end of quoted-list cache records.
 DR_DIR:      DW 0                  ; Absolute start of the published symbol directory.
 DR_DEND:      DW 0                 ; Exclusive end of the published symbol directory.
-ARG_PKT:     DS ARG_MAX*4          ; Four-byte argument records.
+ARG_PKT      EQU 0C780H            ; ARG_MAX four-byte records, after PS_TABLE.
 OPS_SP:       DW RT_OPLO       ; Operator side-stack cursor between heap and guard.
 OUT_BUF:   DS 32               ; Decimal output buffer terminated for BDOS function 9.
 TX_ERROR:  DB "RUNTIME ERROR",13,10,"$"

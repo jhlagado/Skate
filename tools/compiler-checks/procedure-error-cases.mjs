@@ -8,7 +8,7 @@ export const applyRuntimeErrorCases = [
   ],
   [
     "APPCOUNT.SK8",
-    "(apply + (cons 1 (cons 2 (cons 3 (cons 4 (cons 5 (cons 6 (cons 7 (cons 8 (cons 9 '()))))))))))",
+    "(define (iota n acc) (if (= n 0) acc (iota (- n 1) (cons n acc)))) (apply + (iota 33 '()))",
     "RUNTIME ERROR\r\n",
   ],
 ];

@@ -50,9 +50,7 @@ which they should be dealt with.
 | Limit | Today | Verdict | Proposal |
 | --- | --- | --- | --- |
 | Runnable program size | 36,352 bytes of `.COM` (an image ending at `8F00H`); a larger image is `CAP` | Rework | Compute the runtime memory map from the TPA instead of fixed bands (§6.2) |
-| Non-tail recursion depth | about 210 levels, and far fewer in a program with one large procedure | Rework | Size each frame by its own procedure's slots, not the program's largest (§5.2). Then give the stack the memory a computed map frees |
-| Fixed formals per procedure | 4 | Rework | The descriptor has four formal fields. Named `let` and `do` inherit the limit, so a five-variable loop is `CAP`. Make the formal list variable length; target 32 |
-| Arguments per call, `apply`, `list`, `vector` | 8 | Raise | The argument packet is 32 bytes. 32 arguments cost 96 more runtime bytes and one compiler constant |
+| Non-tail recursion depth | about 210 levels of a one-argument procedure | Rework | Each frame is now sized by its own procedure. The depth is bound by the 3,840-byte stack; a computed map (§6.2) can give it more |
 | Size of a `do`, a `letrec` binding list, or leading internal definitions | 200 reader events in all; a `do` body of about 10 short forms | Rework / Raise | They are buffered in an 800-byte replay area. Move it into the idle staging window (§6.1) for 4 KB or more, or stream these forms |
 | Distinct quoted symbols and strings copied to output | 64, and 1,023 bytes | Raise | Double in the staging window |
 | String literals | 64 distinct, 1,024 bytes | Raise | Double; text-heavy programs hit this first |
@@ -75,10 +73,10 @@ which they should be dealt with.
 | Characters | 8 bits | One-byte characters | `integer->char` outside 0–255 is a `RUNTIME ERROR` |
 | String length | 255 bytes | One length byte in the string record | A longer literal is `CAP`; a longer runtime result is a `RUNTIME ERROR` |
 | Symbol and identifier length | 31 bytes | Lexer token check and the runtime reader | `CAP` (pinned by `LONGSYM`). Raise to 63 cheaply in the compiler, but `read` and `string->symbol` must change with it |
-| Fixed formals | 4, plus an optional rest formal | Four formal fields in the 12-byte procedure descriptor, in both compiler and runtime | `CAP` (pinned by `FORMAL5`). Also limits named `let` and `do` to 4 variables. Rework (§2) |
-| Arguments in one call | 8 | The runtime's 32-byte argument packet | `CAP`; the runtime also refuses a larger packet. Raise (§2) |
-| `apply` | The leading arguments and the list's elements together at most 8 | The same packet | `RUNTIME ERROR` |
-| `vector`, `string`, `list` | At most 8 arguments | The packet | `CAP` at compile time |
+| Fixed formals | 32, plus an optional rest formal; also the variables of a named `let` or `do` | A call passes at most 32 values. Formals take consecutive slots, so a descriptor records only the first | `CAP` (pinned by `FORMAL33`) |
+| Arguments in one call | 32 (`ARG_MAX`) | The runtime's 128-byte argument packet | `CAP` (pinned by `ARGS33`); the runtime also refuses a larger packet |
+| `apply` | The leading arguments and the list's elements together at most 32 | The same packet | `RUNTIME ERROR` (pinned by `APPCOUNT`) |
+| `vector`, `string`, `list` | At most 32 arguments | The packet | `CAP` at compile time |
 | `string-append` | Exactly 2 arguments | Implementation | `RUNTIME ERROR`; should accept any number |
 | Vector length | 64 elements | The largest closure-slab class | `RUNTIME ERROR`. Rework |
 | `call/ec` | One-shot escapes only, 8 active at once | `EC_TABLE`, 8 × 21 bytes | `RUNTIME ERROR` |
@@ -131,7 +129,7 @@ The compiler works in fixed tables between `W_STAGE` (`5800H`) and its stack
 | Quoted constants in a program | 255 | One-byte cache index | `CAP` | Rework if met |
 | Replay events | 800 bytes, 200 events | `REC_BUF` to `W_REPEND` | `CAP` | Rework or Raise. Bounds `letrec` binding lists, leading internal definitions with the first body form, and whole `do` forms (about 85 events once the rewrite is appended). Measured: a `do` body of 8 `(write (+ i 0))` compiles and 12 does not; an internal `define` of 30 short forms compiles and 45 does not |
 | Nested replay scopes | 16 | `W_REPLAY` | `CAP` | Keep |
-| `do` variables | 8 in the `do` rewrite; 4 in practice | The named let it becomes | `CAP` | Follows the formals Rework |
+| `do` variables | 32 | The named let it becomes; step ranges in `W_DOSTEP` | `CAP` | Keep |
 | Pending `and`/`or` operands, `case` datums and quoted-list ends | 64 | `W_BRANCH` (half used) | `CAP` | Raise, free |
 | Nested `if`, `when`, `unless` | 32 | `W_IFALSE`, `W_IFEND` (half used) | `CAP` | Raise, free, once the stack is guarded |
 | `cond`/`case` nesting | 32 | `W_CBASES`, `W_CTOPS` | `CAP` | Raise (+64 bytes) |
@@ -151,7 +149,7 @@ grows with a larger TPA.
 | Runtime size | Core 18,410 bytes, with standard procedures 20,849, with numeric procedures 22,479, full 26,145 | `RT_CORE`, `RT_STD`, `RT_NUMS`, `RT_SIZE` | — | Each 256 bytes of runtime or program costs one heap page (32 pairs) |
 | Live pairs | 2,720 with the core runtime and a small program | 8 bytes a pair; low pages up to `9000H` and 21 high pages | `RUNTIME ERROR` after a collection | Rework with the computed map. Pinned by `PAIR2720` and `PAIR2721` |
 | Native stack | 3,840 bytes, `D500H`–`E400H` | `RT_GUARD`, `RT_TOP` | `RUNTIME ERROR` | Rework |
-| Non-tail recursion | About 210 levels of `(+ 1 (f (- n 1)))` (measured: 200 passes, 215 fails) | Each frame holds a pointer array sized by `ST_LMAX`, the largest slot count anywhere in the program | `RUNTIME ERROR` | Rework. Adding one unrelated procedure with 30 `let` locals cut the same recursion to under 40 levels (measured). Closures are sized the same way, 2 × LMAX + 2 bytes. Recording each procedure's own extent in its descriptor fixes both |
+| Non-tail recursion | About 210 levels of `(+ 1 (f (- n 1)))` (measured: 200 passes, 250 fails), whatever other procedures the program has | Each frame holds 4 bytes for each of its own procedure's slots, and closures 2 bytes each; a tail call into a procedure with more slots builds a larger frame | `RUNTIME ERROR` | Rework with the computed map. Pinned by `DEEPOK`, `DEEPREC` and `FRAMES` |
 | Pending operand roots | 255 | `ROOT_TAB`, 1,020 bytes | `RUNTIME ERROR` | Keep |
 | Operator side stack | 255 records | `C000H`–`C400H` | `RUNTIME ERROR` | Keep; bounds nesting through computed-operator calls, `case` and `map` |
 | Quote, `list`, rest and `apply` stack | 255 records shared across nesting | `C800H`–`CC00H` | `RUNTIME ERROR` | Keep, but the compiler should check deep quoted data against it |
@@ -256,17 +254,18 @@ decimal exponent saturating, and runtime symbols that are never freed.
 
 Limits pinned by a test: 256 globals (`GLOB256`), 33 nested `if`s
 (`IF33`), a 64-element quoted list (`REVQCAP`), 2,720 live pairs, recursion
-(`DEEPOK`, `DEEPREC`), `apply` of 9 values (`APPCOUNT`), `(make-vector 65)`
+(`DEEPOK`, `DEEPREC`), `apply` of 33 values (`APPCOUNT`), `(make-vector 65)`
 (`VLONGERR`), stale escapes (`ECSTALE`, `ECREUSE`), 11,000 top-level forms
 (`TOOLONG`), deep `write` (`DEEPNEST`), 255- and 256-byte strings, and an
 out-of-range integer literal.
 
-Also pinned: the runnable image size (`test:cpm:full-image`), a fifth
-formal (`FORMAL5`), a 32-byte identifier (`LONGSYM`), a 65th string
+Also pinned: the runnable image size (`test:cpm:full-image`), a 33rd
+formal (`FORMAL33`) and argument (`ARGS33`), 32 of each (`ARGS32`), frames
+of different sizes (`FRAMES`), a 32-byte identifier (`LONGSYM`), a 65th string
 (`STR65`), a late `include` (`LATEINC`), `string-ref` with a large index
 (`STRREFW`), `equal?` depth (`DEEPEQ`, `EQDEPTH`) and refused source names.
 
-Not pinned: 129 procedures, 14 open procedures, 9 arguments, 320 fixups,
+Not pinned: 129 procedures, 14 open procedures, 320 fixups,
 320 symbols, 65 literals in quoted data, the replay buffer, 64 tail calls,
 `cond` clauses and branches, 255 quoted constants, 8 escapes, the file
 ports, the runtime symbol area and the `read` limits. Each limit that is kept
@@ -279,11 +278,9 @@ In order of value to a programmer:
 
 1. **Close the silent failures** (§7) and make capacity overflows say `CAP`.
    Done, except for circular lists and token generations.
-2. **Per-procedure frame size.** Small, and it lifts the recursion depth of
-   every program with one large procedure.
-3. **Variable-length formals** (target 32) and **32-argument calls**, which
-   together remove the 4/8 limits from procedures, named `let`, `do`,
-   `apply`, `list` and `vector`.
+2. **Per-procedure frame size.** Done.
+3. **32 formals and 32-argument calls,** for procedures, named `let`, `do`,
+   `apply`, `list`, `vector` and `string`. Done.
 4. **Move compile-only tables into the staging window,** then raise the
    replay buffer, literals, strings, symbols and fixups to at least twice
    their size, and the half-used stacks to their full tables.

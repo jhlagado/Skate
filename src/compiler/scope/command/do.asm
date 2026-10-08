@@ -11,8 +11,10 @@
 ; The rest of the form is captured as replay events, the rewritten events are
 ; appended after it, and the replay of the rewritten events is compiled by
 ; LET_FORM.  When the replay runs out, REC_NEXT returns to the enclosing
-; stream and releases both event ranges.  The rewrite is never more than 96
-; bytes longer than the capture, so one capacity check covers every append.
+; stream and releases both event ranges.  The rewrite is at most 52 bytes,
+; plus 4 for each variable without a step, longer than the capture, so
+; checking that space once, and again for each such variable, covers every
+; append.
 
 DO_FORM:
         LD A,(ST_PLAY)             ; A body scan may have replayed just the
@@ -62,7 +64,10 @@ DO_FORM:
         LD BC,(DO_FROM)
         SBC HL,BC
         ADD HL,DE
-        LD DE,W_REPEND-96
+        LD DE,52
+        ADD HL,DE
+        LD (DO_NEED),HL
+        LD DE,W_REPEND
         OR A
         SBC HL,DE
         JR NC,.CAP
@@ -117,7 +122,7 @@ DO_FORM:
         CP 1
         JR NZ,.FAIL
         LD A,(DO_VARS)
-        CP 8
+        CP ARG_MAX                 ; Each variable is an argument of the loop.
         JR NC,.CAP
         CALL .ADV
         LD A,(HL)
@@ -141,6 +146,16 @@ DO_FORM:
         LD C,L
         JR .KEEP
 .SAME:
+        PUSH HL                    ; The variable is copied again as its step.
+        LD HL,(DO_NEED)
+        LD DE,4
+        ADD HL,DE
+        LD (DO_NEED),HL
+        LD DE,W_REPEND
+        OR A
+        SBC HL,DE
+        POP HL
+        JR NC,.CAP
         LD DE,(DO_VAR)             ; No step: the variable itself.
         LD B,D
         LD C,E
@@ -156,7 +171,7 @@ DO_FORM:
         LD L,A
         LD H,0
         PUSH DE
-        LD DE,DO_STEPS
+        LD DE,W_DOSTEP
         ADD HL,DE
         POP DE
         LD (HL),E
@@ -201,7 +216,7 @@ DO_FORM:
         CALL .UPTO                 ; body ...
         CALL .OPEN
         CALL .LOOPSYM
-        LD HL,DO_STEPS
+        LD HL,W_DOSTEP
 .STEP:
         LD A,(DO_VARS)
         OR A
@@ -352,8 +367,8 @@ DO_NAME:  DB "do loop"
 DO_FROM:  DW 0                     ; The captured form's events.
 DO_START: DW 0                     ; The rewritten events.
 DO_VAR:   DW 0                     ; The current binding's variable event.
+DO_NEED:  DW 0                     ; Where the rewrite will end.
 DO_VARS:  DB 0                     ; Bindings, and steps still to emit.
 DO_IF:    DW 0                     ; Symbol references used by the rewrite.
 DO_BEGIN: DW 0
 DO_LOOP:  DW 0
-DO_STEPS: DS 32                    ; Each binding's step range [start,end).

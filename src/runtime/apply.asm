@@ -1,6 +1,6 @@
 ; Dynamic apply for the bounded procedure-call packet.
 ;
-; The compiler call path accepts eight four-byte value records.  Apply keeps
+; The compiler call path accepts ARG_MAX four-byte value records.  Apply keeps
 ; the procedure and final list aside, moves any leading arguments down, then
 ; appends the list elements in order.  A proper list longer than the packet is
 ; rejected before the target is entered.  The ordinary call and tail-call
