@@ -180,6 +180,8 @@ NAME_TAB:   DB 1,'+'+80H                        ; +
             DB 125,"cddd",'r'+80H               ; cdddr
             DB 84,"mem",'v'+80H                 ; memv
             DB 85,"ass",'v'+80H                 ; assv
+            DB 126,"ma",'p'+80H                ; map
+            DB 127,"for-eac",'h'+80H           ; for-each
 ; The fragments, numbered from one in the order of the equates above.
 NAME_FRG:
             DB "strin",'g'+80H

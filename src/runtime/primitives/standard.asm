@@ -48,6 +48,7 @@ STD_DISP:
         DW STD_CXR,STD_CXR,STD_CXR,STD_CXR,STD_CXR      ; 113..117 c[ad]{2,3}r
         DW STD_CXR,STD_CXR,STD_CXR,STD_CXR,STD_CXR      ; 118..122
         DW STD_CXR,STD_CXR                              ; 123..124
+        DW STD_MAP,STD_EACH                             ; 125..126
 
 ; ---- Packet and result helpers --------------------------------------------
 
@@ -802,6 +803,175 @@ STD_JOIN:
         CALL OPS_POP               ; Drop the head slot.
         CALL OPS_POP               ; A:HL is the result.
         PUSH IX
+        RET
+
+; map and for-each call a procedure from inside the runtime.  Each round
+; pushes the procedure and the next element of every list exactly as generated
+; code does, then calls INV_OP, which returns here with the result.  The
+; procedure, the list cursors and the result head live on the operator side
+; stack, where a collection finds them and an escape discards them; the rest
+; of the state is a native-stack frame, found again from SP after each call
+; because a nested map or an escape inside the procedure may change IY.
+;
+; Frame, from IY: +0 the last result pair's CDR cell (0 before the first),
+; +2 the side-stack address of the procedure's record, +4 the number of lists,
+; +5 1 for for-each, +6 the saved FRM_SAVE and +8 the saved IX.
+STD_EACH:
+        LD A,1
+        JR STD_WALK
+STD_MAP:
+        XOR A
+STD_WALK:
+        LD B,A
+        LD A,(ARG_CNT)
+        CP 2
+        JP C,ERROR                 ; A procedure and at least one list.
+        DEC A
+        LD C,A
+        PUSH IX
+        LD HL,(FRM_SAVE)
+        PUSH HL
+        PUSH BC
+        LD HL,(OPS_SP)
+        PUSH HL
+        LD HL,0
+        PUSH HL
+        LD A,(ARG_CNT)             ; Copy the procedure and the lists out of
+        LD B,A                     ; the packet, which each call reuses.
+        LD HL,ARG_PKT
+.COPY:
+        PUSH BC
+        PUSH HL
+        CALL PKT_VAL
+        CALL OPS_PUSH
+        POP HL
+        LD DE,4
+        ADD HL,DE
+        POP BC
+        DJNZ .COPY
+        LD HL,0FE02H               ; The result so far is the empty list.
+        XOR A
+        LD C,A
+        CALL OPS_PUSH
+        LD (ARG_CNT),A
+.ROUND:
+        LD IY,0
+        ADD IY,SP
+        LD L,(IY+2)                ; Stop when any list is empty.
+        LD H,(IY+3)
+        LD B,(IY+4)
+.CHECK:
+        INC HL
+        INC HL
+        INC HL
+        INC HL
+        PUSH HL
+        PUSH BC
+        CALL OPS_GET
+        CALL STD_NIL
+        POP BC
+        POP HL
+        JP Z,.DONE
+        DJNZ .CHECK
+        LD L,(IY+2)                ; Push the procedure, then each list's next
+        LD H,(IY+3)                ; element, and advance the lists.
+        LD (STD_PTR),HL
+        CALL OPS_GET
+        CALL OPS_PUSH
+        LD A,(IY+4)
+        LD (STD_CNT),A
+.ARGS:
+        LD HL,(STD_PTR)
+        LD DE,4
+        ADD HL,DE
+        LD (STD_PTR),HL
+        CALL OPS_GET
+        LD (STD_LIST),HL
+        LD (STD_LTAG),A
+        CALL PAIR_CAR
+        JP C,ERROR                 ; Each list must be a proper list.
+        CALL ARG_PUSH
+        LD HL,(STD_LIST)
+        LD A,(STD_LTAG)
+        CALL PAIR_CDR
+        EX DE,HL
+        LD HL,(STD_PTR)
+        CALL OPS_PUT
+        LD HL,STD_CNT
+        DEC (HL)
+        JR NZ,.ARGS
+        LD A,(IY+4)
+        CALL INV_OP                ; A:CHL is the procedure's result.
+        LD IY,0
+        ADD IY,SP
+        BIT 0,(IY+5)
+        JR NZ,.ROUND               ; for-each keeps no results.
+        LD (QT_CAR),HL             ; map appends (result) to its list.
+        LD (QT_CTAG),A
+        LD A,C
+        LD (QT_CEXT),A
+        LD HL,0FE02H
+        LD (QT_CDR),HL
+        XOR A
+        LD (QT_DTAG),A
+        LD (QT_DEXT),A
+        CALL PAIR_NEW
+        EX DE,HL                   ; DE is the new pair.
+        LD L,(IY+0)
+        LD H,(IY+1)
+        LD A,H
+        OR L
+        JR NZ,.LINK
+        CALL .HEAD                 ; The first pair is the result's head.
+        LD A,1
+        LD C,0
+        CALL OPS_PUT
+        JR .TAIL
+.LINK:
+        LD A,1                     ; Later pairs follow the last one.
+        LD C,0
+        CALL STD_PUT
+.TAIL:
+        LD HL,CDR_LO
+        ADD HL,DE
+        LD (IY+0),L
+        LD (IY+1),H
+        JP .ROUND
+.DONE:
+        CALL .HEAD
+        LD L,(IY+2)                ; Release the side-stack records.
+        LD H,(IY+3)
+        LD (OPS_SP),HL
+        LD HL,0FE04H               ; for-each's value is unspecified.
+        XOR A
+        BIT 0,(IY+5)
+        JR NZ,.LEAVE
+        LD HL,(STD_PTR)
+        CALL OPS_GET               ; map's value is the result list.
+.LEAVE:
+        POP DE
+        POP DE
+        POP DE
+        POP DE
+        LD (FRM_SAVE),DE
+        POP IX
+        JP (IX)
+
+; STD_PTR and HL address the side-stack record of the result's head.
+; DE is kept.
+.HEAD:
+        PUSH DE
+        LD A,(IY+4)
+        INC A
+        ADD A,A
+        ADD A,A
+        LD L,A
+        LD H,0
+        LD E,(IY+2)
+        LD D,(IY+3)
+        ADD HL,DE
+        LD (STD_PTR),HL
+        POP DE
         RET
 
 ; Store A:CDE in the pair cell at HL, keeping its metadata flag bits.

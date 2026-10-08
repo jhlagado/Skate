@@ -29,13 +29,13 @@ The built-in procedures are:
 | Characters | `char=?` `char<?` `char>?` `char<=?` `char>=?` `char-upcase` `char-downcase` `char-alphabetic?` `char-numeric?` `char-whitespace?` `char->integer` `integer->char` `char?` |
 | Strings and symbols | `string` `string-length` `string-ref` `string-copy` `string-append` `substring` `string=?` `string<?` `string>?` `string<=?` `string>=?` `symbol->string` `string->symbol` `string?` `symbol?` |
 | Vectors | `vector` `make-vector` `vector-length` `vector-ref` `vector-set!` `vector?` |
-| Control and other | `apply` `not` `boolean?` `procedure?` `eof-object?` |
+| Control and other | `apply` `map` `for-each` `not` `boolean?` `procedure?` `eof-object?` |
 | Input and output | `read` `read-char` `write` `display` `newline` `write-char`, the port procedures and the file openers |
 
-[`libraries/STDLIB.SK8`](libraries/STDLIB.SK8) adds `map`, `for-each`,
+[`libraries/STDLIB.SK8`](libraries/STDLIB.SK8) adds
 `filter`, `fold-left`, `fold-right`, `reduce`, `list-copy`, `last-pair`,
 `iota`, `list->vector`, `vector->list`, `vector-fill!`, `string->list` and
-`list->string` in Skate itself. Including it adds about 7 KB of code, so a
+`list->string` in Skate itself. Including it adds several kilobytes of code, so a
 program that needs only a few of them may be better off copying those.
 
 The compiler and runtime are written in Z80 assembly using the ATOM assembler.

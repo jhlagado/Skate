@@ -1,36 +1,11 @@
 ; Standard higher-order and conversion procedures, written in Skate.
 ;
 ; Include this file with (include "STDLIB.SK8") before the program's own
-; forms.  The procedures that do not call other procedures, such as length,
-; append, reverse, memq, assoc and equal?, are built into the runtime.
+; forms.  Procedures such as length, append, reverse, memq, assoc, equal?,
+; map and for-each are built into the runtime.
 ;
 ; Loops are iterative so that long lists do not exhaust the native stack:
 ; results are built in reverse and then reversed once.
-
-; (map f list) or (map f list1 list2), stopping at the shorter list.
-(define (map f items . more)
-  (if (null? more)
-      (let loop ((items items) (result '()))
-        (if (null? items)
-            (reverse result)
-            (loop (cdr items) (cons (f (car items)) result))))
-      (let loop ((left items) (right (car more)) (result '()))
-        (if (or (null? left) (null? right))
-            (reverse result)
-            (loop (cdr left) (cdr right)
-                  (cons (f (car left) (car right)) result))))))
-
-; (for-each f list) or (for-each f list1 list2) for their effects.
-(define (for-each f items . more)
-  (if (null? more)
-      (let loop ((items items))
-        (when (pair? items)
-          (f (car items))
-          (loop (cdr items))))
-      (let loop ((left items) (right (car more)))
-        (when (and (pair? left) (pair? right))
-          (f (car left) (car right))
-          (loop (cdr left) (cdr right))))))
 
 ; The elements of a list for which the predicate is true, in order.
 (define (filter keep? items)

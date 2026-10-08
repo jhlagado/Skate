@@ -102,4 +102,4 @@ GLB_PRIM:
         OR A
         RET
 
-GLB_ROWS  EQU 128                ; Records in NAME_TAB.
+GLB_ROWS  EQU 130                ; Records in NAME_TAB.

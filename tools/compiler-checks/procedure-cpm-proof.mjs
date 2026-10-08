@@ -718,6 +718,8 @@ integerCases.push([
 ]);
 const integerRuntimeErrorCases = [
   ["CXRBAD.SK8", "(cadr '(1))", "RUNTIME ERROR\r\n"],
+  ["MAPBAD.SK8", "(map car 5)", "RUNTIME ERROR\r\n"],
+  ["MAPNONE.SK8", "(for-each car)", "RUNTIME ERROR\r\n"],
   ["INTDIV0.SK8", "(quotient 7 0)", "RUNTIME ERROR\r\n"],
   ["INTREM0.SK8", "(remainder 7 0)", "RUNTIME ERROR\r\n"],
   ["INTTYPE.SK8", "(+ 1 #t)", "RUNTIME ERROR\r\n"],
@@ -796,6 +798,33 @@ const regressionCases = [
 (write (do ((i 0 (+ i 1)) (s 0 (+ s i))) ((= i 3000) s)))
 (newline)`,
     "(4 3 2 1 0)\r\n#(0 1 2 3 4)\r\n25\r\n012\r\ndoneend\r\n0101(2 10)\r\n4498500",
+  ],
+  // map and for-each call procedures from the runtime: several lists, the
+  // shortest list ending the walk, nesting, an escape out of the procedure,
+  // apply, tail position and collections while the result is being built.
+  [
+    "MAPEACH.SK8",
+    `(write (map car '((1 2) (3 4))))
+(write (map + '(1 2 3) '(10 20 30)))
+(write (map + '(1 2 3) '(1 2)))
+(write (map (lambda (x) x) '()))
+(newline)
+(for-each (lambda (x y) (display (+ x y))) '(1 2) '(3 4))
+(newline)
+(write (map (lambda (l) (map (lambda (x) (+ x 1)) l)) '((1 2) (3))))
+(write (call/ec (lambda (k) (map (lambda (x) (if (= x 3) (k 'out) x)) '(1 2 3 4)))))
+(write (map - '(5 6)))
+(newline)
+(write (apply map list '((1 2) (3 4))))
+(define (double l) (map (lambda (x) (* 2 x)) l))
+(write (double '(1 2 3)))
+(newline)
+(define (iota n acc) (if (= n 0) acc (iota (- n 1) (cons n acc))))
+(define big (iota 300 '()))
+(define (sum l acc) (if (null? l) acc (sum (cdr l) (+ acc (car l)))))
+(write (do ((i 0 (+ i 1)) (r big (map (lambda (x) (+ x 1)) big))) ((= i 6) (sum r 0))))
+(newline)`,
+    "(1 3)(11 22 33)(2 4)()\r\n46\r\n((2 3) (4))out(-5 -6)\r\n((1 3) (2 4))(2 4 6)\r\n45450",
   ],
   // A nested procedure body must not overwrite the enclosing body's pending
   // tail-call records: a non-final named let or a lambda after a tail call
