@@ -45,8 +45,8 @@ APPLY:
         CP 1
         JP NZ,ERROR                 ; A dotted tail is not an apply argument list.
         LD A,(PKT_LEFT)
-        CP 8
-        JP NC,ERROR                 ; The dynamic call packet has eight records.
+        CP ARG_MAX
+        JP NC,ERROR                 ; The packet is full.
         LD HL,(QT_ACC)              ; Read this pair's CAR before advancing its CDR.
         LD A,1
         CALL PAIR_CAR

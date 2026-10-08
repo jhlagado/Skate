@@ -238,9 +238,9 @@ the console, which fails the proof's output check, then continues with the
 corrected byte so one missing producer reports once per site.
 
 Run the CP/M groups with the probe on after any change to how values move.
-In the probe build the runtime is larger, so the pinned pair ceiling and the
-full-image proof fail by design; every other group must pass with no
-`PROBE` line. At the end of step 2 the probe found two producers that did
+In the probe build the runtime is larger, so the pinned pair ceiling skips
+itself and the full-image proof fails by design; every other group must pass
+with no `PROBE` line. At the end of step 2 the probe found two producers that did
 not set `C` (the primitive operator push in `PRIM_OP`/`PRIM_TL` and the rest
 list store in `REST_ARG`), and the whole CP/M suite was then silent.
 

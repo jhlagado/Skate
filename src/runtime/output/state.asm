@@ -87,7 +87,7 @@ QT_START:     DW 0                 ; Absolute start of quoted-list cache records
 QT_STOP:     DW 0                  ; Exclusive end of quoted-list cache records.
 DR_DIR:      DW 0                  ; Absolute start of the published symbol directory.
 DR_DEND:      DW 0                 ; Exclusive end of the published symbol directory.
-ARG_PKT:     DS 32                 ; Eight four-byte argument records.
+ARG_PKT:     DS ARG_MAX*4          ; Four-byte argument records.
 OPS_SP:       DW RT_OPLO       ; Operator side-stack cursor between heap and guard.
 OUT_BUF:   DS 32               ; Decimal output buffer terminated for BDOS function 9.
 TX_ERROR:  DB "RUNTIME ERROR",13,10,"$"

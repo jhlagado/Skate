@@ -276,6 +276,16 @@ const errorCases = [
     "EXPECT\r\n",
   ],
   ["TOOLONG.SK8", "1 ".repeat(11000), "CAP\r\n"],
+  // Front-end tables report CAP: a fifth formal, an over-long identifier and
+  // a 65th distinct string literal.
+  ["FORMAL5.SK8", "(define (f a b c d e) a)", "CAP\r\n"],
+  ["LONGSYM.SK8", `(define ${"a".repeat(32)} 1)`, "CAP\r\n"],
+  [
+    "STR65.SK8",
+    Array.from({ length: 65 }, (_, i) => `(display "s${i}")`).join(" "),
+    "CAP\r\n",
+  ],
+  ["LATEINC.SK8", '(display 1) (include "LIST.SK8")', "COMPILE ERROR\r\n"],
   [
     "INCBAD.SK8",
     '(include "BROKEN.SK8")\r\n',
@@ -369,6 +379,16 @@ for (const [name, source] of selectedErrorCases) {
     padByte: 0x1a,
   });
 }
+// A source named by a wildcard, or with a type the compiler writes, is
+// refused before publication can delete or rename it.
+const outputTypeSource = new TextEncoder().encode("(display 1)\x1a");
+if (errorMode && onlyName === undefined) {
+  disk = installCpm22File(disk, {
+    name: "NAMED.COM",
+    bytes: outputTypeSource,
+    padByte: 0x1a,
+  });
+}
 if (errorMode) {
   for (const [name, source] of includeErrorFiles) {
     disk = installCpm22File(disk, {
@@ -422,6 +442,17 @@ try {
       assert.ok(output.includes(location), JSON.stringify(output));
     }
     runCommand(`ERA ${name}`, "A>", `remove ${name}`);
+  }
+  if (errorMode && onlyName === undefined) {
+    runCommand("SKATE *.SK8", "SOURCE ERROR\r\n", "refuse a wildcard");
+    runCommand("SKATE NAMED.COM", "SOURCE ERROR\r\n", "refuse a COM source");
+    const kept = readCpm22File(machine.export_drive(0), "NAMED.COM");
+    assert.deepEqual(
+      kept.slice(0, outputTypeSource.length),
+      outputTypeSource,
+      "NAMED.COM must be left unchanged",
+    );
+    runCommand("ERA NAMED.COM", "A>", "remove NAMED.COM");
   }
   for (const [name] of selectedNoOutputCases) {
     runCommand(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);

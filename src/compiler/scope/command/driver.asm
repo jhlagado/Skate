@@ -81,6 +81,8 @@ CMD_MAIN:
         SBC HL,DE                 ; Check the qualified TPA has the required guard.
         JP C,.MEMORY              ; Refuse an installation with too little memory.
         LD SP,0E020H              ; Parser and emitter calls share this stack.
+        CALL CMD_NAME             ; Refuse a name the outputs would destroy.
+        JR C,.NAME
         CALL PUB_TIDY              ; Recover stale stages before opening the spool.
         JR C,.RECOVERY             ; A recovery failure has no source location.
         CALL CMD_INIT             ; Clear tables and load the checked runtime provider.
@@ -101,6 +103,9 @@ CMD_MAIN:
         CALL PUB_SNAG               ; Select OUTPUT ERROR and close any stream.
 .FAIL:
         JP DIAG_OUT                ; Close input and print the selected diagnostic.
+.NAME:
+        LD DE,M_SOURCE
+        JR CMD_QUIT
 .MEMORY:
         LD DE,M_MEMORY             ; Memory guard failure is distinct to the user.
 
@@ -108,6 +113,44 @@ CMD_QUIT:
         LD C,9                     ; CP/M function 9 prints a dollar-terminated string.
         CALL 5                     ; Use the platform BDOS vector.
         JP 0                       ; Warm start after either result.
+
+; Return carry when the source name in the command-line FCB is a wildcard
+; or has a type the compiler writes, since publication would delete or
+; rename the source.
+CMD_NAME:
+        LD HL,5DH
+        LD B,11
+.WILD:
+        LD A,(HL)
+        CP '?'
+        SCF
+        RET Z
+        INC HL
+        DJNZ .WILD
+        LD HL,.TYPES
+        LD C,9
+.TYPE:
+        LD DE,65H
+        LD B,3
+.CHAR:
+        LD A,(DE)
+        AND 7FH                   ; Ignore attribute bits.
+        CP (HL)
+        JR NZ,.SKIP
+        INC HL
+        INC DE
+        DJNZ .CHAR
+        SCF
+        RET
+.SKIP:
+        INC HL
+        DJNZ .SKIP
+        DEC C
+        JR NZ,.TYPE
+        OR A
+        RET
+.TYPES:
+        DB "COMNOBASOCBSNBSSPLNPRCPRAPR"
 
 ; Initialise reader contexts, compiler tables and the staged runtime image.
 CMD_INIT:

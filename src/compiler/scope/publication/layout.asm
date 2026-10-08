@@ -153,6 +153,14 @@ PUB_END:
         OR A                       ; Clear carry before measuring the image.
         SBC HL,DE                  ; HL becomes runtime plus code plus slot data.
         LD (PUB_SIZE),HL           ; PUB_MAIN streams this exact payload length.
+        OR A                       ; A is still ST_PCHI: past 0FFFFH cannot run.
+        JP NZ,ERR_CAP
+        LD A,L                     ; The runtime rounds the image end up to a
+        ADD A,0FFH                 ; page and needs that page below RT_LOEND,
+        LD A,H                     ; so refuse the image here rather than let
+        ADC A,1                    ; it stop at start-up.  The 1 is the 0100H
+        CP RT_LOEND/256            ; origin.
+        JP NC,ERR_CAP
         CALL PUB_LINK              ; Point the runtime image at the generated program.
         CALL PUB_FIX               ; Replace every slot placeholder with an address.
         RET                        ; Carry reports any capacity or layout failure.

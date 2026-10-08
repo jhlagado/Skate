@@ -153,8 +153,7 @@ PROC_ARG:
         RET                        ; The lambda parser reads the next name.
 .FULL:
         POP AF                     ; Keep the compiler stack balanced on rejection.
-        SCF                        ; The procedure arity is a checked capacity.
-        RET                        ; The lambda error path restores its scope.
+        JP ERR_CAP                 ; The procedure arity is a checked capacity.
 
 ; Save the body address, emit the finished descriptor after the body, release
 ; its record and patch the jump over both.  Byte three, the shared slot

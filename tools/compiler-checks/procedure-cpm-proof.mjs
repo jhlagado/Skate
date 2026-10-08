@@ -719,6 +719,12 @@ integerCases.push([
 const integerRuntimeErrorCases = [
   ["CXRBAD.SK8", "(cadr '(1))", "RUNTIME ERROR\r\n"],
   ["MAPBAD.SK8", "(map car 5)", "RUNTIME ERROR\r\n"],
+  ["STRREFW.SK8", '(string-ref "abc" 65536)', "RUNTIME ERROR\r\n"],
+  [
+    "DEEPEQ.SK8",
+    "(define (nest n acc) (if (zero? n) acc (nest (- n 1) (cons acc '())))) (equal? (nest 900 '()) (nest 900 '()))",
+    "RUNTIME ERROR\r\n",
+  ],
   ["MAPNONE.SK8", "(for-each car)", "RUNTIME ERROR\r\n"],
   ["INTDIV0.SK8", "(quotient 7 0)", "RUNTIME ERROR\r\n"],
   ["INTREM0.SK8", "(remainder 7 0)", "RUNTIME ERROR\r\n"],
@@ -825,6 +831,12 @@ const regressionCases = [
 (write (do ((i 0 (+ i 1)) (r big (map (lambda (x) (+ x 1)) big))) ((= i 6) (sum r 0))))
 (newline)`,
     "(1 3)(11 22 33)(2 4)()\r\n46\r\n((2 3) (4))out(-5 -6)\r\n((1 3) (2 4))(2 4 6)\r\n45450",
+  ],
+  // equal? recurses on the native stack; a shallow structure still compares.
+  [
+    "EQDEPTH.SK8",
+    "(define (nest n acc) (if (zero? n) acc (nest (- n 1) (cons acc '())))) (write (equal? (nest 100 '(1)) (nest 100 '(1)))) (write (equal? (nest 100 '(1)) (nest 100 '(2))))",
+    "#t#f",
   ],
   // A nested procedure body must not overwrite the enclosing body's pending
   // tail-call records: a non-final named let or a lambda after a tail call

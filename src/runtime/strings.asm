@@ -62,8 +62,8 @@ STR_PRIM:
         CALL PKT_VAL
         CP 3
         JP NZ,ERROR                ; The index must be an exact integer.
-        LD A,H                     ; Only the nonnegative byte range is addressable.
-        OR A
+        LD A,C                     ; Only the nonnegative byte range is addressable.
+        OR H
         JP NZ,ERROR                ; Negative and wider integers are out of range.
         LD A,L                     ; Retain the checked byte index in the work byte.
         LD (NUM_LEFT),A

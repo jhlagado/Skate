@@ -108,8 +108,7 @@ output, prompting and stream copying with explicit ports.
 ### Program limits
 
 The compiler works in fixed tables, so a program must stay within these
-bounds. Exceeding one stops compilation with `CAP` or, for several front-end
-tables, `COMPILE ERROR`. The [limits register](docs/limits.md) lists every
+bounds. Exceeding one stops compilation with `CAP`. The [limits register](docs/limits.md) lists every
 limit, its reason and what is planned for it.
 
 | Limit | Value |
@@ -129,7 +128,7 @@ limit, its reason and what is planned for it.
 | String length | 255 |
 | Vector length | 64 |
 | Non-tail recursion | about 200 levels, fewer when the program has a procedure with many locals |
-| Program size that runs | about 36 KB of `.COM`; a larger image compiles but stops at start-up |
+| Program size | 36,352 bytes of `.COM`; a larger image is `CAP` |
 
 The runtime is loaded in one of four sizes: the core alone, the core and the
 standard procedures, those and the numeric procedures (`sqrt`, `expt`,

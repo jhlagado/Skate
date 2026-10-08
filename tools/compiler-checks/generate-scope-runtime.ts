@@ -78,6 +78,7 @@ const values = [
   `FRM_CLR EQU ${address("FRM_CLR")}`,
   `RT_CLR EQU ${address("RT_CLR")}`,
   `RT_LIMIT EQU ${offset("RT_LIMIT")}`,
+  `RT_LOEND EQU ${address("RT_LOEND")}`,
   `G_BASE EQU ${offset("G_BASE")}`,
   `G_END EQU ${offset("G_END")}`,
   `QT_START EQU ${offset("QT_START")}`,

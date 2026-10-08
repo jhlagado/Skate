@@ -232,6 +232,7 @@ STD_DEEP:
         OR A
         RET
 .PAIR:
+        CALL WR_GUARD              ; Each level of nesting uses the stack.
         CALL PAIR_CHK              ; Validate the left pair.
         JR C,.NO
         PUSH HL
@@ -260,6 +261,7 @@ STD_DEEP:
         CALL STD_GET
         JP STD_DEEP
 .VECTOR:
+        CALL WR_GUARD
         PUSH HL
         CALL VEC_CHK               ; Validate the left vector.
         POP HL

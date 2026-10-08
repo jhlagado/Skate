@@ -5,6 +5,12 @@
 
 ; Read the operator symbol following an opening parenthesis and dispatch it.
 CMD_FORM:
+        LD HL,0                    ; Refuse a form that would leave less than
+        ADD HL,SP                  ; 256 bytes of stack above the replay area.
+        LD DE,W_REPEND+256
+        OR A
+        SBC HL,DE
+        JP C,ERR_CAP
         LD A,(ST_ALLOW)            ; Save whether define is legal at this level.
         LD (ST_ATTOP),A            ; Nested forms clear the permission below.
         XOR A                      ; No nested definition may be accepted.
@@ -55,6 +61,9 @@ CMD_FORM:
         LD DE,K_DO                 ; do is rewritten to a named let.
         CALL CMD_SAME
         JP Z,DO_FORM
+        LD DE,K_INCL               ; Includes are read only before the first
+        CALL CMD_SAME              ; ordinary form; a later one is an error,
+        JP Z,ERR_BAD               ; not a call to an unbound name.
         LD DE,K_AND                ; Compare with the short-circuit conjunction.
         CALL CMD_SAME              ; The two operands are evaluated left to right.
         JP Z,IF_AND                ; Preserve the first false value.

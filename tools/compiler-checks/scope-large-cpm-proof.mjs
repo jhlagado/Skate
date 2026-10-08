@@ -52,6 +52,18 @@ const expectedComArgument = Deno.args.find((argument) =>
 const expectedCom = expectedComArgument === undefined
   ? undefined
   : Number.parseInt(expectedComArgument.slice("--expect-com=".length), 10);
+// --run executes the compiled program, which must finish without an error;
+// --expect-cap requires the compiler to refuse the program with CAP.
+const runProgram = Deno.args.includes("--run");
+// --comment=N appends N comment lines, so the source can be large while the
+// image stays small enough to run.
+const commentArgument = Deno.args.find((argument) =>
+  argument.startsWith("--comment=")
+);
+const commentLines = commentArgument === undefined
+  ? 0
+  : Number.parseInt(commentArgument.slice("--comment=".length), 10);
+const expectCap = Deno.args.includes("--expect-cap");
 assert.ok(
   Number.isInteger(count) && count > 0 && count <= 10000,
   "count must be an integer from 1 through 10000",
@@ -88,7 +100,8 @@ const source = [
   Array.from({ length: count }, () => "1").join(" "),
   tailLength === undefined ? "" : `"${"a".repeat(tailLength)}"`,
   tail,
-].filter((part) => part.length !== 0).join(" ");
+].filter((part) => part.length !== 0).join(" ") +
+  `\r\n; ${"comment ".repeat(7)}`.repeat(commentLines);
 let disk = installCpm22File(backing, {
   name: "SKATE.COM",
   bytes: compilerBytes,
@@ -111,7 +124,19 @@ const { runUntilPrompt, runCommand } = cpm;
 try {
   machine.install_drive(0, disk, true);
   runUntilPrompt(0, "the boot prompt");
+  if (expectCap) {
+    runCommand("SKATE LARGE.SK8", "CAP\r\n", "refuse LARGE.SK8");
+    console.log(JSON.stringify({ status: "passed", forms: count, cap: true }));
+    Deno.exit(0);
+  }
   runCommand("SKATE LARGE.SK8", "COMPILED\r\n", "compile LARGE.SK8");
+  if (runProgram) {
+    const output = runCommand("LARGE", "A>", "run LARGE.COM");
+    assert.ok(
+      !output.includes("ERROR"),
+      `LARGE.COM failed: ${JSON.stringify(output)}`,
+    );
+  }
   const image = machine.export_drive(0);
   const com = readCpm22File(image, "LARGE.COM");
   const aso = readCpm22File(image, "LARGE.ASO");

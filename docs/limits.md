@@ -39,8 +39,8 @@ Each capacity limit gets one of three verdicts:
 | **Raise** | Arbitrary: can be doubled or more for a known number of bytes, with no change of design |
 | **Rework** | Needs a structural change (a wider field, a computed layout, streaming) before it can grow |
 
-Skate does not yet meet the rule. Section 7 lists the places where it fails
-silently, and section 8 the places where its diagnostics mislead.
+Skate does not yet fully meet the rule. Section 7 lists the silent failures,
+those fixed and those that remain, and section 8 the diagnostics.
 
 ## 2. Summary: the limits that matter
 
@@ -49,9 +49,9 @@ which they should be dealt with.
 
 | Limit | Today | Verdict | Proposal |
 | --- | --- | --- | --- |
-| Runnable program size | about 36 KB of `.COM`; the compiler accepts 65,280 B | Rework | The compiler must refuse an image the runtime will refuse (now). Then compute the runtime memory map from the TPA instead of fixed bands (§6.2) |
+| Runnable program size | 36,352 bytes of `.COM` (an image ending at `8F00H`); a larger image is `CAP` | Rework | Compute the runtime memory map from the TPA instead of fixed bands (§6.2) |
 | Non-tail recursion depth | about 210 levels, and far fewer in a program with one large procedure | Rework | Size each frame by its own procedure's slots, not the program's largest (§5.2). Then give the stack the memory a computed map frees |
-| Fixed formals per procedure | 4 | Rework | The descriptor has four formal fields. Named `let` and `do` inherit the limit, so a five-variable loop is a `COMPILE ERROR`. Make the formal list variable length; target 32 |
+| Fixed formals per procedure | 4 | Rework | The descriptor has four formal fields. Named `let` and `do` inherit the limit, so a five-variable loop is `CAP`. Make the formal list variable length; target 32 |
 | Arguments per call, `apply`, `list`, `vector` | 8 | Raise | The argument packet is 32 bytes. 32 arguments cost 96 more runtime bytes and one compiler constant |
 | Size of a `do`, a `letrec` binding list, or leading internal definitions | 200 reader events in all; a `do` body of about 10 short forms | Rework / Raise | They are buffered in an 800-byte replay area. Move it into the idle staging window (§6.1) for 4 KB or more, or stream these forms |
 | Distinct quoted symbols and strings copied to output | 64, and 1,023 bytes | Raise | Double in the staging window |
@@ -73,10 +73,10 @@ which they should be dealt with.
 | Inexact numbers | float24: 17 significant bits, exponent bias 63, largest about 1.8 × 10^19, smallest normal 2^−62, subnormals to 2^−78 | [float24](float24.md) | Overflow gives ±inf and underflow ±0, at compile time and run time, as IEEE arithmetic does. Converting inf, NaN or a value of magnitude 2^23 or more to an exact integer is a `RUNTIME ERROR` |
 | `/` | Always returns an inexact number | float24 has no rationals | `(/ 6 3)` is `2.0`; integers above 2^17 lose precision |
 | Characters | 8 bits | One-byte characters | `integer->char` outside 0–255 is a `RUNTIME ERROR` |
-| String length | 255 bytes | One length byte in the string record | A longer literal is a `COMPILE ERROR`; a longer runtime result is a `RUNTIME ERROR` |
-| Symbol and identifier length | 31 bytes | Lexer token check and the runtime reader | `COMPILE ERROR` (measured: 31 compiles, 32 fails). Raise to 63 cheaply in the compiler, but `read` and `string->symbol` must change with it |
-| Fixed formals | 4, plus an optional rest formal | Four formal fields in the 12-byte procedure descriptor, in both compiler and runtime | `COMPILE ERROR` (measured). Also limits named `let` and `do` to 4 variables. Rework (§2) |
-| Arguments in one call | 8 | The runtime's 32-byte argument packet | `CAP`. Raise (§2) |
+| String length | 255 bytes | One length byte in the string record | A longer literal is `CAP`; a longer runtime result is a `RUNTIME ERROR` |
+| Symbol and identifier length | 31 bytes | Lexer token check and the runtime reader | `CAP` (pinned by `LONGSYM`). Raise to 63 cheaply in the compiler, but `read` and `string->symbol` must change with it |
+| Fixed formals | 4, plus an optional rest formal | Four formal fields in the 12-byte procedure descriptor, in both compiler and runtime | `CAP` (pinned by `FORMAL5`). Also limits named `let` and `do` to 4 variables. Rework (§2) |
+| Arguments in one call | 8 | The runtime's 32-byte argument packet | `CAP`; the runtime also refuses a larger packet. Raise (§2) |
 | `apply` | The leading arguments and the list's elements together at most 8 | The same packet | `RUNTIME ERROR` |
 | `vector`, `string`, `list` | At most 8 arguments | The packet | `CAP` at compile time |
 | `string-append` | Exactly 2 arguments | Implementation | `RUNTIME ERROR`; should accept any number |
@@ -87,7 +87,7 @@ which they should be dealt with.
 | String escapes | `\"` `\\` `\n` `\r` `\t` `\xHH;` | Lexer | A raw tab or line break inside a string is a `COMPILE ERROR`, so a string cannot span lines |
 | Number syntax | Decimal integers and decimals with exponents, `+inf.0`, `-inf.0`, `+nan.0` | Lexer | No rationals, radix prefixes or exactness prefixes |
 | Quasiquote | Not supported | Design | `` ` `` and `,` are a `COMPILE ERROR` |
-| `include` | Only leading `(include "…")` forms | The include pre-pass reads only the head of a file | A later `include` is compiled as a call to an unbound name and fails at run time. It should be a `COMPILE ERROR` |
+| `include` | Only leading `(include "…")` forms | The include pre-pass reads only the head of a file | A later `include` is a `COMPILE ERROR` (pinned by `LATEINC`) |
 
 Procedures still missing from the standard set: `string->number`,
 `make-string`, `string-set!`, `string->list`, `list->string`,
@@ -98,14 +98,14 @@ Procedures still missing from the standard set: `string->number`,
 
 | Limit | Value | Reason | When exceeded |
 | --- | --- | --- | --- |
-| Compiled image | `0100H` to `FFFFH` (65,280 bytes) | 16-bit addresses | `CAP`. But see the runnable size, §5.2: the compiler accepts images the runtime refuses |
+| Compiled image | Must end below the runtime's low heap limit, `9000H` rounded down to a page (§5.2) | The runtime's memory map | `CAP` |
 | Source file | 65,535 bytes, lines and columns | 16-bit positions; the source is streamed, not buffered | `COMPILE ERROR`; split the program with includes |
-| Lexer token | 64 bytes; string literals 255 | `LX_BUF` | `COMPILE ERROR` |
+| Lexer token | 64 bytes; string literals 255 | `LX_BUF` | `CAP` |
 | Decimal literal | 64 significant digits held exactly, correctly rounded; the exponent saturates at 1000 | `decimal/parse.asm` | Harmless: any such exponent overflows or underflows anyway |
-| Reader nesting | 64 open lists, vectors and quote prefixes | `RD_STACK` | `COMPILE ERROR` (measured) |
+| Reader nesting | 64 open lists, vectors and quote prefixes | `RD_STACK` | `CAP` |
 | Compiler TPA | BDOS entry at `E020H` or above | The compiler's stack top | `INSUFFICIENT MEMORY` |
 | Runtime TPA | BDOS entry at `E400H` or above | The runtime's stack top | `NOT ENOUGH MEMORY`. A machine with its BDOS between these two addresses can compile but not run |
-| Source name | The command-tail FCB, used as given | `source/open.asm` | No default `.SK8` type. A wildcard is not refused (§7) |
+| Source name | The command-tail FCB, used as given; no default `.SK8` type | `CMD_NAME` | A wildcard, or a type the compiler writes (`COM`, `NOB`, `ASO`, `CBS`, `NBS`, `SPL`, `NPR`, `CPR`, `APR`), is `SOURCE ERROR` before any file is touched |
 | Include files | Depth 8, 32 files in one program, 8.3 names of `A-Z 0-9 - _`, read from the drive of the root source | `INC_MAX`, `SRC_MAX` | `INCLUDE ERROR`, with no position (§8) |
 | Runtime file names | Current drive, 8.3, 1–12 bytes, CP/M's reserved characters refused | `file-ports.asm` | `RUNTIME ERROR` |
 | File size | CP/M's 8 MB | 128-byte sequential records; ^Z ends text | — |
@@ -124,20 +124,20 @@ The compiler works in fixed tables between `W_STAGE` (`5800H`) and its stack
 | Procedures open at once | 13 | `W_PRECS`, 44 bytes each | `CAP` | Raise (+572 bytes for 26) |
 | Local bindings in scope | 128 slots, counting every enclosing procedure's locals | `W_LKEYS`, `W_BKEYS`, `W_LOWNER` and others; the runtime's 16-byte slot masks | `CAP` | Keep the count. The cost is in the runtime (§5.2) |
 | Address fixups | 320 | `W_FIXUPS`, 4 bytes each | `CAP` | Raise (+1,280 bytes for 640). Each use of a string or symbol literal, each quoted constant and each reference to a top-level `let` local takes one |
-| Distinct symbols | 320 names; 4,800 bytes of spelling | `W_SYMTAB`, `W_SYMBUF` | `COMPILE ERROR` | Raise. Keywords and every identifier count; `STDLIB.SK8` alone uses about 61 |
-| Distinct string literals | 64; 1,024 bytes | `W_STRTAB`, `W_STRBUF` | `COMPILE ERROR` (measured) | Raise. The first limit a text-heavy program meets |
+| Distinct symbols | 320 names; 4,800 bytes of spelling | `W_SYMTAB`, `W_SYMBUF` | `CAP` | Raise. Keywords and every identifier count; `STDLIB.SK8` alone uses about 61 |
+| Distinct string literals | 64; 1,024 bytes | `W_STRTAB`, `W_STRBUF` | `CAP` (pinned by `STR65`) | Raise. The first limit a text-heavy program meets |
 | Literals copied to the output (symbols and strings in quoted data) | 64; 1,023 bytes | `W_LITREC`, `W_LITBUF`, `W_LITOUT` | `CAP` (measured: two quoted lists of 40 symbols) | Raise |
 | Elements in one level of a quoted list or vector | 63 | `quoted.asm` | `CAP` | Raise, with a check on the runtime quote stack (255 records shared by every nesting level) |
 | Quoted constants in a program | 255 | One-byte cache index | `CAP` | Rework if met |
 | Replay events | 800 bytes, 200 events | `REC_BUF` to `W_REPEND` | `CAP` | Rework or Raise. Bounds `letrec` binding lists, leading internal definitions with the first body form, and whole `do` forms (about 85 events once the rewrite is appended). Measured: a `do` body of 8 `(write (+ i 0))` compiles and 12 does not; an internal `define` of 30 short forms compiles and 45 does not |
 | Nested replay scopes | 16 | `W_REPLAY` | `CAP` | Keep |
-| `do` variables | 8 in the `do` rewrite; 4 in practice | The named let it becomes | 5 to 8 give `COMPILE ERROR`, 9 `CAP` | Follows the formals Rework |
+| `do` variables | 8 in the `do` rewrite; 4 in practice | The named let it becomes | `CAP` | Follows the formals Rework |
 | Pending `and`/`or` operands, `case` datums and quoted-list ends | 64 | `W_BRANCH` (half used) | `CAP` | Raise, free |
 | Nested `if`, `when`, `unless` | 32 | `W_IFALSE`, `W_IFEND` (half used) | `CAP` | Raise, free, once the stack is guarded |
 | `cond`/`case` nesting | 32 | `W_CBASES`, `W_CTOPS` | `CAP` | Raise (+64 bytes) |
 | `cond`/`case` clauses pending | 64 across all open forms | `W_CONDS` (half used) | `CAP` (measured: 65 clauses) | Raise, free |
 | Tail calls pending in one body expression | 64 | `W_TCALLS`, `W_TAILOP` | `CAP` (measured: a `cond` of 65 clauses ending in calls) | Raise (+192 bytes, needs a new place) |
-| Compiler stack | 2,048 bytes | `D820H`–`E020H` | **Not checked** (§7) | Rework: add a depth guard |
+| Compiler stack | 2,048 bytes | `D820H`–`E020H` | `CAP` when a form starts with less than 256 bytes left | Keep |
 | Includes | Depth 8, 32 files | In the compiler image | `INCLUDE ERROR` | Keep; each file costs image bytes |
 
 ### 5.2 Runtime
@@ -147,7 +147,7 @@ grows with a larger TPA.
 
 | Capacity | Value | Where | When exceeded | Verdict |
 | --- | --- | --- | --- | --- |
-| Runnable image | Ends below `9000H`, less one or two page-metadata pages: about 36 KB of `.COM` with the full runtime | `RT_LOEND`, `page/init.asm` | `RUNTIME ERROR` before the first form; the compiler has already printed `COMPILED` (measured: a 49,536-byte program) | Rework. The compiler must check this; `test:cpm:full-image` compiles a 65,280-byte image but never runs it |
+| Runnable image | Ends at `8F00H` at most: 36,352 bytes of `.COM` | `RT_LOEND`, `page/init.asm`; the compiler applies the same rule | `CAP` at compile time (pinned by `test:cpm:full-image`, which runs a 36,352-byte image and refuses one byte more) | Rework with the computed map |
 | Runtime size | Core 18,410 bytes, with standard procedures 20,849, with numeric procedures 22,479, full 26,145 | `RT_CORE`, `RT_STD`, `RT_NUMS`, `RT_SIZE` | — | Each 256 bytes of runtime or program costs one heap page (32 pairs) |
 | Live pairs | 2,720 with the core runtime and a small program | 8 bytes a pair; low pages up to `9000H` and 21 high pages | `RUNTIME ERROR` after a collection | Rework with the computed map. Pinned by `PAIR2720` and `PAIR2721` |
 | Native stack | 3,840 bytes, `D500H`–`E400H` | `RT_GUARD`, `RT_TOP` | `RUNTIME ERROR` | Rework |
@@ -178,7 +178,7 @@ grows with a larger TPA.
 | `C700H`–`CE00H` | 1,792 | Lambda frames, primitive kinds, branch, `if`, tail and `cond` stacks; `CD40H`–`CE00H` (192 bytes) free |
 | `CE00H`–`D500H` | 1,792 | Replay scopes and the literal tables |
 | `D500H`–`D820H` | 800 | Replay events |
-| `D820H`–`E020H` | 2,048 | Stack, unguarded |
+| `D820H`–`E020H` | 2,048 | Stack, guarded by `CMD_FORM` |
 
 **Where room can come from.** The compiler image has 600 bytes of headroom,
 so a Raise must find its memory in the workspace, not in code.
@@ -213,30 +213,32 @@ for the program size, the stack and the heap together.
 
 ## 7. Silent failures
 
-The rule forbids these. Each needs fixing.
+The rule forbids these.
 
-1. **The compiler accepts images the runtime refuses.** An image ending at or
-   above about `9000H` compiles, then stops with `RUNTIME ERROR` at start-up.
-   The fix is a check when publication ends.
-2. **`string-ref` checks only the high byte of the index's low 16 bits, not
-   byte 2.** `(string-ref "abc" 65536)` returns `#\a` (measured). The fix is
-   the check `VEC_IDX` already makes.
-3. **`equal?`, `member` and `assoc` recurse on the native stack without a
-   guard** (`STD_DEEP`). A deep enough structure runs the stack down through
-   the GC worklist and the runtime bands. The fix is the writer's guard.
-4. **The compiler stack has no guard.** Overflow would corrupt the replay
-   events and the literal tables.
-5. **The argument packet is not bounds-checked at run time.** Only the
-   compiler's `CAP` keeps a call within eight arguments.
-6. **Circular lists:** `length`, `list?`, `memq`, `member`, `assq` and
+Fixed:
+
+1. **Images the runtime would refuse** are now `CAP` at compile time, instead
+   of compiling and then stopping with `RUNTIME ERROR` at start-up.
+2. **`string-ref`** now checks byte 2 of its index: `(string-ref "abc" 65536)`
+   is a `RUNTIME ERROR` (`STRREFW`).
+3. **`equal?`, `member` and `assoc`** check the stack at each level of
+   nesting, as the writer does, so a deep structure is a `RUNTIME ERROR`
+   (`DEEPEQ`) instead of running the stack into the runtime's tables.
+4. **The compiler stack** is checked at the start of every form.
+5. **The argument packet** is bounded at run time in `FRM_PACK` and
+   `PKT_PACK`, not only by the compiler.
+6. **A wildcard source name**, or a source whose type is one of the
+   compiler's own output types, is refused before publication deletes or
+   renames anything.
+
+Remaining:
+
+7. **Circular lists:** `length`, `list?`, `memq`, `member`, `assq` and
    `assoc` with no match never return, and `display` of a list circular in
    its cdrs never ends.
-7. **`call/ec` token generations wrap after 512 reopenings,** so a stale
+8. **`call/ec` token generations wrap after 512 reopenings,** so a stale
    escape can be accepted again; a stale file-port token reaches the file
    opened after it.
-8. **A wildcard source name** such as `SKATE *.SK8`, or a source whose type is
-   one of the compiler's own output types, reaches BDOS delete and rename
-   unchecked (read from `publication/stream.asm`, not run).
 
 Losses that are intended, and are not failures under the rule: float
 overflow and underflow, precision lost in `/` and `exact->inexact`, the
@@ -244,15 +246,11 @@ decimal exponent saturating, and runtime symbols that are never freed.
 
 ## 8. Diagnostics
 
-- Most front-end capacity overflows print `COMPILE ERROR`, not `CAP`: symbols,
-  string literals, token and identifier length, string length, reader depth,
-  and a fifth formal. The reader's capacity codes (129–132) are not mapped
-  to `M_CAP`.
+- A full compiler table, an over-long token and a fifth formal report `CAP`.
+  An out-of-range integer literal and malformed source report `COMPILE
+  ERROR`.
 - Every runtime failure, whether capacity or type, prints `RUNTIME ERROR`.
 - An include failure prints `INCLUDE ERROR` with no file, position or reason.
-
-The README describes overflows as `CAP`; it should match whatever the
-diagnostics become.
 
 ## 9. Tests
 
@@ -263,11 +261,15 @@ Limits pinned by a test: 256 globals (`GLOB256`), 33 nested `if`s
 (`TOOLONG`), deep `write` (`DEEPNEST`), 255- and 256-byte strings, and an
 out-of-range integer literal.
 
-Not pinned: 129 procedures, 14 open procedures, 9 arguments, 5 formals, 320
-fixups, 320 symbols, 65 strings or literals, the replay buffer, 64 tail
-calls, `cond` clauses and branches, 255 quoted constants, the runnable image
-size, 8 escapes, the file ports, the runtime symbol area, the `read` limits,
-`string-ref` with a large index and `equal?` depth. Each limit that is kept
+Also pinned: the runnable image size (`test:cpm:full-image`), a fifth
+formal (`FORMAL5`), a 32-byte identifier (`LONGSYM`), a 65th string
+(`STR65`), a late `include` (`LATEINC`), `string-ref` with a large index
+(`STRREFW`), `equal?` depth (`DEEPEQ`, `EQDEPTH`) and refused source names.
+
+Not pinned: 129 procedures, 14 open procedures, 9 arguments, 320 fixups,
+320 symbols, 65 literals in quoted data, the replay buffer, 64 tail calls,
+`cond` clauses and branches, 255 quoted constants, 8 escapes, the file
+ports, the runtime symbol area and the `read` limits. Each limit that is kept
 should get a test at its boundary, and each that is raised a test at the new
 one.
 
@@ -275,9 +277,8 @@ one.
 
 In order of value to a programmer:
 
-1. **Close the silent failures** (§7), starting with the compile-time image
-   check, `string-ref` and the `equal?` guard. Make capacity overflows say
-   `CAP`.
+1. **Close the silent failures** (§7) and make capacity overflows say `CAP`.
+   Done, except for circular lists and token generations.
 2. **Per-procedure frame size.** Small, and it lifts the recursion depth of
    every program with one large procedure.
 3. **Variable-length formals** (target 32) and **32-argument calls**, which

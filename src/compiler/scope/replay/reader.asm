@@ -14,7 +14,12 @@ REC_NEXT:
         OR A
         JP NZ,.REPLAY              ; Retained events already carry their numeric kind.
         CALL RD_NEXT               ; Read one event from the source reader.
-        RET C                      ; Preserve the reader's latched error code.
+        JR NC,.READ
+        CP 129                     ; A full reader or interner table, or an
+        SCF                        ; over-long token, is a capacity error.
+        RET NZ                     ; Others keep the reader's diagnostic.
+        JP ERR_CAP
+.READ:
         CP 7                       ; Scalar events may be exact integers or floats.
         JR NZ,.SOURCE              ; Other event kinds need no reader-tag adjustment.
         LD A,(RD_FLOAT)            ; Check whether this scalar came from decimal text.

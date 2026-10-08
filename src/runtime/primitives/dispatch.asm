@@ -11,6 +11,8 @@
 ; Pack arguments, then recover the operator value saved before evaluation.
 PKT_PACK:
         POP IX                   ; Save the PKT_PACK helper return address.
+        CP ARG_MAX+1             ; More values than the packet holds is an error.
+        JP NC,ERROR
         LD B,A                   ; B counts values still on the native stack.
         LD C,A                   ; C is the packet index, starting at count-1.
         LD A,B                   ; A supplies the zero-count test below.
