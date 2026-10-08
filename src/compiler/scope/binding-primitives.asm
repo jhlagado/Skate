@@ -22,38 +22,84 @@ GLB_PRIM:
         LD (ST_NAME),HL            ; Keep the spelling while trying each name.
         LD A,C
         LD (ST_NAMEN),A            ; Keep the length beside the spelling pointer.
-        LD HL,NAME_TAB             ; Scan every length/kind/spelling record.
+        LD HL,NAME_TAB             ; Try every kind/spelling record.
         LD B,GLB_ROWS              ; Count the records instead of using a terminator.
 .TRY:
-        LD A,(HL)                  ; Read the candidate spelling length.
-        LD C,A                     ; Keep it while comparing the source name.
-        LD A,(ST_NAMEN)            ; Compare it with the source spelling length.
-        CP C
-        JR NZ,.SKIP                ; A different length skips this record.
-        INC HL                     ; The kind follows the length byte.
-        LD A,(HL)
-        LD (ST_PRIM),A             ; Hold the candidate kind for a full match.
-        INC HL                     ; HL now points at the candidate spelling.
-        LD DE,(ST_NAME)            ; DE walks the interned source spelling.
-.COMPARE:
-        LD A,(DE)                  ; Compare one source byte with the candidate.
-        CP (HL)
-        JR NZ,.MISMATCH            ; Skip the rest of this record on a mismatch.
-        INC DE
+        LD A,(HL)                  ; Hold the candidate kind for a full match.
+        LD (ST_PRIM),A
         INC HL
-        DEC C                      ; C counts the bytes still to compare.
-        JR NZ,.COMPARE
+        LD DE,(ST_NAME)            ; DE walks the interned source spelling.
+        LD A,(ST_NAMEN)            ; C counts the source bytes still unmatched.
+        LD C,A
+.NEXT:
+        LD A,(HL)                  ; One spelling byte: a character or a fragment.
+        AND 7FH
+        CP 20H
+        JR NC,.PLAIN
+        PUSH HL                    ; Find fragment A, keeping the record and B.
+        PUSH BC
+        LD B,A
+        LD HL,NAME_FRG
+.FIND:
+        DEC B
+        JR Z,.FRAG
+.PASS:
+        BIT 7,(HL)                 ; Pass one fragment.
+        INC HL
+        JR Z,.PASS
+        JR .FIND
+.FRAG:
+        POP BC
+.FRAG_CH:
+        LD A,(HL)                  ; Match the fragment's characters in turn.
+        CALL .CHAR
+        JR NZ,.FRAG_NO
+        BIT 7,(HL)
+        INC HL
+        JR Z,.FRAG_CH
+        POP HL                     ; The fragment matched; continue the record.
+        JR .STEP
+.FRAG_NO:
+        POP HL
+        JR .MISS
+.PLAIN:
+        CALL .CHAR
+        JR NZ,.MISS
+.STEP:
+        BIT 7,(HL)                 ; Bit 7 ends the spelling.
+        INC HL
+        JR Z,.NEXT
+        LD A,C                     ; A match must use the whole source name.
+        OR A
+        JR NZ,.ROW
         LD A,(ST_PRIM)             ; Every byte matched: return the nonzero kind.
         RET
-.SKIP:
-        INC HL                     ; Skip the candidate length.
-        INC HL                     ; Skip the candidate kind; C bytes of spelling remain.
-.MISMATCH:
-        LD E,C                     ; Skip the unexamined remainder of the name.
-        LD D,0
-        ADD HL,DE                  ; HL now addresses the next record's length.
+.MISS:
+        BIT 7,(HL)                 ; Skip the rest of the spelling.
+        INC HL
+        JR Z,.MISS
+.ROW:
         DJNZ .TRY                  ; Try every record before classifying as ordinary.
         XOR A                      ; Ordinary names receive no primitive mark.
+        RET
+
+; Compare character A (bit 7 ignored) with the next source byte at DE, counted
+; by C.  Return Z and step past it on a match, NZ otherwise.
+.CHAR:
+        AND 7FH
+        INC C                      ; No source byte is left: NZ, as A is not zero.
+        DEC C
+        JR Z,.NONE
+        EX DE,HL
+        CP (HL)
+        EX DE,HL
+        RET NZ
+        INC DE
+        DEC C
+        CP A
+        RET
+.NONE:
+        OR A
         RET
 
 GLB_ROWS  EQU 128                ; Records in NAME_TAB.

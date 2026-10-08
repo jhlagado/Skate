@@ -35,132 +35,163 @@ M_SOURCE:   DB "SOURCE ERROR",13,10,"$"
 M_MEMORY:   DB "INSUFFICIENT MEMORY",13,10,"$"
 K_QUOTE:    DB 5,"quote"
 K_CALLEC:    DB 7,"call/ec"
-; Predefined procedures: length, compiler kind and spelling for GLB_PRIM.
-NAME_TAB:   DB 1,1,"+"
-            DB 1,2,"-"
-            DB 1,3,"*"
-            DB 1,32,"/"
-            DB 5,4,"zero?"
-            DB 4,5,"cons"
-            DB 3,6,"car"
-            DB 3,7,"cdr"
-            DB 5,8,"pair?"
-            DB 5,9,"null?"
-            DB 4,10,"list"
-            DB 3,11,"eq?"
-            DB 5,12,"write"
-            DB 7,13,"display"
-            DB 7,14,"newline"
-            DB 10,30,"write-char"
-            DB 9,31,"read-char"
-            DB 8,15,"quotient"
-            DB 9,16,"remainder"
-            DB 1,17,"="
-            DB 1,18,"<"
-            DB 1,19,">"
-            DB 2,20,"<="
-            DB 2,21,">="
-            DB 3,22,"not"
-            DB 7,23,"number?"
-            DB 8,24,"boolean?"
-            DB 7,25,"symbol?"
-            DB 10,26,"procedure?"
-            DB 7,27,"string?"
-            DB 5,28,"char?"
-            DB 13,33,"string-length"
-            DB 10,34,"string-ref"
-            DB 13,35,"char->integer"
-            DB 13,36,"integer->char"
-            DB 6,37,"string"
-            DB 11,38,"string-copy"
-            DB 13,39,"string-append"
-            DB 11,29,"eof-object?"
-            DB 7,40,"vector?"
-            DB 11,41,"make-vector"
-            DB 6,42,"vector"
-            DB 13,43,"vector-length"
-            DB 10,44,"vector-ref"
-            DB 11,45,"vector-set!"
-            DB 5,46,"apply"
-            DB 4,54,"read"
-            DB 18,47,"current-input-port"
-            DB 19,48,"current-output-port"
-            DB 18,49,"current-error-port"
-            DB 5,50,"port?"
-            DB 11,51,"input-port?"
-            DB 12,52,"output-port?"
-            DB 10,53,"close-port"
-            DB 15,56,"open-input-file"
-            DB 16,57,"open-output-file"
-            DB 22,58,"open-input-binary-file"
-            DB 23,59,"open-output-binary-file"
-            DB 8,61,"set-car!"
-            DB 8,62,"set-cdr!"
-            DB 6,63,"equal?"
-            DB 4,11,"eqv?"
-            DB 6,64,"char=?"
-            DB 6,65,"char<?"
-            DB 6,66,"char>?"
-            DB 7,67,"char<=?"
-            DB 7,68,"char>=?"
-            DB 8,69,"string=?"
-            DB 8,70,"string<?"
-            DB 8,71,"string>?"
-            DB 9,72,"string<=?"
-            DB 9,73,"string>=?"
-            DB 14,74,"symbol->string"
-            DB 14,75,"string->symbol"
-            DB 14,76,"number->string"
-            DB 6,77,"modulo"
-            DB 3,78,"abs"
-            DB 6,79,"length"
-            DB 7,80,"reverse"
-            DB 6,81,"append"
-            DB 9,82,"list-tail"
-            DB 8,83,"list-ref"
-            DB 4,84,"memq"
-            DB 4,85,"assq"
-            DB 6,86,"member"
-            DB 5,87,"assoc"
-            DB 5,88,"list?"
-            DB 11,89,"char-upcase"
-            DB 13,90,"char-downcase"
-            DB 16,91,"char-alphabetic?"
-            DB 13,92,"char-numeric?"
-            DB 16,93,"char-whitespace?"
-            DB 9,94,"substring"
-            DB 14,95,"exact->inexact"
-            DB 7,95,"inexact"
-            DB 14,96,"inexact->exact"
-            DB 5,96,"exact"
-            DB 5,97,"floor"
-            DB 7,98,"ceiling"
-            DB 8,99,"truncate"
-            DB 5,100,"round"
-            DB 3,101,"min"
-            DB 3,102,"max"
-            DB 5,103,"even?"
-            DB 4,104,"odd?"
-            DB 9,105,"positive?"
-            DB 9,106,"negative?"
-            DB 6,107,"exact?"
-            DB 8,108,"inexact?"
-            DB 8,109,"integer?"
-            DB 3,110,"gcd"
-            DB 3,111,"lcm"
-            DB 4,112,"expt"
-            DB 4,113,"sqrt"
-            DB 4,114,"caar"
-            DB 4,115,"cadr"
-            DB 4,116,"cdar"
-            DB 4,117,"cddr"
-            DB 5,118,"caaar"
-            DB 5,119,"caadr"
-            DB 5,120,"cadar"
-            DB 5,121,"caddr"
-            DB 5,122,"cdaar"
-            DB 5,123,"cdadr"
-            DB 5,124,"cddar"
-            DB 5,125,"cdddr"
-            DB 4,84,"memv"
-            DB 4,85,"assv"
+; Fragment numbers for NAME_TAB spellings.
+F_STR EQU 1
+F_CHAR EQU 2
+F_EXACT EQU 3
+F_VEC EQU 4
+F_PUT EQU 5
+F_PORT EQU 6
+F_CURR EQU 7
+F_INT EQU 8
+F_OPEN EQU 9
+F_SYM EQU 10
+F_LEN EQU 11
+F_BINF EQU 12
+F_LIST EQU 13
+; Predefined procedures for GLB_PRIM: the compiler kind, then the spelling.
+; A byte below 20H stands for a fragment of NAME_FRG, and bit 7 marks the
+; last byte of a spelling.
+NAME_TAB:   DB 1,'+'+80H                        ; +
+            DB 2,'-'+80H                        ; -
+            DB 3,'*'+80H                        ; *
+            DB 32,'/'+80H                       ; /
+            DB 4,"zero",'?'+80H                 ; zero?
+            DB 5,"con",'s'+80H                  ; cons
+            DB 6,"ca",'r'+80H                   ; car
+            DB 7,"cd",'r'+80H                   ; cdr
+            DB 8,"pair",'?'+80H                 ; pair?
+            DB 9,"null",'?'+80H                 ; null?
+            DB 10,F_LIST+80H                    ; list
+            DB 11,"eq",'?'+80H                  ; eq?
+            DB 12,"writ",'e'+80H                ; write
+            DB 13,"displa",'y'+80H              ; display
+            DB 14,"newlin",'e'+80H              ; newline
+            DB 30,"write-",F_CHAR+80H           ; write-char
+            DB 31,"read-",F_CHAR+80H            ; read-char
+            DB 15,"quotien",'t'+80H             ; quotient
+            DB 16,"remainde",'r'+80H            ; remainder
+            DB 17,'='+80H                       ; =
+            DB 18,'<'+80H                       ; <
+            DB 19,'>'+80H                       ; >
+            DB 20,"<",'='+80H                   ; <=
+            DB 21,">",'='+80H                   ; >=
+            DB 22,"no",'t'+80H                  ; not
+            DB 23,"number",'?'+80H              ; number?
+            DB 24,"boolean",'?'+80H             ; boolean?
+            DB 25,F_SYM,'?'+80H              ; symbol?
+            DB 26,"procedure",'?'+80H           ; procedure?
+            DB 27,F_STR,'?'+80H              ; string?
+            DB 28,F_CHAR,'?'+80H                ; char?
+            DB 33,F_STR,"-",F_LEN+80H     ; string-length
+            DB 34,F_STR,"-re",'f'+80H        ; string-ref
+            DB 35,F_CHAR,"->",F_INT+80H     ; char->integer
+            DB 36,F_INT,"->",F_CHAR+80H     ; integer->char
+            DB 37,F_STR+80H                  ; string
+            DB 38,F_STR,"-cop",'y'+80H       ; string-copy
+            DB 39,F_STR,"-appen",'d'+80H     ; string-append
+            DB 29,"eof-object",'?'+80H          ; eof-object?
+            DB 40,F_VEC,'?'+80H              ; vector?
+            DB 41,"make-",F_VEC+80H          ; make-vector
+            DB 42,F_VEC+80H                  ; vector
+            DB 43,F_VEC,"-",F_LEN+80H     ; vector-length
+            DB 44,F_VEC,"-re",'f'+80H        ; vector-ref
+            DB 45,F_VEC,"-set",'!'+80H       ; vector-set!
+            DB 46,"appl",'y'+80H                ; apply
+            DB 54,"rea",'d'+80H                 ; read
+            DB 47,F_CURR,"in",F_PUT,F_PORT+80H  ; current-input-port
+            DB 48,F_CURR,"out",F_PUT,F_PORT+80H ; current-output-port
+            DB 49,F_CURR,"error-",F_PORT+80H    ; current-error-port
+            DB 50,F_PORT,'?'+80H                ; port?
+            DB 51,"in",F_PUT,F_PORT,'?'+80H     ; input-port?
+            DB 52,"out",F_PUT,F_PORT,'?'+80H    ; output-port?
+            DB 53,"close-",F_PORT+80H           ; close-port
+            DB 56,F_OPEN,"in",F_PUT,"fil",'e'+80H ; open-input-file
+            DB 57,F_OPEN,"out",F_PUT,"fil",'e'+80H ; open-output-file
+            DB 58,F_OPEN,"in",F_PUT,F_BINF+80H ; open-input-binary-file
+            DB 59,F_OPEN,"out",F_PUT,F_BINF+80H ; open-output-binary-file
+            DB 61,"set-car",'!'+80H             ; set-car!
+            DB 62,"set-cdr",'!'+80H             ; set-cdr!
+            DB 63,"equal",'?'+80H               ; equal?
+            DB 11,"eqv",'?'+80H                 ; eqv?
+            DB 64,F_CHAR,"=",'?'+80H            ; char=?
+            DB 65,F_CHAR,"<",'?'+80H            ; char<?
+            DB 66,F_CHAR,">",'?'+80H            ; char>?
+            DB 67,F_CHAR,"<=",'?'+80H           ; char<=?
+            DB 68,F_CHAR,">=",'?'+80H           ; char>=?
+            DB 69,F_STR,"=",'?'+80H          ; string=?
+            DB 70,F_STR,"<",'?'+80H          ; string<?
+            DB 71,F_STR,">",'?'+80H          ; string>?
+            DB 72,F_STR,"<=",'?'+80H         ; string<=?
+            DB 73,F_STR,">=",'?'+80H         ; string>=?
+            DB 74,F_SYM,"->",F_STR+80H    ; symbol->string
+            DB 75,F_STR,"->",F_SYM+80H    ; string->symbol
+            DB 76,"number->",F_STR+80H       ; number->string
+            DB 77,"modul",'o'+80H               ; modulo
+            DB 78,"ab",'s'+80H                  ; abs
+            DB 79,F_LEN+80H                  ; length
+            DB 80,"revers",'e'+80H              ; reverse
+            DB 81,"appen",'d'+80H               ; append
+            DB 82,F_LIST,"-tai",'l'+80H         ; list-tail
+            DB 83,F_LIST,"-re",'f'+80H          ; list-ref
+            DB 84,"mem",'q'+80H                 ; memq
+            DB 85,"ass",'q'+80H                 ; assq
+            DB 86,"membe",'r'+80H               ; member
+            DB 87,"asso",'c'+80H                ; assoc
+            DB 88,F_LIST,'?'+80H                ; list?
+            DB 89,F_CHAR,"-upcas",'e'+80H       ; char-upcase
+            DB 90,F_CHAR,"-downcas",'e'+80H     ; char-downcase
+            DB 91,F_CHAR,"-alphabetic",'?'+80H  ; char-alphabetic?
+            DB 92,F_CHAR,"-numeric",'?'+80H     ; char-numeric?
+            DB 93,F_CHAR,"-whitespace",'?'+80H  ; char-whitespace?
+            DB 94,"sub",F_STR+80H            ; substring
+            DB 95,F_EXACT,"->in",F_EXACT+80H    ; exact->inexact
+            DB 95,"in",F_EXACT+80H              ; inexact
+            DB 96,"in",F_EXACT,"->",F_EXACT+80H ; inexact->exact
+            DB 96,F_EXACT+80H                   ; exact
+            DB 97,"floo",'r'+80H                ; floor
+            DB 98,"ceilin",'g'+80H              ; ceiling
+            DB 99,"truncat",'e'+80H             ; truncate
+            DB 100,"roun",'d'+80H               ; round
+            DB 101,"mi",'n'+80H                 ; min
+            DB 102,"ma",'x'+80H                 ; max
+            DB 103,"even",'?'+80H               ; even?
+            DB 104,"odd",'?'+80H                ; odd?
+            DB 105,"positive",'?'+80H           ; positive?
+            DB 106,"negative",'?'+80H           ; negative?
+            DB 107,F_EXACT,'?'+80H              ; exact?
+            DB 108,"in",F_EXACT,'?'+80H         ; inexact?
+            DB 109,F_INT,'?'+80H            ; integer?
+            DB 110,"gc",'d'+80H                 ; gcd
+            DB 111,"lc",'m'+80H                 ; lcm
+            DB 112,"exp",'t'+80H                ; expt
+            DB 113,"sqr",'t'+80H                ; sqrt
+            DB 114,"caa",'r'+80H                ; caar
+            DB 115,"cad",'r'+80H                ; cadr
+            DB 116,"cda",'r'+80H                ; cdar
+            DB 117,"cdd",'r'+80H                ; cddr
+            DB 118,"caaa",'r'+80H               ; caaar
+            DB 119,"caad",'r'+80H               ; caadr
+            DB 120,"cada",'r'+80H               ; cadar
+            DB 121,"cadd",'r'+80H               ; caddr
+            DB 122,"cdaa",'r'+80H               ; cdaar
+            DB 123,"cdad",'r'+80H               ; cdadr
+            DB 124,"cdda",'r'+80H               ; cddar
+            DB 125,"cddd",'r'+80H               ; cdddr
+            DB 84,"mem",'v'+80H                 ; memv
+            DB 85,"ass",'v'+80H                 ; assv
+; The fragments, numbered from one in the order of the equates above.
+NAME_FRG:
+            DB "strin",'g'+80H
+            DB "cha",'r'+80H
+            DB "exac",'t'+80H
+            DB "vecto",'r'+80H
+            DB "put",'-'+80H
+            DB "por",'t'+80H
+            DB "current",'-'+80H
+            DB "intege",'r'+80H
+            DB "open",'-'+80H
+            DB "symbo",'l'+80H
+            DB "lengt",'h'+80H
+            DB "binary-fil",'e'+80H
+            DB "lis",'t'+80H
