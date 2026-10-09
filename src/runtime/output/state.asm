@@ -11,17 +11,16 @@ REST_IDX:     DB 0                 ; Packet index while reading surplus values.
 REST_LEN:     DB 0                 ; Original surplus count passed to QT_FOLD.
 ROOT_CNT:       DB 0               ; Number of generated operands not yet consumed.
 ; The exact-root operand table and allocation maps use a fixed work band
-; outside the provider image.  The page domain ends its low band before 9000H,
-; skips this band through AB00H and manages AB00H..C000H.
-ROOT_TAB:     EQU 0A200H           ; Four-byte exact roots for up to 255 operands.
+; outside the provider image, A500H..C000H, just below the transient bands, so
+; the heap is one extent from the image end to A500H.
+ROOT_TAB:     EQU 0B700H           ; Four-byte exact roots for up to 255 operands.
 ROOT_VAL:     DW 0                 ; Shadow-root payload staging.
 ROOT_TAG:     DB 0                 ; Shadow-root tag staging.
-; These maps are outside the serialized provider image and occupy the 9000H
-; through AB00H work band reserved by the page manager.  Their larger extents
-; cover the full 3000H..C000H address span, including images below 4000H.
-CL_MAP      EQU 09000H            ; 2304 bytes mark every allocated closure start.
-GC_MARKS      EQU 09900H          ; 2304 bytes: even marks, odd vector type bits.
-BND_MAP       EQU 0A600H          ; 1152 bytes: one bit per four-byte binding cell.
+; These maps cover the full 3000H..C000H address span, including images
+; below 4000H.
+CL_MAP      EQU 0A500H            ; 2304 bytes mark every allocated closure start.
+GC_MARKS      EQU 0AE00H          ; 2304 bytes: even marks, odd vector type bits.
+BND_MAP       EQU 0BB00H          ; 1152 bytes: one bit per four-byte binding cell.
 NUM_LEFT:     DB 0                 ; Remaining values in an arithmetic or compare fold.
 NUM_ATAG:     DB 0                 ; Accumulator tag for a variadic numeric fold.
 NUM_AEXT:     DB 0                 ; Accumulator byte 2 for a variadic numeric fold.

@@ -49,7 +49,7 @@ which they should be dealt with.
 
 | Limit | Today | Verdict | Proposal |
 | --- | --- | --- | --- |
-| Runnable program size | 36,352 bytes of `.COM` (an image ending at `8F00H`); a larger image is `CAP` | Rework | Compute the runtime memory map from the TPA instead of fixed bands (§6.2) |
+| Runnable program size | 41,472 bytes of `.COM` (an image ending at `A300H`); a larger image is `CAP` | Keep | The heap is whatever the program leaves below `A500H`. Sizing the collector maps to the heap, not to `3000H`–`C000H`, would add about 5 KB more (§6.2) |
 | Non-tail recursion depth | about 210 levels of a one-argument procedure | Rework | Each frame is now sized by its own procedure. The depth is bound by the 3,840-byte stack; a computed map (§6.2) can give it more |
 | Size of a `do` | 1,504 reader events for the form and its rewrite: a body of about 140 short forms | Keep | The replay buffer now lives in the staging window (§6.1) |
 | Elements per level of a quoted list or vector | 63 | Raise | Tied to the 255-record runtime quote stack; raise to 255 with a nesting check |
@@ -92,7 +92,7 @@ Procedures still missing from the standard set: `string->number`,
 
 | Limit | Value | Reason | When exceeded |
 | --- | --- | --- | --- |
-| Compiled image | Must end below the runtime's low heap limit, `9000H` rounded down to a page (§5.2) | The runtime's memory map | `CAP` |
+| Compiled image | Must leave a metadata page and one free heap page below `RT_LOEND`, `A500H` (§5.2) | The runtime's memory map | `CAP` |
 | Source file | 65,535 bytes, lines and columns | 16-bit positions; the source is streamed, not buffered | `COMPILE ERROR`; split the program with includes |
 | Lexer token | 64 bytes; string literals 255 | `LX_BUF` | `CAP` |
 | Decimal literal | 64 significant digits held exactly, correctly rounded; the exponent saturates at 1000 | `decimal/parse.asm` | Harmless: any such exponent overflows or underflows anyway |
@@ -141,9 +141,9 @@ grows with a larger TPA.
 
 | Capacity | Value | Where | When exceeded | Verdict |
 | --- | --- | --- | --- | --- |
-| Runnable image | Ends at `8F00H` at most: 36,352 bytes of `.COM` | `RT_LOEND`, `page/init.asm`; the compiler applies the same rule | `CAP` at compile time (pinned by `test:cpm:full-image`, which runs a 36,352-byte image and refuses one byte more) | Rework with the computed map |
+| Runnable image | Ends at `A300H` at most: 41,472 bytes of `.COM` | `RT_LOEND`, `page/init.asm`; the compiler applies the same rule | `CAP` at compile time (pinned by `test:cpm:full-image`, which runs a 41,472-byte image and refuses one byte more) | Keep. Such a program has one free heap page |
 | Runtime size | Core 18,410 bytes, with standard procedures 20,849, with numeric procedures 22,479, full 26,145 | `RT_CORE`, `RT_STD`, `RT_NUMS`, `RT_SIZE` | — | Each 256 bytes of runtime or program costs one heap page (32 pairs) |
-| Live pairs | 2,720 with the core runtime and a small program | 8 bytes a pair; low pages up to `9000H` and 21 high pages | `RUNTIME ERROR` after a collection | Rework with the computed map. Pinned by `PAIR2720` and `PAIR2721` |
+| Live pairs | 2,720 with the core runtime and a small program | 8 bytes a pair; heap pages from the image end to `A500H`, 32 pairs each | `RUNTIME ERROR` after a collection | Raise by sizing the maps to the heap. Pinned by `PAIR2720` and `PAIR2721` |
 | Native stack | 3,840 bytes, `D500H`–`E400H` | `RT_GUARD`, `RT_TOP` | `RUNTIME ERROR` | Rework |
 | Non-tail recursion | About 210 levels of `(+ 1 (f (- n 1)))` (measured: 200 passes, 250 fails), whatever other procedures the program has | Each frame holds 4 bytes for each of its own procedure's slots, and closures 2 bytes each; a tail call into a procedure with more slots builds a larger frame | `RUNTIME ERROR` | Rework with the computed map. Pinned by `DEEPOK`, `DEEPREC` and `FRAMES` |
 | Pending operand roots | 255 | `ROOT_TAB`, 1,020 bytes | `RUNTIME ERROR` | Keep |
@@ -183,17 +183,18 @@ memory in the workspace, not in code.
 | Range | Contents |
 | --- | --- |
 | `0100H` | Runtime (by tier), the 1 KB global area, generated code, descriptors, quoted data, literals |
-| Image end, rounded to a page (at least `3000H`) to `9000H` | Low heap pages; the first one or two hold page metadata |
-| `9000H`–`AB00H` | Closure map, GC marks, `ROOT_TAB`, binding map |
-| `AB00H`–`C000H` | High heap, 21 pages |
+| Image end, rounded to a page (at least `3000H`) to `A500H` | Heap pages; the first holds page metadata |
+| `A500H`–`C000H` | Closure map, GC marks, `ROOT_TAB`, binding map |
 | `C000H`–`D000H` | Operator side stack, page tables, quote stack, datum reader, runtime symbols |
 | `D000H`–`D500H` | GC worklist and a spare band |
 | `D500H`–`E400H` | Native stack |
 
-Every band is placed at assembly time and nothing scales with the TPA, so
-raising one runtime limit takes memory from another. Computing the layout
-at start-up, from the image end and the BDOS entry, is the structural fix
-for the program size, the stack and the heap together.
+The heap is one extent, so a program trades heap pages for code byte for
+byte, up to the 41,472-byte limit. The bands are still placed at assembly
+time. Two further steps would give more room: sizing the collector maps to
+the actual heap rather than to all of `3000H`–`C000H` (they take 5.8 KB, about
+5 KB more than a small heap needs), and placing the bands from the BDOS entry
+down so a larger TPA gives a larger stack.
 
 ## 7. Silent failures
 
@@ -271,7 +272,8 @@ In order of value to a programmer:
 4. **Compile-only tables in the staging window.** Done: the replay buffer,
    symbols, strings, literals, fixups, procedures and the branch, `if`,
    `cond` and tail stacks are all at least twice their former size.
-5. **A computed runtime memory map,** giving the stack and heap whatever the
-   TPA holds and the program does not use.
+5. **One heap extent.** Done: the maps moved below the transient bands, so
+   programs can be 41,472 bytes. Still to do: sizing the maps to the heap,
+   and a stack that grows with the TPA.
 6. Long vectors, more file ports and escapes, `read` of long lists and
    floats, and the missing standard procedures.

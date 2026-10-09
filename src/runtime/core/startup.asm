@@ -3,9 +3,9 @@
 ; Included in runtime order by ../core.asm.
 
 RT_HEAP    EQU 03000H              ; Base used by the full-pool allocation maps.
-RT_LOEND EQU 09000H              ; Low pages end before the external mark maps.
-RT_HIGH  EQU 0AB00H               ; The managed high band begins after the maps.
-RT_HPAGE  EQU 0ABH                ; High byte of RT_HIGH for page mapping.
+RT_LOEND EQU 0A500H              ; Low pages end before the external mark maps.
+RT_HIGH  EQU 0C000H               ; No high band: the maps reach RT_HIEND.
+RT_HPAGE  EQU 0C0H                ; High byte of RT_HIGH for page mapping.
 RT_HIEND  EQU 0C000H              ; Managed objects stop before transient storage.
 RT_EPAGE   EQU 0E0H               ; Pair tag-seven values above this byte are escapes.
 RT_ESC   EQU 0E000H               ; Escape generations occupy the non-heap range.

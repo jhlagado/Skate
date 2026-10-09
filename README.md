@@ -128,7 +128,7 @@ limit, its reason and what is planned for it.
 | String length | 255 |
 | Vector length | 64 |
 | Non-tail recursion | about 200 levels |
-| Program size | 36,352 bytes of `.COM`; a larger image is `CAP` |
+| Program size | 41,472 bytes of `.COM`; a larger image is `CAP`. The heap is what the program leaves below `A500H` |
 
 The runtime is loaded in one of four sizes: the core alone, the core and the
 standard procedures, those and the numeric procedures (`sqrt`, `expt`,

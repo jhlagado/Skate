@@ -66,29 +66,27 @@ function runStartup(
 
 Deno.test("page setup rejects an image at the managed boundary", async () => {
   const { memory, call, assembled } = await pageRuntime();
-  memory.fill(0xa5, 0x8f00, 0x9000);
-  const before = memory.slice(0x8f00, 0x9000);
-  const result = call("PAGE_INI", 0x9000);
+  memory.fill(0xa5, 0xa400, 0xa500);
+  const before = memory.slice(0xa400, 0xa500);
+  const result = call("PAGE_INI", 0xa500);
   assert.equal(result.carry, 1);
   assert.equal(result.status, 2);
-  assert.deepEqual(memory.slice(0x8f00, 0x9000), before);
+  assert.deepEqual(memory.slice(0xa400, 0xa500), before);
   assert.equal(memory[assembled.address("PAGE_OK")], 0);
 });
 
-Deno.test("one-page gaps reserve management before the high extent", async () => {
+Deno.test("a one-page gap holds only page management", async () => {
   const { memory, call, assembled } = await pageRuntime();
-  const result = call("PAGE_INI", 0x8e01);
+  const result = call("PAGE_INI", 0xa301);
   assert.equal(result.carry, 0);
-  assert.equal(readWord(memory, assembled.address("PAGE_ORG")), 0x8f00);
+  assert.equal(readWord(memory, assembled.address("PAGE_ORG")), 0xa400);
   assert.equal(readWord(memory, assembled.address("PAGE_LO")), 1);
-  assert.equal(readWord(memory, assembled.address("PAGE_CNT")), 22);
+  assert.equal(readWord(memory, assembled.address("PAGE_CNT")), 1);
   assert.equal(readWord(memory, assembled.address("PAGE_SYS")), 1);
-  assert.equal(readWord(memory, assembled.address("PAGE_CAP")), 21);
-  assert.equal(readWord(memory, assembled.address("PAGE_MIN")), 0xab00);
-  const high = call("PAGE_NEW", 1);
-  assert.equal(high.carry, 0);
-  assert.equal(high.hl, 0xab00);
-  assert.equal(call("PAGE_REL", high.hl, 1).carry, 0);
+  assert.equal(readWord(memory, assembled.address("PAGE_CAP")), 0);
+  const none = call("PAGE_NEW", 1);
+  assert.equal(none.carry, 1);
+  assert.equal(none.status, 1);
 });
 
 Deno.test("small images use the pages below the legacy map origin", async () => {
@@ -103,29 +101,25 @@ Deno.test("small images use the pages below the legacy map origin", async () => 
   assert.equal(call("PAGE_REL", first.hl, 1).carry, 0);
 });
 
-Deno.test("a lower managed ceiling shortens the high extent without overlap", async () => {
+Deno.test("the heap is one extent from the image to the maps", async () => {
   const { memory, call, assembled } = await pageRuntime();
   writeWord(memory, assembled.address("HEAP_LIM"), 0xad00);
-  const lower = call("PAGE_INI", 0x8e01);
-  assert.equal(lower.carry, 0);
-  assert.equal(readWord(memory, assembled.address("PAGE_HI")), 2);
-  assert.equal(readWord(memory, assembled.address("PAGE_CNT")), 3);
-  assert.equal(readWord(memory, assembled.address("PAGE_CAP")), 2);
-  const first = call("PAGE_NEW", 2);
-  assert.equal(first.carry, 0);
-  assert.equal(first.hl, 0xab00);
-  assert.equal(call("PAGE_NEW", 1).carry, 1);
+  assert.equal(call("PAGE_INI", 0x8e01).carry, 1);
 
   writeWord(memory, assembled.address("HEAP_LIM"), 0xc000);
   const full = call("PAGE_INI", 0x8e01);
   assert.equal(full.carry, 0);
-  assert.equal(readWord(memory, assembled.address("PAGE_HI")), 21);
+  assert.equal(readWord(memory, assembled.address("PAGE_HI")), 0);
+  assert.equal(readWord(memory, assembled.address("PAGE_LO")), 22);
   assert.equal(readWord(memory, assembled.address("PAGE_CAP")), 21);
+  const last = call("PAGE_NEW", 21);
+  assert.equal(last.carry, 0);
+  assert.equal(last.hl, 0x9000);
+  assert.equal(call("PAGE_NEW", 1).carry, 1);
 });
 
 Deno.test("runtime startup publishes page readiness and rejects an invalid image", async () => {
   const { assembled, memory, call } = await pageRuntime();
-  memory.fill(0xa5, 0x8f00, 0x9000);
   runStartup(assembled, memory, 0x8f00, false);
   assert.equal(memory[assembled.address("PAGE_OK")], 1);
   assert.equal(readWord(memory, assembled.address("PAGE_ORG")), 0x8f00);
@@ -134,31 +128,31 @@ Deno.test("runtime startup publishes page readiness and rejects an invalid image
   assert.ok(
     [...memory.slice(
       assembled.address("BND_MAP"),
-      assembled.address("RT_HIGH"),
+      assembled.address("BND_MAP") + 1152,
     )].every((value) => value === 0),
     "binding-start bitmap was not cleared at startup",
   );
-  const high = call("PAGE_NEW", 1);
-  assert.equal(high.carry, 0);
-  assert.equal(high.hl, 0xac00);
+  const next = call("PAGE_NEW", 1);
+  assert.equal(next.carry, 0);
+  assert.equal(next.hl, 0x9100);
 
-  memory.fill(0xa5, 0x8f00, 0x9000);
-  const beforeFailure = memory.slice(0x8f00, 0x9000);
-  runStartup(assembled, memory, 0x9000, true);
+  memory.fill(0xa5, 0xa400, 0xa500);
+  const beforeFailure = memory.slice(0xa400, 0xa500);
+  runStartup(assembled, memory, 0xa500, true);
   assert.equal(memory[assembled.address("PAGE_OK")], 0);
-  assert.deepEqual([...memory.slice(0x8f00, 0x9000)], [...beforeFailure]);
+  assert.deepEqual([...memory.slice(0xa400, 0xa500)], [...beforeFailure]);
 });
 
 Deno.test("page runs honor bitmap boundaries, fragmentation and canaries", async () => {
   const { memory, call, assembled } = await pageRuntime();
-  memory.fill(0xa5, 0x6000, 0x9000);
-  memory.fill(0xa5, 0x9000, 0xab00);
+  memory.fill(0xa5, 0x6000, 0xa500);
+  memory.fill(0xa5, 0xa500, 0xc000);
   memory.fill(0xa5, 0xc000, 0xdfe0);
   const result = call("PAGE_INI", 0x6f00);
   assert.equal(result.carry, 0);
   const address = (name: string) => assembled.address(name);
   assert.equal(readWord(memory, address("PAGE_ORG")), 0x6f00);
-  assert.equal(readWord(memory, address("PAGE_LO")), 33);
+  assert.equal(readWord(memory, address("PAGE_LO")), 54);
   assert.equal(readWord(memory, address("PAGE_CNT")), 54);
   assert.equal(readWord(memory, address("PAGE_LEN")), 7);
   assert.equal(readWord(memory, address("PAGE_SYS")), 1);
@@ -217,7 +211,7 @@ Deno.test("page runs honor bitmap boundaries, fragmentation and canaries", async
   assert.equal(readWord(memory, address("PAGE_CAP")), 21);
   const highOne = call("PAGE_NEW", 1);
   assert.equal(highOne.carry, 0);
-  assert.equal(highOne.hl, 0xab00);
+  assert.equal(highOne.hl, 0x9000);
   assert.equal(readWord(memory, address("PAGE_CAP")), 20);
   assert.equal(call("PAGE_REL", five.hl, 5).carry, 0);
   assert.equal(call("PAGE_REL", seven.hl, 7).carry, 0);
@@ -237,7 +231,7 @@ Deno.test("page runs honor bitmap boundaries, fragmentation and canaries", async
   assert.equal(readWord(memory, address("PAGE_CAP")), 21);
   const highAll = call("PAGE_NEW", 21);
   assert.equal(highAll.carry, 0);
-  assert.equal(highAll.hl, 0xab00);
+  assert.equal(highAll.hl, 0x9000);
   assert.equal(readWord(memory, address("PAGE_CAP")), 0);
   const exhausted = call("PAGE_NEW", 1);
   assert.equal(exhausted.carry, 1);
@@ -246,14 +240,14 @@ Deno.test("page runs honor bitmap boundaries, fragmentation and canaries", async
   assert.equal(call("PAGE_REL", highAll.hl, 21).carry, 0);
   const highAgain = call("PAGE_NEW", 21);
   assert.equal(highAgain.carry, 0);
-  assert.equal(highAgain.hl, 0xab00);
+  assert.equal(highAgain.hl, 0x9000);
   assert.equal(readWord(memory, address("PAGE_CAP")), 0);
   assert.equal(call("PAGE_REL", highAgain.hl, 21).carry, 0);
   assert.equal(call("PAGE_REL", lowAll.hl, 32).carry, 0);
   assert.equal(readWord(memory, address("PAGE_CAP")), 53);
   assert.deepEqual([...memory.slice(0x6000, 0x6f00)], [...lowCanary]);
   assert.deepEqual(
-    [...memory.slice(0x9000, 0xab00)],
+    [...memory.slice(0xa500, 0xc000)],
     [...new Uint8Array(0x1b00).fill(0xa5)],
   );
   assert.deepEqual([...memory.slice(0xc000, 0xdfe0)], [...stackCanary]);
@@ -261,10 +255,9 @@ Deno.test("page runs honor bitmap boundaries, fragmentation and canaries", async
 
 Deno.test("page release rejects the protected intervals", async () => {
   const { memory, call, assembled } = await pageRuntime();
-  memory.fill(0xa5, 0x8f00, 0x9000);
   const result = call("PAGE_INI", 0x8f00);
   assert.equal(result.carry, 0);
-  for (const address of [0x8e00, 0x8f00, 0x9000, 0xaa00, 0xc000, 0xdf00]) {
+  for (const address of [0x8e00, 0x8f00, 0xa500, 0xb000, 0xc000, 0xdf00]) {
     const rejected = call("PAGE_REL", address, 1);
     assert.equal(rejected.carry, 1, `release ${address.toString(16)}`);
     assert.equal(rejected.status, 2);

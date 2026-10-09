@@ -3,8 +3,9 @@
 ; PAGE_NEW: HL = page count; returns HL = page address or A=1 capacity,
 ; A=2 invalid request or A=3 uninitialised, with carry set.
 ; PAGE_REL: HL = page address, DE = count; returns A=0 or A=2 invalid request
-; or A=3 uninitialised, with carry set. The pool owns the gap below 9000H and
-; the AB00H..C000H high extent; maps and exact roots occupy 9000H..AB00H.
+; or A=3 uninitialised, with carry set. The pool owns the gap from the image
+; to RT_LOEND (A500H); maps and exact roots occupy A500H..C000H.  The high
+; extent starts at RT_HIGH, which is now C000H, so it holds no pages.
 
 PAGE_INI:
         XOR A                      ; Invalidate any previous domain before checks.
@@ -58,7 +59,7 @@ PAGE_INI:
         LD HL,RT_HEAP             ; Do not hand out pages below the map coverage.
 .BASE:
         LD (PAGE_ORG),HL           ; Save the first page in the managed domain.
-        LD A,090H                  ; 9000H ends the low managed extent.
+        LD A,RT_LOEND/256          ; RT_LOEND ends the low managed extent.
         SUB H                      ; The high-byte difference is the page count.
         JP Z,PAGE_ERR              ; A zero-page gap cannot hold management state.
         LD L,A                     ; Store the count in the low byte.
