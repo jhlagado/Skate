@@ -53,7 +53,7 @@ function readDatum(
     carry: cpu.flags.C,
     tag: cpu.a,
     payload: (cpu.h << 8) | cpu.l,
-    ext: cpu.a === 3 ? cpu.c : 0,
+    ext: cpu.a === 3 || cpu.a === 9 ? cpu.c : 0,
   };
 }
 
@@ -89,32 +89,6 @@ function readDatumError(bytes: readonly number[]) {
   });
 }
 
-function addDigit(
-  assembled: Awaited<ReturnType<typeof managedRuntime>>["assembled"],
-  memory: Uint8Array,
-  cpu: Awaited<ReturnType<typeof managedRuntime>>["cpu"],
-  magnitude: number,
-  digit: number,
-) {
-  writeWord(memory, assembled.address("DR_MAG"), magnitude & 0xffff);
-  memory[assembled.address("DR_MAG") + 2] = magnitude >>> 16;
-  cpu.a = digit;
-  cpu.pc = assembled.address("DR_DIGIT");
-  cpu.sp = 0xb3f2;
-  writeWord(memory, cpu.sp, 0xef00);
-  let steps = 0;
-  while (cpu.pc !== 0xef00) {
-    assert.ok(++steps < 1_000, "DR_DIGIT did not return");
-    assembled.runtime.step();
-  }
-  assert.equal(cpu.sp, 0xb3f4);
-  return {
-    carry: cpu.flags.C,
-    magnitude: readWord(memory, assembled.address("DR_MAG")) |
-      memory[assembled.address("DR_MAG") + 2] << 16,
-  };
-}
-
 function pairPart(
   call: Awaited<ReturnType<typeof managedRuntime>>["call"],
   cpu: Awaited<ReturnType<typeof managedRuntime>>["cpu"],
@@ -124,6 +98,23 @@ function pairPart(
   cpu.a = 1;
   return call(selector, payload);
 }
+
+Deno.test("datum reader reads decimals as correctly rounded floats", async () => {
+  const { assembled, memory, cpu } = await managedRuntime();
+  installBdosReader(
+    memory,
+    Array.from(new TextEncoder().encode("1.5 -0.25 1e3 0.1 ")),
+  );
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
+  // float24: sign, seven exponent bits biased by 63, sixteen fraction bits.
+  for (const bits of [0x3f8000, 0xbd0000, 0x48f400, 0x3b999a]) {
+    const value = readDatum(assembled, memory, cpu);
+    assert.equal(value.tag, 9);
+    assert.equal((value.ext << 16) | value.payload, bits);
+  }
+});
 
 Deno.test("datum reader reads the R7RS character names", async () => {
   const { assembled, memory, cpu } = await managedRuntime();
@@ -203,37 +194,6 @@ Deno.test("datum reader preserves port lookahead across read-char", async () => 
 });
 
 Deno.test("datum reader rejects malformed, overflowing and non-ASCII input", async () => {
-  const invalidDigit = await managedRuntime();
-  assert.equal(
-    addDigit(
-      invalidDigit.assembled,
-      invalidDigit.memory,
-      invalidDigit.cpu,
-      12,
-      "x".charCodeAt(0),
-    ).carry,
-    1,
-  );
-  assert.equal(
-    addDigit(
-      invalidDigit.assembled,
-      invalidDigit.memory,
-      invalidDigit.cpu,
-      1_677_721,
-      "6".charCodeAt(0),
-    ).carry,
-    1,
-  );
-  assert.deepEqual(
-    addDigit(
-      invalidDigit.assembled,
-      invalidDigit.memory,
-      invalidDigit.cpu,
-      838_860,
-      "8".charCodeAt(0),
-    ),
-    { carry: 0, magnitude: 8_388_608 },
-  );
   await readDatumError(Array.from(new TextEncoder().encode("8388608 ")));
   await readDatumError(Array.from(new TextEncoder().encode("-8388609 ")));
 

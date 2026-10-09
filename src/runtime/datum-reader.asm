@@ -326,140 +326,42 @@ DR_ASCII:
         RET C
         JP ERROR
 
-; Start a signed decimal exact-integer token with its first byte in A.
+; Collect a number token, its first byte staged in DR_BYTE, and convert it
+; with the compiler's decimal parser, so read gives the value the same literal
+; would: an exact integer, or a float correctly rounded.  The value returns
+; in A:CHL.
 DR_NUM:
-        XOR A                       ; Clear the accumulating magnitude.
-        LD (DR_MAG),A
-        LD (DR_MAG+1),A
-        LD (DR_MAG+2),A
-        LD A,1                      ; Count the first spelling byte.
+        LD A,(DR_BYTE)
+        LD (DR_NBUF),A
+        LD A,1
         LD (DR_LEN),A
-        XOR A                       ; Positive sign is the default.
-        LD (DR_NEG),A
-        LD (DR_SEEN),A             ; A sign by itself is not a number.
-        LD A,(DR_BYTE)               ; The first byte was staged by the caller.
-        JP .FIRST
-
-; The dispatch path stages the first token byte here before entering parsing.
-.FIRST:
-        CP '+'                       ; A leading plus changes no magnitude.
-        JR Z,.PLUS
-        CP '-'                       ; A leading minus is applied after parsing.
-        JR Z,.MINUS
-        CALL DR_DIGIT            ; The first byte must be a decimal digit.
-        JP C,ERROR
-        LD A,1                       ; Record that at least one digit was seen.
-        LD (DR_SEEN),A
-        JR .LOOP
-.PLUS:
-        XOR A                        ; Keep the explicit positive sign.
-        LD (DR_NEG),A
-        JR .LOOP
-.MINUS:
-        LD A,1                       ; Record the negative sign for final folding.
-        LD (DR_NEG),A
-        JR .LOOP
-
-; Consume subsequent token digits until a delimiter or EOF is encountered.
 .LOOP:
         CALL DR_PEEK              ; Leave the terminating delimiter pending.
-        JR C,DR_INT             ; EOF finishes an unterminated final integer.
-        CALL DR_DELIM              ; A delimiter ends the numeric spelling.
-        JR Z,DR_INT
-        CALL DR_TAKE              ; Consume the next non-delimiter byte.
-        JP C,ERROR                  ; A provider EOF cannot follow a peeked byte.
-        LD (DR_BYTE),A              ; Preserve it while checking token capacity.
+        JR C,.CONVERT             ; EOF ends the final token.
+        CALL DR_DELIM
+        JR Z,.CONVERT
+        CALL DR_TAKE
+        JP C,ERROR                ; A provider EOF cannot follow a peeked byte.
+        LD (DR_BYTE),A
         LD A,(DR_LEN)
-        INC A
-        CP 65                       ; A numeric spelling is limited to 64 bytes.
+        CP 64                     ; A numeric spelling is limited to 64 bytes.
         JP NC,ERROR
+        LD E,A
+        LD D,0
+        INC A
         LD (DR_LEN),A
+        LD HL,DR_NBUF
+        ADD HL,DE
         LD A,(DR_BYTE)
-        CALL DR_DIGIT            ; Every remaining byte must be a digit.
-        JP C,ERROR
-        LD A,1                       ; Publish that the token contains a digit.
-        LD (DR_SEEN),A
+        LD (HL),A
         JR .LOOP
-
-; Add the decimal digit in A to the bounded 24-bit magnitude.
-DR_DIGIT:
-        CP '0'                       ; Reject bytes below ASCII zero.
-        RET C
-        CP ':'                       ; ASCII colon is one past the digit range.
-        JR C,.ADD
-        SCF                         ; Bytes after nine are malformed digits.
-        RET
-.ADD:
-        SUB '0'                      ; Convert the digit to an unsigned value.
-        LD (DR_BYTE),A               ; Retain it while multiplying the magnitude.
-        LD HL,(DR_MAG)               ; C:HL is the current accumulated magnitude.
-        LD A,(DR_MAG+2)
+.CONVERT:
+        LD HL,DR_NBUF
+        LD A,(DR_LEN)
         LD C,A
-        ADD HL,HL                    ; Multiply the accumulator by two.
-        RL C
-        JR C,.OVERFLOW               ; Reject overflow before widening the product.
-        LD E,L                       ; B:DE keeps two times the value for the final add.
-        LD D,H
-        LD B,C
-        ADD HL,HL                    ; Multiply by four.
-        RL C
-        JR C,.OVERFLOW               ; Reject overflow before the next doubling.
-        ADD HL,HL                    ; Multiply by eight.
-        RL C
-        JR C,.OVERFLOW               ; Reject overflow before adding the final digit.
-        ADD HL,DE                    ; Eight plus two gives ten times the value.
-        LD A,C
-        ADC A,B
-        LD C,A
-        JR C,.OVERFLOW               ; Carry means the 24-bit magnitude overflowed.
-        LD A,(DR_BYTE)               ; Add the converted decimal digit.
-        ADD A,L
-        LD L,A
-        LD A,0
-        ADC A,H
-        LD H,A
-        LD A,0
-        ADC A,C
-        LD C,A
-        JR C,.OVERFLOW
-        LD (DR_MAG),HL               ; Publish the new magnitude for the next digit.
-        LD A,C
-        LD (DR_MAG+2),A
-        OR A                         ; Clear carry for the successful digit.
-        RET
-.OVERFLOW:
-        SCF                          ; Report an overflowing or malformed digit.
-        RET
-
-; Finish the exact-integer token and apply its sign with a signed-24 bound.
-; The value returns in A:CHL.
-DR_INT:
-        LD A,(DR_SEEN)             ; A sign without a digit is malformed.
-        OR A
-        JP Z,ERROR
-        LD HL,(DR_MAG)               ; Recover the unsigned magnitude.
-        LD A,(DR_MAG+2)
-        LD C,A
-        LD A,(DR_NEG)
-        OR A
-        JR Z,.POSITIVE
-        LD A,C                       ; Negative values may reach magnitude 800000H.
-        CP 80H
-        JR C,.NEGATE
-        JP NZ,ERROR
-        LD A,H
-        OR L
-        JP NZ,ERROR
-.NEGATE:
-        CALL NUM_INV                 ; Form the two's-complement signed payload.
-        LD A,3                       ; Exact integers use logical tag three.
-        OR A                          ; Successful integer parsing clears carry.
-        RET
-.POSITIVE:
-        BIT 7,C                      ; Positive values must remain below 800000H.
-        JP NZ,ERROR
-        LD A,3                       ; Exact integers use logical tag three.
-        OR A                          ; Successful integer parsing clears carry.
+        LD B,0
+        CALL DEC_READ
+        JP C,ERROR                ; Malformed, or an integer out of range.
         RET
 
 ; Publish a successful immediate result and preserve shared lookahead state.

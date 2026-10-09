@@ -262,7 +262,7 @@ CMD_INIT:
 ; to load: the core alone, then the standard-procedure module, the numeric
 ; procedures and the I/O module, each following the one before.  A standard
 ; procedure or case needs the standard module, a numeric procedure (kinds
-; 95 to 113) the numeric module, and read or a file opener the whole runtime.  A source or syntax error selects the whole runtime; the compiling pass
+; 95 to 113, and string->number) the numeric module, and read or a file opener the whole runtime.  A source or syntax error selects the whole runtime; the compiling pass
 ; reports the error.  Symbols interned here are found again by that pass.
 .SCAN:
         LD HL,RT_CORE
@@ -287,6 +287,8 @@ CMD_INIT:
         CALL CMD_SAME
         JR Z,.STD
         CALL GLB_PRIM              ; A is the primitive kind, or zero.
+        CP 136                     ; string->number uses the decimal parser.
+        JR Z,.NUMS
         CP 114
         JR NC,.STD                 ; Kinds 114 and up are standard again.
         CP 95

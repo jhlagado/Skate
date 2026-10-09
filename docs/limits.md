@@ -81,9 +81,12 @@ which they should be dealt with.
 | Quasiquote | Not supported | Design | `` ` `` and `,` are a `COMPILE ERROR` |
 | `include` | Only leading `(include "…")` forms | The include pre-pass reads only the head of a file | A later `include` is a `COMPILE ERROR` (pinned by `LATEINC`) |
 
-`string->number` reads exact integers in radix 2, 8, 10 or 16 and gives `#f`
-for text that is not a number; a decimal point or an exponent is a `RUNTIME
-ERROR` until the runtime has a correctly rounded decimal parser (`S2NDEC`).
+`string->number` reads text in radix 10 with the compiler's own decimal
+parser, so it gives exactly the value the same literal would: an exact
+integer, or a float correctly rounded (`S2NDEC`). Radix 2, 8 and 16 read
+exact integers. Text that is not a number gives `#f`; an exact integer out of
+range is a `RUNTIME ERROR`, as it is a `COMPILE ERROR` for a literal.
+`read` uses the same parser for numbers.
 `string-set!` refuses a literal string (`SSETLIT`). `list-copy` needs a proper
 list. `number->string` has no radix argument yet.
 
@@ -151,7 +154,7 @@ grows with a larger TPA.
 | GC mark worklist | 512 entries | `DF00H`–`E300H` | Never fails: collection rescans and slows down | Keep |
 | Runtime symbols (`read`, `string->symbol`) | 512 bytes, never freed | `DD00H`–`DF00H` | `RUNTIME ERROR` after about 60 new seven-character symbols | Raise |
 | `read`: pending list elements | 64 across all open lists | `datum-lists.asm` | `RUNTIME ERROR`; `read` cannot read a list longer than 64 | Rework: fold as it reads |
-| `read`: nesting and tokens | 32 open lists; symbols 31, integers 64, strings 255, vectors 64 | `datum-*.asm` | `RUNTIME ERROR` | Keep. `read` does not accept floats, `'x` or bytes of `80H` and above |
+| `read`: nesting and tokens | 32 open lists; symbols 31, numbers 64, strings 255, vectors 64 | `datum-*.asm` | `RUNTIME ERROR` | Keep. Numbers are read as the compiler reads them. `read` does not accept `'x` or bytes of `80H` and above |
 | `write` and `display` nesting | Guarded | `WR_GUARD` | `RUNTIME ERROR` (pinned by `DEEPNEST`) | Keep |
 
 ## 6. Memory maps
@@ -289,6 +292,6 @@ In order of value to a programmer:
    `vector-fill!`, `list-copy`, `string->number` (integers) and
    `string-append` of any number of strings, vectors of 255 elements, and
    the R7RS character names in `write` and `read`. Still to do:
-   more file ports and escapes, `read` of long lists and floats, decimal
-   `string->number`, and `#x` and the other radix prefixes.  Character
+   more file ports and escapes, `read` of long lists, and `#x` and the other
+   radix prefixes.  Decimal `string->number` and `read` of floats are done.  Character
    names, `#true` and `#false`, and strings that span lines are done.

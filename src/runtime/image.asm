@@ -45,6 +45,8 @@
 %INCLUDE "primitives/standard.asm"
 %INCLUDE "primitives/convert.asm"
 %INCLUDE "primitives/numbers.asm"
+%INCLUDE "primitives/parse.asm"
+%INCLUDE "../compiler/decimal.asm"
 %INCLUDE "io-start.asm"
 %INCLUDE "../compiler/cpm-transport.asm"
 %INCLUDE "file-ports.asm"
