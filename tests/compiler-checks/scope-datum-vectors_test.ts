@@ -8,7 +8,7 @@ import {
 
 function installBdosReader(memory: Uint8Array, bytes: readonly number[]) {
   const queue = 0xf200;
-  const cursor = 0xf2f0;
+  const cursor = 0xf0f0; // Below the queue, so long input cannot overwrite it.
   const routine = 0xf100;
   memory.set(bytes, queue);
   memory[5] = 0xc3;
@@ -54,7 +54,7 @@ function readDatum(
 }
 
 function readDatumError(bytes: readonly number[]) {
-  return managedRuntime().then(({ assembled, memory, cpu }) => {
+  return managedRuntime(true).then(({ assembled, memory, cpu }) => {
     installBdosReader(memory, bytes);
     memory[assembled.address("ARG_CNT")] = 0;
     memory[assembled.address("IN_CR")] = 0;
@@ -171,21 +171,27 @@ Deno.test("datum reader enforces vector size and delimiter limits", async () => 
   installBdosReader(
     memory,
     Array.from(
-      new TextEncoder().encode(`#(${Array(64).fill("1").join(" ")})\x1a`),
+      new TextEncoder().encode(
+        `#(${Array.from({ length: 255 }, (_, i) => i).join(" ")})\x1a`,
+      ),
     ),
   );
   initialiseReader(assembled, memory);
   const result = readDatum(assembled, memory, cpu);
   assert.equal(result.tag, 7);
-  assert.equal(memory[result.payload], 64);
-  assert.deepEqual(vectorElement(memory, result.payload, 63), {
+  assert.equal(memory[result.payload], 255);
+  assert.deepEqual(vectorElement(memory, result.payload, 0), {
     tag: 3,
-    payload: 1,
+    payload: 0,
+  });
+  assert.deepEqual(vectorElement(memory, result.payload, 254), {
+    tag: 3,
+    payload: 254,
   });
 
   await readDatumError(
     Array.from(
-      new TextEncoder().encode(`#(${Array(65).fill("1").join(" ")})\x1a`),
+      new TextEncoder().encode(`#(${Array(256).fill("1").join(" ")})\x1a`),
     ),
   );
   await readDatumError(Array.from(new TextEncoder().encode("#(1 . 2\x1a")));
@@ -293,7 +299,6 @@ Deno.test("datum reader cleans up when vector allocation is exhausted", async ()
   assert.equal(memory[assembled.address("DR_LIVE")], 0);
   assert.equal(memory[assembled.address("DR_DEPTH")], 0);
   assert.equal(memory[assembled.address("DR_SLOTS")], 0);
-  assert.equal(memory[assembled.address("DR_HELD")], 0);
   assert.equal(
     readWord(memory, assembled.address("DR_SP")),
     assembled.address("RT_DRVLO"),

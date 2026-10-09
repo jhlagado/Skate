@@ -13,11 +13,8 @@ DR_DEPTH: DB 0                   ; Open construction frames for later units.
 DR_SLOTS:   DB 0                   ; Used construction-value slots for later units.
 DR_SP:   DW RT_DRVLO              ; Next free reader value-stack address.
 DR_FRAME:   DW 0                   ; Current reader frame address, if any.
-DR_HELD:  DB 0                     ; Nonzero while the list accumulator is a root.
-DR_ATAG: DB 0                     ; Accumulator tag during list construction.
-DR_ACC: DW 0                      ; Accumulator payload during list construction.
-DR_FOLD:   DB 0                    ; Remaining values while folding one list.
-DR_DOT:  DB 0                      ; Nonzero while DR_BUILD is folding a dotted list.
+DR_ATAG: DB 0                     ; Tag of the list being relinked by a close.
+DR_ACC: DW 0                      ; Payload of that list.
 DR_EOF: DB 0                     ; Nonzero when the current nested value is EOF.
 DR_LEN:   DB 0                      ; Numeric spelling length, bounded at 64 bytes.
 DR_NBUF:   DS 64                   ; A number's spelling for DEC_READ.

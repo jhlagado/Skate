@@ -2,8 +2,9 @@
 ;
 ; Reader values use a separate 64-slot stack so a read cannot overwrite the
 ; quoted-data stack used by list, rest and apply.  Each open list owns one
-; eight-byte frame: state, value count and the stack cursor at its opening.
-; Completed lists are folded through the eight-byte pair allocator.
+; eight-byte frame (its accumulator slot, state and count) and one slot: the
+; values read so far, consed in reverse.  A list of any length therefore uses
+; two slots at most, and the close relinks the reversed pairs in place.
 
 ; Push a parsed value onto the reader's bounded construction stack.
 DR_PUSH:
@@ -74,64 +75,72 @@ DR_POP:
         EX DE,HL
         RET
 
-; Fold the current frame's values into a proper or dotted list.
-; A contains heads plus an optional tail; B is nonzero for a dotted tail.
-DR_BUILD:
-        LD (DR_FOLD),A              ; Keep the number while pair allocation runs.
-        LD A,B
-        LD (DR_DOT),A               ; The tail is popped before the list heads.
-        LD A,1
-        LD (DR_HELD),A              ; The accumulator is a separate exact root.
-        LD A,(DR_DOT)
-        OR A
-        JR Z,.PROPER
-        CALL DR_POP                 ; A dotted tail is the initial CDR value.
+; Cons the completed child A:CHL onto the current frame's accumulator, which
+; holds the frame's values so far as a reversed list in the frame's first
+; reader slot.  The child stays a reader root while its pair is allocated.
+DR_CONS:
+        CALL DR_PUSH
         JP C,ERROR
-        LD (DR_ATAG),A
-        LD A,C
-        LD (DR_AEXT),A
-        LD (DR_ACC),HL
-        LD A,(DR_FOLD)
-        DEC A
-        LD (DR_FOLD),A
-        JR .LOOP
-.PROPER:
-        XOR A
-        LD (DR_ATAG),A
-        LD (DR_AEXT),A
-        LD HL,0FE02H                ; The empty list is the initial proper CDR.
-        LD (DR_ACC),HL
-.LOOP:
-        LD A,(DR_FOLD)
-        OR A
-        JR Z,.DONE
-        CALL DR_POP                 ; The preceding value becomes the new CAR.
-        LD (QT_CTAG),A              ; Pair construction already owns these fields.
         LD (QT_CAR),HL
+        LD (QT_CTAG),A
         LD A,C
         LD (QT_CEXT),A
-        LD A,(DR_AEXT)
-        LD (QT_DEXT),A
-        LD A,(DR_ATAG)
-        LD (QT_DTAG),A
-        LD HL,(DR_ACC)
+        CALL DR_BASE                ; HL addresses the accumulator slot.
+        CALL DR_GET
         LD (QT_CDR),HL
-        CALL PAIR_NEW               ; The common constructor roots both operands.
-        JP C,ERROR                  ; Propagate allocation failure to the reader.
-        LD (DR_ATAG),A             ; The new pair becomes the next accumulator.
-        LD (DR_ACC),HL
-        XOR A
-        LD (DR_AEXT),A
-        LD A,(DR_FOLD)
-        DEC A
-        LD (DR_FOLD),A
-        JR .LOOP
-.DONE:
-        XOR A
-        LD (DR_HELD),A              ; The caller now owns the completed value.
-        LD A,(DR_ATAG)
-        LD HL,(DR_ACC)
+        LD (QT_DTAG),A
+        LD A,C
+        LD (QT_DEXT),A
+        CALL PAIR_NEW
+        JP C,ERROR
+        PUSH HL
+        CALL DR_BASE
+        POP DE
+        LD C,0
+        CALL OPS_PUT                ; The new pair is the accumulator.
+        CALL DR_POP                 ; Drop the child's root.
+        LD HL,(DR_FRAME)            ; Count the child; a vector holds 255.
+        INC HL
+        INC HL
+        LD A,(HL)
+        INC HL
+        INC (HL)
+        RET NZ
+        CP 4
+        JP Z,ERROR
+        DEC (HL)                    ; A list's count stops at 255.
+        OR A
         RET
+
+; HL = the current frame's accumulator slot.
+DR_BASE:
+        LD HL,(DR_FRAME)
+        LD E,(HL)
+        INC HL
+        LD D,(HL)
+        EX DE,HL
+        RET
+
+; Load the four-byte reader slot at HL as A:CHL.
+DR_GET:
+        LD E,(HL)
+        INC HL
+        LD D,(HL)
+        INC HL
+        LD C,(HL)
+        INC HL
+        LD A,(HL)
+        EX DE,HL
+        RET
+
+; Drop the current frame's slots and return its accumulator as A:CHL.
+DR_DROP:
+        CALL DR_BASE
+        LD (DR_SP),HL
+        LD A,(DR_SLOTS)
+        DEC A
+        LD (DR_SLOTS),A
+        JR DR_GET
 
 ; Open a list frame at the current reader value-stack cursor.
 DR_OPEN:
@@ -158,20 +167,16 @@ DR_OPEN:
         LD A,(DR_DEPTH)
         INC A
         LD (DR_DEPTH),A
-        OR A                       ; A successful frame open clears carry.
-        RET
+        XOR A                      ; The accumulator starts as the empty list.
+        LD C,A
+        LD HL,0FE02H
+        JP DR_PUSH
 
 ; Add one completed child value to the current list frame.
 DR_CHILD:
         LD HL,(DR_FRAME)
-        LD DE,3
-        ADD HL,DE
-        LD A,(HL)
-        INC A
-        CP 65
-        JP NC,ERROR                 ; A single list cannot exceed 64 values.
-        LD (HL),A
-        DEC HL                       ; Reach the frame state byte.
+        INC HL
+        INC HL
         LD A,(HL)
         CP 2
         JR Z,.TAIL                   ; The value fills a dotted tail.
@@ -225,7 +230,7 @@ DR_LIST:
         OR A
         JP NZ,ERROR                  ; EOF cannot be a child inside a list.
         LD A,B
-        CALL DR_PUSH
+        CALL DR_CONS
         JP C,ERROR
         CALL DR_CHILD
         JP C,ERROR
@@ -274,29 +279,63 @@ DR_LIST:
         CP ')'
         JP NZ,ERROR                  ; No datum may follow a dotted tail.
 
-; Consume ')' and fold the frame's values into pair records.
+; Consume ')' and reverse the accumulator in place onto the tail.  The pairs
+; are the reader's own, and nothing is allocated while their links change.
 .CLOSE:
         CALL DR_TAKE                 ; Consume the closing delimiter.
         LD HL,(DR_FRAME)
-        LD DE,2
-        ADD HL,DE
+        INC HL
+        INC HL
         LD A,(HL)
         CP 2
         JP Z,ERROR                   ; Dot without a tail is malformed.
-        LD B,0
+        LD HL,0FE02H                 ; A proper list ends in the empty list.
+        LD C,0
         CP 3
-        JR NZ,.FOLD
-        INC B                         ; DR_BUILD receives a dotted-list flag.
-.FOLD:
-        INC HL                        ; Reach the frame value count.
-        LD A,(HL)
-        CALL DR_BUILD
-        JP C,ERROR
-        LD (DR_TAG),A                ; Preserve the completed list across frame pop.
+        LD A,0
+        CALL Z,DR_POP                ; A dotted list ends in its tail.
+        LD (DR_ACC),HL
+        LD (DR_ATAG),A
+        LD A,C
+        LD (DR_AEXT),A
+        CALL DR_DROP                 ; A:CHL is the reversed list.
+.FLIP:
+        CALL STD_NIL
+        JR Z,.DONE
+        LD DE,CDR_LO
+        ADD HL,DE
+        PUSH HL
+        CALL DR_GET                  ; The next pair.
+        AND 0FH
+        LD (DR_TAG),A
         LD (DR_VAL),HL
-        CALL DR_CLOSE
-        JP C,ERROR
-        LD A,(DR_TAG)
+        LD A,C
+        LD (DR_EXT),A
+        POP HL
+        PUSH HL
+        LD DE,(DR_ACC)               ; Link this pair to the list after it.
+        LD A,(DR_AEXT)
+        LD C,A
+        LD A,(DR_ATAG)
+        CALL STD_PUT
+        POP HL
+        LD DE,-CDR_LO
+        ADD HL,DE
+        LD (DR_ACC),HL               ; This pair heads the list so far.
+        LD A,1
+        LD (DR_ATAG),A
+        XOR A
+        LD (DR_AEXT),A
         LD HL,(DR_VAL)
+        LD A,(DR_EXT)
+        LD C,A
+        LD A,(DR_TAG)
+        JR .FLIP
+.DONE:
+        CALL DR_CLOSE
+        LD HL,(DR_ACC)
+        LD A,(DR_AEXT)
+        LD C,A
+        LD A,(DR_ATAG)
         OR A
         RET

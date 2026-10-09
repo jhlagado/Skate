@@ -1,13 +1,14 @@
 ; Vector construction for the streaming datum reader.
 ;
-; A vector frame uses the same eight-byte record as a list frame. Its state
-; byte is four, its count byte records the child values, and the reader value
-; stack keeps every child as an exact four-byte root until the final count is
-; known. The existing vector allocator then owns the managed block.
+; A vector frame uses the same eight-byte record as a list frame, with state
+; four.  Its children are consed onto the frame's accumulator as they are
+; read, so a vector holds up to 255 elements; at the close the vector is
+; allocated while the accumulator is still a reader root, then filled from
+; its last element back.
 
 ; Parse one datum vector after .HASH has consumed its opening parenthesis.
 DR_VEC:
-        CALL DR_OPEN               ; Reserve a frame and save the value cursor.
+        CALL DR_OPEN               ; Reserve a frame and its accumulator.
         JP C,ERROR                 ; Reject a nesting depth beyond the frame band.
         LD HL,(DR_FRAME)           ; Select the new frame's state byte.
         INC HL
@@ -26,28 +27,12 @@ DR_VEC:
         LD A,(DR_EOF)               ; EOF cannot be a vector element.
         OR A
         JP NZ,ERROR
-        LD A,B                     ; Recover the child tag for the root push.
-        CALL DR_PUSH               ; Keep the child rooted until vector allocation.
+        LD A,B                     ; Recover the child tag.
+        CALL DR_CONS               ; Cons it on; the 256th is an error.
         JP C,ERROR
-        CALL .COUNT                ; Count it in this vector's frame.
-        JP C,ERROR
-        JP .LOOP                   ; Continue until the closing delimiter.
+        JP .LOOP
 
-; Increment the current vector count, rejecting the 65th element.
-.COUNT:
-        LD HL,(DR_FRAME)           ; Frame byte three contains the child count.
-        INC HL
-        INC HL
-        INC HL
-        LD A,(HL)
-        INC A
-        CP 65                      ; Datum vectors are bounded at 64 elements.
-        JP NC,ERROR
-        LD (HL),A
-        OR A                       ; A successful count update clears carry.
-        RET
-
-; Consume ')' and allocate/copy the completed vector.
+; Consume ')', allocate the vector and fill it from the accumulator.
 .CLOSE:
         CALL DR_TAKE               ; Consume the closing delimiter.
         LD HL,(DR_FRAME)           ; Read the vector's exact child count.
@@ -56,76 +41,43 @@ DR_VEC:
         INC HL
         LD A,(HL)
         LD (VEC_REQ),A             ; The common allocator takes a byte count.
-        LD HL,(DR_FRAME)           ; Save the value-stack base across allocation.
-        LD E,(HL)
-        INC HL
-        LD D,(HL)
-        LD (.BASE),DE
-        CALL VEC_NEW                ; Collection sees the reader stack as roots.
+        CALL VEC_NEW                ; Collection sees the accumulator as a root.
         JP C,ERROR                 ; Preserve the checked managed-capacity error.
-        CALL .COPY                 ; Copy every tagged child without allocation.
-        LD A,(VEC_REQ)             ; Remove the child records from the reader stack.
-        LD B,A
-        LD HL,(DR_SP)
-        LD E,A
-        LD D,0
-        SLA E                      ; Four bytes are stored for each child.
-        RL D
-        SLA E
-        RL D
-        OR A
-        SBC HL,DE
-        LD (DR_SP),HL
-        LD A,(DR_SLOTS)
-        SUB B
-        LD (DR_SLOTS),A
+        LD HL,(VEC_OBJ)
+        LD A,(VEC_REQ)
+        LD (HL),A
+        LD L,A                     ; The last element is at base + 4n - 3.
+        LD H,0
+        ADD HL,HL
+        ADD HL,HL
+        LD DE,(VEC_OBJ)
+        ADD HL,DE
+        DEC HL
+        DEC HL
+        DEC HL
+        LD (VEC_PTR),HL
+        CALL DR_DROP               ; A:CHL is the reversed list of elements.
+.NEXT:
+        CALL STD_NIL
+        JR Z,.DONE
+        LD (DR_VAL),HL
+        LD (DR_TAG),A
+        CALL PAIR_CAR              ; Copy this element.
+        EX DE,HL
+        LD HL,(VEC_PTR)
+        PUSH HL
+        CALL OPS_PUT
+        POP HL
+        LD DE,-4
+        ADD HL,DE
+        LD (VEC_PTR),HL
+        LD HL,(DR_VAL)
+        LD A,(DR_TAG)
+        CALL PAIR_CDR
+        JR .NEXT
+.DONE:
         CALL DR_CLOSE              ; Return to the enclosing list/vector frame.
         LD A,7                     ; The completed object has the vector tag.
         LD HL,(VEC_OBJ)            ; Return the managed vector block address.
         OR A                       ; Clear carry after a complete vector.
         RET
-
-; Copy reader-stack values into the allocated vector's four-byte elements.
-.COPY:
-        LD HL,(VEC_OBJ)            ; Publish the count before copying elements.
-        LD A,(VEC_REQ)
-        LD (HL),A
-        INC HL
-        LD (VEC_PTR),HL
-        LD HL,(.BASE)              ; Source begins at this frame's saved cursor.
-        LD (VEC_PKTP),HL
-        LD A,(VEC_REQ)
-        LD (VEC_LEFT),A
-.NEXT:
-        LD A,(VEC_LEFT)             ; Stop after all children have been copied.
-        OR A
-        RET Z
-        LD HL,(VEC_PKTP)            ; Read one source payload, tag and flags.
-        LD E,(HL)
-        INC HL
-        LD D,(HL)
-        INC HL
-        LD C,(HL)                   ; Byte 2.
-        INC HL
-        LD A,(HL)
-        AND 0FH
-        LD (VEC_TAG),A
-        INC HL
-        LD (VEC_PKTP),HL
-        LD HL,(VEC_PTR)             ; Write the corresponding vector element.
-        LD (HL),E
-        INC HL
-        LD (HL),D
-        INC HL
-        LD (HL),C
-        INC HL
-        LD A,(VEC_TAG)
-        LD (HL),A
-        INC HL
-        LD (VEC_PTR),HL
-        LD A,(VEC_LEFT)
-        DEC A
-        LD (VEC_LEFT),A
-        JP .NEXT
-
-.BASE:   DW 0                      ; Value-stack base saved for vector copying.

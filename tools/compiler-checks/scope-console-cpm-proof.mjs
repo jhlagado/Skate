@@ -91,8 +91,9 @@ disk = installCpm22File(disk, {
   bytes: new TextEncoder().encode("(1 2) foo\r\n"),
   padByte: 0x1a,
 });
-const vector64Input = `#(${Array(64).fill("1").join(" ")})\r`;
-const vector65Input = `#(${Array(65).fill("1").join(" ")})\r`;
+const vector255Input = `#(${Array(255).fill("1").join(" ")})\r`;
+const vector256Input = `#(${Array(256).fill("1").join(" ")})\r`;
+const list300Input = `(${Array.from({ length: 300 }, (_, i) => i).join(" ")})\r`;
 
 const cases = [
   [
@@ -153,7 +154,7 @@ const cases = [
   [
     "BININ.SK8",
     '(let ((p (open-input-binary-file "INPUT.BIN"))) (write (read-char p)) (write (read-char p)) (write (read-char p)) (write (read-char p)) (newline))',
-    "#\\x00#\\x1a#\\x0d#\\newline\r\n",
+    "#\\null#\\x1a#\\return#\\newline\r\n",
   ],
   [
     "BINOUT.SK8",
@@ -209,17 +210,23 @@ const cases = [
     "#(#(1 2) 3)\r",
   ],
   [
-    "RDVEC64.SK8",
+    "RDVEC255.SK8",
     "(begin (write (vector-length (read))) (newline))",
-    `${vector64Input.slice(0, -1)}64\r\n`,
-    vector64Input,
+    `${vector255Input.slice(0, -1)}255\r\n`,
+    vector255Input,
   ],
   [
-    "RDVEC65.SK8",
+    "RDVEC256.SK8",
     "(read)",
     "RUNTIME ERROR\r\n",
-    vector65Input,
+    vector256Input,
     false,
+  ],
+  [
+    "RDLIST.SK8",
+    "(let ((l (read))) (write (length l)) (write (list-ref l 299)) (newline))",
+    `${list300Input.slice(0, -1)}300299\r\n`,
+    list300Input,
   ],
   [
     "RDVECBAD.SK8",

@@ -74,7 +74,6 @@ async function readDatumError(bytes: readonly number[]) {
   assert.equal(memory[assembled.address("DR_ROOTS")], 0);
   assert.equal(memory[assembled.address("DR_DEPTH")], 0);
   assert.equal(memory[assembled.address("DR_SLOTS")], 0);
-  assert.equal(memory[assembled.address("DR_HELD")], 0);
   assert.equal(memory[assembled.address("DR_SIZE")], 0);
   assert.equal(memory[assembled.address("IN_STATE")], 0);
   assert.equal(memory[assembled.address("IN_CR")], 0);
@@ -227,7 +226,6 @@ Deno.test("datum string allocation failure runs the reader cleanup hook", async 
   assert.equal(memory[assembled.address("DR_ROOTS")], 0);
   assert.equal(memory[assembled.address("DR_DEPTH")], 0);
   assert.equal(memory[assembled.address("DR_SLOTS")], 0);
-  assert.equal(memory[assembled.address("DR_HELD")], 0);
   assert.equal(memory[assembled.address("DR_SIZE")], 0);
 });
 

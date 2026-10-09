@@ -72,7 +72,6 @@ RT_BOOT:                          ; START in entry.asm set the boot stack.
         LD (DR_LIVE),A
         LD (DR_DEPTH),A
         LD (DR_SLOTS),A
-        LD (DR_HELD),A
         LD (DR_FRAME),A
         LD (DR_FRAME+1),A
         LD HL,RT_GCLO               ; Reset the collector worklist cursor.

@@ -8,7 +8,7 @@ import {
 
 function installBdosReader(memory: Uint8Array, bytes: readonly number[]) {
   const queue = 0xf200;
-  const cursor = 0xf2f0;
+  const cursor = 0xf0f0; // Below the queue, so long input cannot overwrite it.
   const routine = 0xf100;
   memory.set(bytes, queue);
   memory[5] = 0xc3;
@@ -76,7 +76,7 @@ function readChar(
 }
 
 function readDatumError(bytes: readonly number[]) {
-  return managedRuntime().then(({ assembled, memory, cpu }) => {
+  return managedRuntime(true).then(({ assembled, memory, cpu }) => {
     installBdosReader(memory, bytes);
     memory[assembled.address("ARG_CNT")] = 0;
     memory[assembled.address("IN_CR")] = 0;
@@ -415,7 +415,6 @@ Deno.test("datum reader clears roots when pair allocation fails", async () => {
   assert.equal(memory[assembled.address("DR_LIVE")], 0);
   assert.equal(memory[assembled.address("DR_DEPTH")], 0);
   assert.equal(memory[assembled.address("DR_SLOTS")], 0);
-  assert.equal(memory[assembled.address("DR_HELD")], 0);
   assert.equal(
     readWord(memory, assembled.address("DR_SP")),
     assembled.address("RT_DRVLO"),
@@ -469,10 +468,33 @@ Deno.test("datum reader rejects malformed list punctuation", async () => {
   await readDatumError(Array.from(new TextEncoder().encode("(1 2\x1a")));
 });
 
-Deno.test("datum reader rejects excessive list depth and aggregate values", async () => {
+Deno.test("datum reader rejects excessive list depth", async () => {
   const deep = `${"(".repeat(33)}1${")".repeat(33)}\x1a`;
   await readDatumError(Array.from(new TextEncoder().encode(deep)));
 
-  const wide = `(${Array(65).fill("1").join(" ")})\x1a`;
-  await readDatumError(Array.from(new TextEncoder().encode(wide)));
+});
+
+Deno.test("datum reader reads a list longer than 255 elements", async () => {
+  const { assembled, memory, cpu, call } = await managedRuntime(true);
+  const wide = `(${Array.from({ length: 300 }, (_, i) => i).join(" ")} . 7)\x1a`;
+  installBdosReader(memory, Array.from(new TextEncoder().encode(wide)));
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
+  const result = readDatum(assembled, memory, cpu);
+  let rest = { carry: 0, tag: result.tag, payload: result.payload };
+  for (let index = 0; index < 300; index++) {
+    assert.equal(rest.tag, 1);
+    const head = pairPart(call, cpu, "PAIR_CAR", rest.payload);
+    assert.deepEqual({ tag: head.tag, payload: head.payload }, {
+      tag: 3,
+      payload: index,
+    });
+    rest = pairPart(call, cpu, "PAIR_CDR", rest.payload);
+  }
+  assert.deepEqual({ tag: rest.tag, payload: rest.payload }, {
+    tag: 3,
+    payload: 7,
+  });
+  assert.equal(memory[assembled.address("DR_SLOTS")], 0);
 });

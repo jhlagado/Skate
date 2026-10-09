@@ -392,7 +392,6 @@ DR_DONE:
         LD (DR_ROOTS),A
         LD (DR_DEPTH),A
         LD (DR_SLOTS),A
-        LD (DR_HELD),A
         LD (DR_FRAME),A
         LD (DR_FRAME+1),A
         LD HL,RT_DRVLO               ; Discard any value slots consumed by the read.

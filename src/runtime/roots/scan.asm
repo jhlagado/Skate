@@ -23,16 +23,9 @@ ROOT_ALL:
         CALL ROOT_ARG              ; Generated operand records remain live until consumed.
         CALL ROOT_OPS
         CALL ROOT_QT
-        CALL ROOT_DR               ; Reader values remain live during pair folding.
+        CALL ROOT_DR               ; Reader values and list accumulators.
         CALL ROOT_ENV
         CALL EC_ROOTS              ; Scan maps saved by active call/ec records.
-        LD A,(DR_HELD)
-        OR A
-        JR Z,.QUOTED                ; No separate list accumulator is active.
-        LD A,(DR_ATAG)
-        LD HL,(DR_ACC)
-        CALL GC_VALUE
-.QUOTED:
         LD A,(QT_HELD)
         OR A
         RET Z

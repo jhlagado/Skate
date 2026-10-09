@@ -72,7 +72,7 @@ which they should be dealt with.
 | Arguments in one call | 32 (`ARG_MAX`) | The runtime's 128-byte argument packet | `CAP` (pinned by `ARGS33`); the runtime also refuses a larger packet |
 | `apply` | The leading arguments and the list's elements together at most 32 | The same packet | `RUNTIME ERROR` (pinned by `APPCOUNT`) |
 | `vector`, `string`, `list` | At most 32 arguments | The packet | `CAP` at compile time |
-| Vector length | 255 elements | One count byte; a vector above 63 elements owns a run of two to four pages | `RUNTIME ERROR` (pinned by `VLONGERR`, `LONGVEC`). `read` still reads at most 64 |
+| Vector length | 255 elements | One count byte; a vector above 63 elements owns a run of two to four pages | `RUNTIME ERROR` (pinned by `VLONGERR`, `LONGVEC`, `RDVEC256`) |
 | `call/ec` | One-shot escapes only, 8 active at once | `EC_TABLE`, 8 × 21 bytes | `RUNTIME ERROR` |
 | Character names | The R7RS names (`#\alarm`, `#\backspace`, `#\delete`, `#\escape`, `#\newline`, `#\null`, `#\return`, `#\space`, `#\tab`), `#\xHH`, or one printable byte | Lexer (`LX_NAMES`); runtime `CH_NAMES` for `write` and `read` | `COMPILE ERROR` for another name; `write` prints these names and `read` reads them |
 | `#` syntax | `#(`, `#t`, `#true`, `#f`, `#false`, `#\` | Lexer | `COMPILE ERROR`. No `#x` and other radix or exactness prefixes, `#|…|#` or `#;` |
@@ -153,8 +153,8 @@ grows with a larger TPA.
 | Quote, `list`, rest and `apply` stack | 255 records shared across nesting | `D700H`–`DB00H` | `RUNTIME ERROR` | Keep, but the compiler should check deep quoted data against it |
 | GC mark worklist | 512 entries | `DF00H`–`E300H` | Never fails: collection rescans and slows down | Keep |
 | Runtime symbols (`read`, `string->symbol`) | 512 bytes, never freed | `DD00H`–`DF00H` | `RUNTIME ERROR` after about 60 new seven-character symbols | Raise |
-| `read`: pending list elements | 64 across all open lists | `datum-lists.asm` | `RUNTIME ERROR`; `read` cannot read a list longer than 64 | Rework: fold as it reads |
-| `read`: nesting and tokens | 32 open lists; symbols 31, numbers 64, strings 255, vectors 64 | `datum-*.asm` | `RUNTIME ERROR` | Keep. Numbers are read as the compiler reads them. `read` does not accept `'x` or bytes of `80H` and above |
+| `read`: list length | No fixed limit | Each open list or vector keeps one reader slot, its elements so far consed in reverse; the close relinks them in place (`datum-lists.asm`) | — | Done. Pinned by `RDLIST` (300 elements) |
+| `read`: nesting and tokens | 32 open lists; symbols 31, numbers 64, strings 255, vectors 255 | `datum-*.asm` | `RUNTIME ERROR` | Keep. Numbers are read as the compiler reads them. `read` does not accept `'x` or bytes of `80H` and above |
 | `write` and `display` nesting | Guarded | `WR_GUARD` | `RUNTIME ERROR` (pinned by `DEEPNEST`) | Keep |
 
 ## 6. Memory maps
@@ -292,6 +292,7 @@ In order of value to a programmer:
    `vector-fill!`, `list-copy`, `string->number` (integers) and
    `string-append` of any number of strings, vectors of 255 elements, and
    the R7RS character names in `write` and `read`. Still to do:
-   more file ports and escapes, `read` of long lists, and `#x` and the other
-   radix prefixes.  Decimal `string->number` and `read` of floats are done.  Character
-   names, `#true` and `#false`, and strings that span lines are done.
+   more file ports and escapes, and `#x` and the other radix prefixes.
+   Decimal `string->number`, `read` of floats, and `read` of lists of any
+   length and vectors of 255 are done.  Character names, `#true` and
+   `#false`, and strings that span lines are done.
