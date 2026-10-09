@@ -53,13 +53,13 @@ CL_FREE:  DS 130                 ; Heads for rounded four-byte closure classes.
 ; side stack, outside the program image, so they cost no heap.  Startup
 ; clears the four 128-byte tables as one block; PS_TABLE is read only up to
 ; PS_COUNT entries.
-CL_OWNER   EQU 0C400H            ; Class owner for each logical closure page.
+CL_OWNER   EQU 0D300H            ; Class owner for each logical closure page.
                                   ; Zero is free; 41H owns a two-page run; FFH continues it.
-CL_LIVE   EQU 0C480H             ; Live object count for each owned page.
-CL_PHYS   EQU 0C500H             ; Physical page high byte for each owner entry.
-BND_PHYS    EQU 0C580H           ; Physical page high bytes assigned to bindings.
-CL_LIMIT   EQU 0C600H            ; End of the four cleared tables.
-PS_TABLE    EQU 0C600H           ; One hundred twenty-eight three-byte descriptors.
+CL_LIVE   EQU 0D380H             ; Live object count for each owned page.
+CL_PHYS   EQU 0D400H             ; Physical page high byte for each owner entry.
+BND_PHYS    EQU 0D480H           ; Physical page high bytes assigned to bindings.
+CL_LIMIT   EQU 0D500H            ; End of the four cleared tables.
+PS_TABLE    EQU 0D500H           ; One hundred twenty-eight three-byte descriptors.
 CL_CAP:  DB 64,32,21,16,12,10,9,8,7,6,5,5,4,4,4,4
             DB 3,3,3,3,3,2,2,2,2,2,2,2,2,2,2,2
             DB 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1

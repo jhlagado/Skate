@@ -25,14 +25,14 @@ function callLabel(
   },
 ) {
   cpu.pc = assembled.address(label);
-  cpu.sp = 0xdff0;
+  cpu.sp = 0xb3f0;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
   while (cpu.pc !== 0xef00) {
     assert.ok(++steps < 20_000_000, `${label} did not return`);
     assembled.runtime.step();
   }
-  assert.equal(cpu.sp, 0xdff2);
+  assert.equal(cpu.sp, 0xb3f2);
   return {
     carry: cpu.flags.C,
     payload: (cpu.h << 8) | cpu.l,
@@ -88,14 +88,14 @@ async function collectorFixture(rootCount: number) {
   const orphan = recordAddress(530);
   memory[orphan + CAR_META] = 0x43;
   cpu.pc = assembled.address("GC");
-  cpu.sp = 0xdff0;
+  cpu.sp = 0xb3f0;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
   while (cpu.pc !== 0xef00) {
     assert.ok(++steps < 10_000_000, "collector did not return");
     assembled.runtime.step();
   }
-  assert.equal(cpu.sp, 0xdff2);
+  assert.equal(cpu.sp, 0xb3f2);
   return { memory, parent, child, orphan, steps };
 }
 
@@ -131,14 +131,14 @@ Deno.test("pair allocator follows free chains across a second slab", async () =>
   const cpu = assembled.runtime.cpu;
   const call = (label: string) => {
     cpu.pc = assembled.address(label);
-    cpu.sp = 0xdff0;
+    cpu.sp = 0xb3f0;
     writeWord(memory, cpu.sp, 0xef00);
     let steps = 0;
     while (cpu.pc !== 0xef00) {
       assert.ok(++steps < 10_000_000, `${label} did not return`);
       assembled.runtime.step();
     }
-    assert.equal(cpu.sp, 0xdff2);
+    assert.equal(cpu.sp, 0xb3f2);
     return {
       carry: cpu.flags.C,
       payload: (cpu.h << 8) | cpu.l,

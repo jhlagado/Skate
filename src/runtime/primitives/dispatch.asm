@@ -37,15 +37,12 @@ PKT_PACK:
         LD A,D
         OR CELL_VAL              ; A live record and its tag.
         LD (HL),A
+        POP DE                   ; Unlink its root record.
+        LD (ROOT_TOP),DE
         DEC C
         DJNZ .LOOP
 .OPERATOR:
         CALL OPS_POP             ; Recover the value evaluated before arguments.
-        LD (ARG_TAG),A
-        LD A,(ARG_CNT)           ; Arguments have been copied out of the native stack.
-        LD B,A
-        CALL ROOT_CUT
-        LD A,(ARG_TAG)
         PUSH IX                  ; Restore the PKT_PACK helper return address.
         RET
 

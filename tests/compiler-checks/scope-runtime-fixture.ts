@@ -64,11 +64,15 @@ export async function managedRuntime(withPairs = false) {
   );
   writeWord(memory, assembled.address("CL_TOP"), 0);
   writeWord(memory, assembled.address("BND_TOP"), 0);
-  writeWord(memory, assembled.address("HEAP_LIM"), 0xc000);
+  writeWord(
+    memory,
+    assembled.address("HEAP_LIM"),
+    assembled.address("RT_HIEND"),
+  );
   // Test descriptors live in the transient area, beyond the assembled image.
   // Keep the published-image bound above them while the allocator still uses
   // the real image end for its first managed page.
-  writeWord(memory, assembled.address("RT_LIMIT"), 0xc200);
+  writeWord(memory, assembled.address("RT_LIMIT"), 0xe400);
   writeWord(memory, assembled.address("G_BASE"), 0);
   writeWord(memory, assembled.address("G_END"), 0);
   writeWord(memory, assembled.address("QT_START"), 0);
@@ -87,14 +91,14 @@ export async function managedRuntime(withPairs = false) {
     cpu.h = hl >>> 8;
     cpu.l = hl & 255;
     cpu.pc = assembled.address(label);
-    cpu.sp = 0xdff0;
+    cpu.sp = 0xb3f0;
     writeWord(memory, cpu.sp, 0xef00);
     let steps = 0;
     while (cpu.pc !== 0xef00) {
       assert.ok(++steps < 50_000_000, `${label} did not return`);
       assembled.runtime.step();
     }
-    assert.equal(cpu.sp, 0xdff2, `${label} stack`);
+    assert.equal(cpu.sp, 0xb3f2, `${label} stack`);
     return {
       carry: cpu.flags.C,
       tag: cpu.a,

@@ -34,6 +34,8 @@ GC:
         CALL GC_CELLS               ; Reclaim dead four-byte bindings.
         CALL SLAB_GC                ; Reclaim dead rounded closure blocks.
         CALL GC_SWEEP              ; Rebuild free records and clear surviving marks.
+        LD A,1                     ; An allocation that still finds no room may
+        LD (PAGE_HRD),A           ; now take a page past the soft line.
         RET
 
 ; Mark the two typed inputs held across an allocation retry.  These roots use
@@ -270,7 +272,7 @@ GC_MARK:
         LD HL,(PS_PAIR)             ; Queue the record address, not its state byte.
         LD DE,(GC_QTOP)
         LD A,D
-        CP 0D4H
+        CP RT_GCHI/256
         JR NC,.FULL                ; Preserve the mark and defer its children.
         LD A,L
         LD (DE),A

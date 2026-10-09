@@ -259,7 +259,7 @@ GC_QUEUE:
         CALL GC_VISIT
         LD DE,(GC_QTOP)
         LD A,D
-        CP 0D4H
+        CP RT_GCHI/256
         JR NC,.FULL
         LD HL,(CL_OBJ)
         LD A,L

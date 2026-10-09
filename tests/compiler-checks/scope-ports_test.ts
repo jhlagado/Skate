@@ -30,14 +30,14 @@ Deno.test("native text input folds repeated CR and split CR/LF", async () => {
 
   function readChar() {
     cpu.pc = assembled.address("PKT_GETC");
-    cpu.sp = 0xdff2;
+    cpu.sp = 0xb3f2;
     cpu.ix = 0xef00;
     let steps = 0;
     while (cpu.pc !== 0xef00) {
       assert.ok(++steps < 50_000_000, "PKT_GETC did not return");
       assembled.runtime.step();
     }
-    assert.equal(cpu.sp, 0xdff2);
+    assert.equal(cpu.sp, 0xb3f2);
     return { tag: cpu.a, payload: (cpu.h << 8) | cpu.l };
   }
 
@@ -70,13 +70,13 @@ Deno.test("native direct CP/M output accepts byte FF", async () => {
 
   cpu.a = 0xff;
   cpu.pc = assembled.address("OUT_CHAR");
-  cpu.sp = 0xdff0;
+  cpu.sp = 0xb3f0;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
   while (cpu.pc !== 0xef00) {
     assert.ok(++steps < 50_000_000, "OUT_CHAR did not return");
     assembled.runtime.step();
   }
-  assert.equal(cpu.sp, 0xdff2);
+  assert.equal(cpu.sp, 0xb3f2);
   assert.equal(memory[capture], 0xff);
 });

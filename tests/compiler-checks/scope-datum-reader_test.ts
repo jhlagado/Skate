@@ -35,7 +35,7 @@ function readDatum(
   maxSteps = 50_000_000,
 ) {
   cpu.pc = assembled.address("DR_READ");
-  cpu.sp = 0xdff2;
+  cpu.sp = 0xb3f2;
   cpu.ix = 0xef00;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
@@ -46,7 +46,7 @@ function readDatum(
     );
     assembled.runtime.step();
   }
-  assert.equal(cpu.sp, terminalError ? 0xdff4 : 0xdff2);
+  assert.equal(cpu.sp, terminalError ? 0xb3f4 : 0xb3f2);
   return {
     assembled,
     memory,
@@ -63,7 +63,7 @@ function readChar(
   cpu: Awaited<ReturnType<typeof managedRuntime>>["cpu"],
 ) {
   cpu.pc = assembled.address("PKT_GETC");
-  cpu.sp = 0xdff2;
+  cpu.sp = 0xb3f2;
   cpu.ix = 0xef00;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
@@ -71,7 +71,7 @@ function readChar(
     assert.ok(++steps < 50_000_000, "PKT_GETC did not return");
     assembled.runtime.step();
   }
-  assert.equal(cpu.sp, 0xdff2);
+  assert.equal(cpu.sp, 0xb3f2);
   return { tag: cpu.a, payload: (cpu.h << 8) | cpu.l };
 }
 
@@ -100,14 +100,14 @@ function addDigit(
   memory[assembled.address("DR_MAG") + 2] = magnitude >>> 16;
   cpu.a = digit;
   cpu.pc = assembled.address("DR_DIGIT");
-  cpu.sp = 0xdff2;
+  cpu.sp = 0xb3f2;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
   while (cpu.pc !== 0xef00) {
     assert.ok(++steps < 1_000, "DR_DIGIT did not return");
     assembled.runtime.step();
   }
-  assert.equal(cpu.sp, 0xdff4);
+  assert.equal(cpu.sp, 0xb3f4);
   return {
     carry: cpu.flags.C,
     magnitude: readWord(memory, assembled.address("DR_MAG")) |
@@ -254,14 +254,14 @@ Deno.test("datum reader shares lookahead across successive reads and sticky EOF"
 
   function readDatum() {
     cpu.pc = assembled.address("DR_READ");
-    cpu.sp = 0xdff2;
+    cpu.sp = 0xb3f2;
     cpu.ix = 0xef00;
     let steps = 0;
     while (cpu.pc !== 0xef00) {
       assert.ok(++steps < 50_000_000, "successive DR_READ did not return");
       assembled.runtime.step();
     }
-    assert.equal(cpu.sp, 0xdff2);
+    assert.equal(cpu.sp, 0xb3f2);
     return {
       tag: cpu.a,
       payload: (cpu.h << 8) | cpu.l,

@@ -32,6 +32,8 @@ FRM_PACK:
         LD A,D                    ; Packet values are always live.
         OR CELL_VAL
         LD (HL),A                 ; Publish the complete argument record.
+        POP DE                    ; Unlink its root record.
+        LD (ROOT_TOP),DE
         DEC C                     ; The preceding source argument has a lower index.
         DJNZ .LOOP                ; Consume every staged argument.
 .CALLEE:
@@ -40,11 +42,8 @@ FRM_PACK:
         LD A,D
         LD (ARG_TAG),A
         LD C,E
-        LD A,(ARG_CNT)           ; The callee and every argument leave the shadow stack.
-        INC A
-        LD B,A
-        CALL ROOT_CUT
-        LD A,(ARG_TAG)
+        POP DE                   ; Unlink the callee's root record.
+        LD (ROOT_TOP),DE
         PUSH IX                  ; Restore the FRM_PACK call return.
         RET                      ; The caller selects closure or primitive dispatch.
 

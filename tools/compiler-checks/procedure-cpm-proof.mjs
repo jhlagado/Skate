@@ -32,7 +32,8 @@ assert.equal(compiler.address("CMD_MAIN"), 0x0100);
 assert.ok(compiler.address("W_IMGEND") < 0x10000);
 const runtimeLength = provider.image.bytes.length - 0x0100;
 assert.equal(runtimeLength, compiler.address("RT_SIZE"));
-const heapPointerAddress = provider.address("HEAP_LIM");
+const heapPointerAddress = provider.address("STK_FLR");
+const pageMinAddress = provider.address("PAGE_MIN");
 const lowStackAddress = provider.address("RT_LOWSP");
 const bindingAllocationAddress = provider.address("CNT_BIND");
 const closureAllocationAddress = provider.address("CNT_CLOS");
@@ -63,9 +64,9 @@ if (Deno.args.includes("--data")) {
 }
 
 // Pin the live-pair ceiling of four-byte pair cells.  This program loads only
-// the core runtime and keeps 2,720 pairs (85 full 32-record pair pages) live;
+// the core runtime and keeps 3,136 pairs (98 full 32-record pair pages) live;
 // one more pair must stop with RUNTIME ERROR rather than corrupt the heap.
-const livePairCeiling = 2720;
+const livePairCeiling = 3136;
 function livePairSource(count) {
   return `(define build (lambda (n acc) (if (zero? n) acc (build (- n 1) (cons n acc))))) (define len (lambda (l n) (if (null? l) n (len (cdr l) (+ n 1))))) (define keep (build ${count} '())) (begin (write (len keep 0)) (newline))`;
 }
@@ -435,7 +436,7 @@ const cases = [
   ],
   [
     "ECGCMAP.SK8",
-    "(let ((root (cons 41 42))) (call/ec (lambda (escape) (letrec ((loop (lambda (n) (if (zero? n) (escape (car root)) (begin (cons n 0) (loop (- n 1))))))) (loop 3000)))))",
+    "(let ((root (cons 41 42))) (call/ec (lambda (escape) (letrec ((loop (lambda (n) (if (zero? n) (escape (car root)) (begin (cons n 0) (loop (- n 1))))))) (loop 8000)))))",
     "41",
   ],
   [
@@ -488,8 +489,8 @@ const cases = [
   ],
   [
     "DEEPOK.SK8",
-    "(define f (lambda (n) (if (zero? n) 0 (+ 1 (f (- n 1)))))) (f 180)",
-    "180",
+    "(define f (lambda (n) (if (zero? n) 0 (+ 1 (f (- n 1)))))) (f 1000)",
+    "1000",
   ],
   [
     "STACKOK.SK8",
@@ -726,7 +727,7 @@ const integerRuntimeErrorCases = [
   ["L2SBAD.SK8", "(list->string '(1 2))", "RUNTIME ERROR\r\n"],
   [
     "DEEPEQ.SK8",
-    "(define (nest n acc) (if (zero? n) acc (nest (- n 1) (cons acc '())))) (equal? (nest 900 '()) (nest 900 '()))",
+    "(define (nest n acc) (if (zero? n) acc (nest (- n 1) (cons acc '())))) (equal? (nest 1500 '()) (nest 1500 '()))",
     "RUNTIME ERROR\r\n",
   ],
   ["MAPNONE.SK8", "(for-each car)", "RUNTIME ERROR\r\n"],
@@ -1284,7 +1285,7 @@ try {
   machine.install_drive(0, disk, true);
   runUntilPrompt(0, "the boot prompt");
   const measurements = [];
-  for (const [name, source, expected, guard] of selectedCases) {
+  for (const [name, source, expected] of selectedCases) {
     const outputName = name.replace(".SK8", ".COM");
     runCommand(`SKATE ${name}`, "COMPILED\r\n", `compile ${name}`);
     const image = machine.export_drive(0);
@@ -1304,9 +1305,6 @@ try {
       `${name}: runtime image end was not published from the final image length`,
     );
     assert.equal(generated[0], 0x31, `${outputName} sets its private stack`);
-    if (guard) {
-      machine.write_ram(0xce00, new Uint8Array(0x100).fill(0xa5));
-    }
     const output = runCommand(
       outputName.replace(".COM", ""),
       explicitResultSource(source).includes("(newline)")
@@ -1322,13 +1320,6 @@ try {
       expectedOutput,
       `${name}: unexpected program output`,
     );
-    if (guard) {
-      assert.deepEqual(
-        [...machine.read_ram(0xce00, 0x100)],
-        [...new Uint8Array(0x100).fill(0xa5)],
-        `${name}: generated operands crossed the heap boundary`,
-      );
-    }
     if (name === "GCLOCAL.SK8" || name === "ECGCMAP.SK8") {
       assert.ok(
         readWord(machine, collectionCountAddress) > 0,
@@ -1337,8 +1328,13 @@ try {
     }
     const nativeLowSp = readWord(machine, lowStackAddress);
     const heapEnd = readWord(machine, heapPointerAddress);
-    assert.ok(nativeLowSp >= 0xd400, `${name}: native stack crossed its guard`);
-    assert.ok(heapEnd < nativeLowSp, `${name}: heap and stack collided`);
+    // The stack shares memory with the heap: it must stay above the heap's
+    // first page, and the heap's top (the stack's floor) below its start.
+    assert.ok(
+      nativeLowSp >= readWord(machine, pageMinAddress),
+      `${name}: native stack reached the heap`,
+    );
+    assert.ok(heapEnd <= 0xb400, `${name}: the heap reached the stack`);
     measurements.push({
       name,
       result: expected,

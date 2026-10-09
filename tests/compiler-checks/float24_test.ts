@@ -89,15 +89,15 @@ async function runtime() {
   }
   function call(label: string) {
     cpu.pc = assembled.address(label);
-    cpu.sp = 0xdff0;
-    memory[0xdff0] = 0x00;
-    memory[0xdff1] = 0xef;
+    cpu.sp = 0xb3f0;
+    memory[0xb3f0] = 0x00;
+    memory[0xb3f1] = 0xef;
     let steps = 0;
     while (cpu.pc !== 0xef00) {
       assert.ok(++steps < 200_000, `${label} did not return`);
       assembled.runtime.step();
     }
-    assert.equal(cpu.sp, 0xdff2, `${label} stack`);
+    assert.equal(cpu.sp, 0xb3f2, `${label} stack`);
     return {
       bits: (cpu.c << 16) | (cpu.h << 8) | cpu.l,
       a: cpu.a,

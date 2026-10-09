@@ -30,28 +30,42 @@ RST_SET:
         DW ARG_PUSH,L_LOAD,PRIM_OP,QT_PUSH,G_OPSH,INV_OP
 
 ; Generated code pushes each argument with CALL ARG_PUSH: the value in A:CHL
-; is recorded as an exact root and pushed as a cell image, BC (B = tag beside
-; C = byte 2) then HL, below the return.  A, C and HL are kept.
+; is pushed below the return as a six-byte root record, the link to the
+; previous record (ROOT_TOP), then BC (B = tag beside C = byte 2), then HL, so
+; the record starts with a cell image.  The collector follows the links, so
+; pending values are bounded only by the stack.  A, C and HL are kept.
 ARG_PUSH:
 %IF PROBE
         CALL PROBE
 %ENDIF
-        CALL ROOT_ADD
-        POP DE                     ; The generated continuation.
+        LD (ROOT_VAL),HL
+        POP HL                     ; The generated continuation.
+        LD (ROOT_RET),HL
+        LD HL,(ROOT_TOP)
+        PUSH HL
         LD B,A
         PUSH BC
+        LD HL,(ROOT_VAL)
         PUSH HL
-        PUSH DE
+        LD HL,0                    ; This record is now the newest.
+        ADD HL,SP
+        LD (ROOT_TOP),HL
+        LD HL,(ROOT_RET)
+        PUSH HL
+        LD HL,(ROOT_VAL)
         RET
 
-; Recover a value pushed by ARG_PUSH into A:CHL and retire its root record.
+; Recover a value pushed by ARG_PUSH into A:CHL and unlink its record.
 ARG_POP:
         POP DE                     ; The generated continuation.
         POP HL
         POP BC
+        EX (SP),HL                 ; HL is the link; the payload waits.
+        LD (ROOT_TOP),HL
+        POP HL
         LD A,B
         PUSH DE
-        JP ROOT_POP                ; Keeps A:CHL.
+        RET
 
 ; Call a predefined primitive whose kind is known when the program is
 ; compiled.  Generated code is CALL PRIM_OP, DB payload, DB count, where the

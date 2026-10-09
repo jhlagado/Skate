@@ -44,7 +44,7 @@ function runWithProvider(
   }
   memory[5] = 0xc9;
   cpu.pc = assembled.address(label);
-  cpu.sp = 0xdff0;
+  cpu.sp = 0xb3f0;
   writeWord(memory, cpu.sp, stopAddress);
   let steps = 0;
   while (cpu.pc !== stopAddress) {
@@ -83,7 +83,7 @@ function runWithProvider(
     }
     assembled.runtime.step();
   }
-  if (expectBalancedStack) assert.equal(cpu.sp, 0xdff2, `${label} stack`);
+  if (expectBalancedStack) assert.equal(cpu.sp, 0xb3f2, `${label} stack`);
   if (expectError) {
     assert.ok(enteredError, `${label} did not enter ERROR`);
     assert.ok(

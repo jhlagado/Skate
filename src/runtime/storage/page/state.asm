@@ -17,5 +17,6 @@ PAGE_POS: DW 0                     ; Successful run start index for address outp
 PAGE_PTR: DW 0                     ; Scratch release address.
 PAGE_END: DW 0                     ; Scratch exclusive end for extent checks.
 PAGE_OK:  DB 0                     ; Nonzero after a successful page-domain init.
+PAGE_HRD:  DB 0                    ; Nonzero lets the next page pass the soft line.
 PAGE_BIT:  DB 0                    ; Selected bit mask for the current page.
 PAGE_POW: DB 1,2,4,8,16,32,64,128 ; Bit masks for one bitmap byte.

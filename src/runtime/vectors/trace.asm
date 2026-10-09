@@ -11,7 +11,7 @@ VEC_MARK:
         CALL GC_VISIT              ; Set the shared closure mark map.
         LD DE,(GC_QTOP)            ; Queue the object for element tracing.
         LD A,D
-        CP 0D4H
+        CP RT_GCHI/256
         JR NC,.FULL                ; Defer children when the bounded queue is full.
         LD HL,(CL_OBJ)
         LD A,L

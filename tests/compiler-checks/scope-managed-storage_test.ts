@@ -144,7 +144,7 @@ Deno.test("tail-owned cells clear their old value and initialization state", asy
   const { assembled, memory, call } = await managedRuntime();
   const binding = call("HEAP_NEW").payload;
   const map = 0xd700;
-  const descriptor = 0xc100;
+  const descriptor = 0xe300;
   writeWord(memory, map, binding);
   memory[map + 2] = 0;
   memory[map + 3] = 0x20; // Promoted.
@@ -259,7 +259,7 @@ Deno.test("closure classes round at the supported 128-slot boundary", async () =
 
 Deno.test("closure creation clears every uncaptured environment byte", async () => {
   const { assembled, memory, call } = await managedRuntime();
-  const descriptor = 0xc100;
+  const descriptor = 0xe300;
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 3] = 3;
   memory[descriptor + 5] = 0; // No mask bytes.
@@ -274,21 +274,20 @@ Deno.test("closure creation clears every uncaptured environment byte", async () 
   );
 });
 
-Deno.test("activation maps keep helper calls above the collector worklist", async () => {
+Deno.test("activation maps stay above the heap's floor", async () => {
   const { assembled, memory, cpu } = await managedRuntime();
-  const guard = assembled.address("RT_GUARD");
-  const worklistEnd = assembled.address("RT_GCHI");
-  assert.equal(guard, worklistEnd + 0x100);
-
-  memory.fill(0xa5, 0xd000, worklistEnd);
-  const descriptor = 0xc100;
+  const guard = 0xa000;
+  writeWord(memory, assembled.address("STK_FLR"), guard);
+  // ENV_NEW pushes its return below the map, into the page above the heap.
+  memory.fill(0xa5, 0x9b00, guard - 0x100);
+  const descriptor = 0xe300;
   writeWord(memory, assembled.address("DESC_CUR"), descriptor);
   memory[descriptor + 5] = 0; // No mask bytes.
   memory[assembled.address("SLOT_CNT")] = 1;
   writeWord(memory, assembled.address("ENV_CUR"), 0);
 
   // POP HL in ENV_NEW advances this return stack by two bytes.  Four bytes
-  // for one active slot therefore put the candidate map exactly at the guard.
+  // for one active slot therefore put the candidate map exactly at the floor.
   cpu.pc = assembled.address("ENV_NEW");
   cpu.sp = guard + 2;
   writeWord(memory, cpu.sp, 0xef00);
@@ -300,14 +299,14 @@ Deno.test("activation maps keep helper calls above the collector worklist", asyn
 
   assert.equal(readWord(memory, assembled.address("ENV_CUR")), guard);
   assert.deepEqual(
-    [...memory.slice(0xd000, worklistEnd)],
+    [...memory.slice(0x9b00, guard - 0x100)],
     new Array(0x400).fill(0xa5),
   );
 });
 
 Deno.test("large closures own and release a contiguous two-page run", async () => {
   const { assembled, memory, call } = await managedRuntime();
-  const descriptor = 0xc100;
+  const descriptor = 0xe300;
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 3] = 128;
 
@@ -340,7 +339,7 @@ Deno.test("large closures own and release a contiguous two-page run", async () =
 
 Deno.test("dead closures are reclaimed by class and live closures remain published", async () => {
   const { assembled, memory, call } = await managedRuntime();
-  const descriptor = 0xc100;
+  const descriptor = 0xe300;
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 3] = 1;
   memory[descriptor + 5] = 0; // No mask bytes.
@@ -381,7 +380,7 @@ Deno.test("closure pages share the pool with binding pages", async () => {
   const { assembled, call } = await managedRuntime();
   const binding = call("HEAP_NEW");
   assert.equal(binding.carry, 0);
-  const descriptor = 0xc100;
+  const descriptor = 0xe300;
   const memory = assembled.runtime.hardware.memory;
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 3] = 1;
@@ -393,7 +392,7 @@ Deno.test("closure pages share the pool with binding pages", async () => {
 
 Deno.test("a two-page closure claims adjacent pages in the shared pool", async () => {
   const { assembled, memory, call } = await managedRuntime();
-  const descriptor = 0xc100;
+  const descriptor = 0xe300;
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 3] = 128;
   const closure = call("HEAP_LAM", descriptor);
@@ -405,7 +404,7 @@ Deno.test("a two-page closure claims adjacent pages in the shared pool", async (
 
 Deno.test("a live two-page closure does not hide a later dead page", async () => {
   const { assembled, memory, call } = await managedRuntime();
-  const wideDescriptor = 0xc100;
+  const wideDescriptor = 0xe300;
   const narrowDescriptor = 0xc130;
   writeWord(memory, wideDescriptor, 0x4000);
   memory[wideDescriptor + 3] = 128;
@@ -438,7 +437,7 @@ Deno.test("a live two-page closure does not hide a later dead page", async () =>
 
 Deno.test("a partial closure slab can refill every freed slot", async () => {
   const { assembled, memory, call } = await managedRuntime();
-  const descriptor = 0xc100;
+  const descriptor = 0xe300;
   const root = 0xd800;
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 3] = 1;
@@ -466,7 +465,7 @@ Deno.test("a partial closure slab can refill every freed slot", async () => {
 
 Deno.test("closure churn beyond sixteen kilobytes reuses a bounded live set", async () => {
   const { assembled, memory, call } = await managedRuntime();
-  const descriptor = 0xc100;
+  const descriptor = 0xe300;
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 3] = 128;
   const root = 0xd800;
@@ -505,7 +504,7 @@ Deno.test("closure churn beyond sixteen kilobytes reuses a bounded live set", as
 
 Deno.test("a closure capture keeps a pair alive and releases both together", async () => {
   const { assembled, memory, call } = await managedRuntime(true);
-  const descriptor = 0xc100;
+  const descriptor = 0xe300;
   const map = 0xd700;
   const root = 0xd800;
   writeWord(memory, descriptor, 0x4000);

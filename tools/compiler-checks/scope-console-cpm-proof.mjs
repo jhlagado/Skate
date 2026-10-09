@@ -36,15 +36,18 @@ const provider = await loadAssembly(
 );
 assert.equal(compiler.image.base, 0);
 assert.equal(provider.image.bytes.length - 0x100, compiler.address("RT_SIZE"));
-const heapPointerAddress = provider.address("HEAP_LIM");
+const heapPointerAddress = provider.address("STK_FLR");
+const pageMinAddress = provider.address("PAGE_MIN");
 const lowStackAddress = provider.address("RT_LOWSP");
 const bindingAllocationAddress = provider.address("CNT_BIND");
 const closureAllocationAddress = provider.address("CNT_CLOS");
 const pairAllocationAddress = provider.address("CNT_PAIR");
 const collectionCountAddress = provider.address("CNT_GC");
 const frameCountAddress = provider.address("CNT_MAPS");
-const stackGuardBase = 0xd400;
-const stackTop = 0xe400;
+// The 4 KB below the stack's start, watched for stack writes; small console
+// programs keep their heap pages far below it.
+const stackGuardBase = 0xa400;
+const stackTop = 0xb400;
 let disk = installCpm22File(backing, {
   name: "SKATE.COM",
   bytes: compiler.image.bytes.slice(0x100),
@@ -377,7 +380,7 @@ const cases = [
   ],
   [
     "DEEPNEST.SK8",
-    "(define (nest n acc) (if (zero? n) acc (nest (- n 1) (cons acc '())))) (write (nest 1200 '()))",
+    "(define (nest n acc) (if (zero? n) acc (nest (- n 1) (cons acc '())))) (write (nest 2500 '()))",
     "RUNTIME ERROR\r\n",
     "",
     false,
@@ -659,19 +662,22 @@ function runCase([name, , expected, input = "", exact = true], measurements) {
   if (name === "LONGLST.SK8") {
     checkCase(name, () =>
       assert.ok(
-        observedLowSp >= 0xd500,
+        observedLowSp >= 0xa500,
         `LONGLST.SK8: printing used stack down to ${
           observedLowSp.toString(16)
         }`,
       ));
   }
   const heapEnd = readWord(heapPointerAddress);
-  assert.ok(nativeLowSp >= 0xd400, `${name}: native stack crossed its guard`);
+  assert.ok(
+    nativeLowSp >= readWord(pageMinAddress),
+    `${name}: native stack reached the heap`,
+  );
   assert.ok(
     observedLowSp < stackTop,
     `${name}: no stack writes were observed`,
   );
-  assert.ok(heapEnd < nativeLowSp, `${name}: heap and stack collided`);
+  assert.ok(heapEnd <= 0xb400, `${name}: the heap reached the stack`);
   measurements[measurements.length - 1].lowSp = nativeLowSp;
   measurements[measurements.length - 1].observedLowSp = observedLowSp;
   measurements[measurements.length - 1].heapEnd = heapEnd;

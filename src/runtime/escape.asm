@@ -28,28 +28,25 @@ EC_CALL:
         LD (EC_PROC),HL            ; Keep it while the escape record is opened.
         POP AF                     ; Recover the target procedure tag.
         LD (EC_PTAG),A             ; Keep the tag beside its payload.
+        POP HL                     ; Unlink its root record: an escape restores
+        LD (ROOT_TOP),HL           ; the operands as they were before it.
         LD HL,0                    ; Form the current native stack pointer in HL.
         ADD HL,SP
         LD (EC_SP),HL              ; The caller frame remains below this boundary.
         CALL EC_OPEN               ; Reserve one dynamic record and make a token.
-        LD A,(EC_PTAG)             ; Restore the target value for INV_CALL.
-        LD B,A
+        LD A,(EC_PTAG)             ; The target is the callee record.
         LD C,0                     ; A procedure's byte 2 is zero.
         LD HL,(EC_PROC)
-        PUSH BC                    ; The target is the callee record.
-        PUSH HL
+        CALL ARG_PUSH
         LD A,8                     ; Escape tokens use the private tag-eight type.
-        LD HL,(EC_TOKEN)           ; The active record's generation is its payload.
-        CALL ROOT_ADD              ; Keep the token visible during call setup.
-        LD B,A
-        PUSH BC                    ; The token is the one argument to the target.
-        PUSH HL
+        LD HL,(EC_TOKEN)           ; The token is the one argument to the target.
+        CALL ARG_PUSH
         LD HL,EC_DONE              ; A normal target return completes call/ec.
         PUSH HL
         LD A,1                     ; The target receives exactly one escape value.
         JP INV_CALL                ; Use the ordinary closure and arity machinery.
 
-; Compute the address of dynamic record A. Records are twenty-one bytes wide.
+; Compute the address of dynamic record A. Records are twenty-two bytes wide.
 EC_ADDR:
         LD L,A                     ; Widen the record index before multiplying.
         LD H,0
@@ -59,7 +56,8 @@ EC_ADDR:
         ADD HL,HL                  ; Index times four.
         ADD HL,HL                  ; Index times eight.
         ADD HL,HL                  ; Index times sixteen.
-        ADD HL,DE                  ; Add five for the twenty-one-byte stride.
+        ADD HL,DE                  ; Add six for the twenty-two-byte stride.
+        ADD HL,DE
         ADD HL,DE
         ADD HL,DE
         ADD HL,DE
@@ -159,10 +157,11 @@ EC_OPEN:
         LD A,(ENV_RCNT)            ; Store the caller-map slot count.
         LD (DE),A
         INC DE
-        LD A,(ROOT_CNT)            ; The target is still rooted on the native stack.
-        OR A
-        JP Z,ERROR                 ; A call/ec target must have an exact root record.
-        DEC A                       ; Save the cursor before that target was pushed.
+        LD HL,(ROOT_TOP)           ; The operands before the target was pushed.
+        LD A,L
+        LD (DE),A
+        INC DE
+        LD A,H
         LD (DE),A
         INC DE
         LD HL,(OPS_SP)             ; Save the operator-stack cursor across an escape.
@@ -199,8 +198,10 @@ EC_DONE:
         LD HL,(EC_REC)
         LD DE,18
         ADD HL,DE
-        LD A,(HL)                  ; Restore the caller's exact shadow-root cursor.
-        LD (ROOT_CNT),A
+        LD E,(HL)                  ; Restore the caller's pending operands.
+        INC HL
+        LD D,(HL)
+        LD (ROOT_TOP),DE
         INC HL
         LD E,(HL)
         INC HL
@@ -301,8 +302,10 @@ EC_ESC:
         LD HL,(EC_REC)
         LD DE,18
         ADD HL,DE
-        LD A,(HL)                  ; Restore roots owned by the enclosing call.
-        LD (ROOT_CNT),A
+        LD E,(HL)                  ; Restore roots owned by the enclosing call.
+        INC HL
+        LD D,(HL)
+        LD (ROOT_TOP),DE
         INC HL
         LD E,(HL)
         INC HL
@@ -383,4 +386,4 @@ EC_TAG:   DB 0                     ; Escape or normal-result tag.
 EC_EXT:   DB 0                     ; Escape or normal-result byte 2.
 EC_GOTO:  DW 0                     ; Continuation retained across state restore.
 EC_MAP:  DW 0                      ; Saved map pointer during collector root scans.
-EC_TABLE:   DS 168                 ; Eight records, twenty-one bytes each.
+EC_TABLE:   DS 176                 ; Eight records, twenty-two bytes each.

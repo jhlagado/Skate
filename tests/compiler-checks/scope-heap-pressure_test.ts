@@ -40,7 +40,7 @@ function runEntry(
   const gcAddress = assembled.address("GC");
   const constructorAddress = assembled.address("PAIR_NEW");
   cpu.pc = assembled.address(label);
-  cpu.sp = 0xdff0;
+  cpu.sp = 0xb3f0;
   writeWord(memory, cpu.sp, returnAddress);
   setup();
   let gcCount = 0;
@@ -142,7 +142,7 @@ Deno.test("packet cons preserves both scalar inputs through collection", async (
   );
   assert.equal(result.gcCount, 1);
   assert.equal(result.forcedCount, 1);
-  assert.equal(result.sp, 0xdff0);
+  assert.equal(result.sp, 0xb3f0);
   assert.equal(result.carry, 0);
   assert.equal(readWord(memory, result.payload), 0x1234);
   assert.equal(readWord(memory, result.payload + CDR_PAYLOAD), 0x5678);
@@ -178,7 +178,7 @@ Deno.test("quoted list construction survives collection at both allocations", as
   );
   assert.equal(result.gcCount, 2);
   assert.equal(result.forcedCount, 2);
-  assert.equal(result.sp, 0xdff2);
+  assert.equal(result.sp, 0xb3f2);
   assert.equal(result.carry, 0);
   const head = result.payload;
   const tail = readWord(memory, head + CDR_PAYLOAD);
@@ -230,7 +230,7 @@ Deno.test("tracing preserves a linked list of more than one thousand pairs", asy
   writeWord(memory, assembled.address("G_BASE"), 0xd700);
   writeWord(memory, assembled.address("G_END"), 0xd704);
   const result = callRoutine(assembled, "GC", memory, cpu, 50_000_000);
-  assert.equal(result.sp, 0xdff2);
+  assert.equal(result.sp, 0xb3f2);
   for (let index = 0; index < records.length; index++) {
     const address = records[index];
     assert.equal(readWord(memory, address), index);

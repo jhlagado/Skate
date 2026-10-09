@@ -9,18 +9,17 @@ REST_MIN:     DB 0                 ; Fixed minimum arity of the active procedure
 REST_CNT:     DB 0                 ; Surplus values still waiting for the rest list.
 REST_IDX:     DB 0                 ; Packet index while reading surplus values.
 REST_LEN:     DB 0                 ; Original surplus count passed to QT_FOLD.
-ROOT_CNT:       DB 0               ; Number of generated operands not yet consumed.
-; The exact-root operand table and allocation maps use a fixed work band
-; outside the provider image, A500H..C000H, just below the transient bands, so
-; the heap is one extent from the image end to A500H.
-ROOT_TAB:     EQU 0B700H           ; Four-byte exact roots for up to 255 operands.
-ROOT_VAL:     DW 0                 ; Shadow-root payload staging.
-ROOT_TAG:     DB 0                 ; Shadow-root tag staging.
+ROOT_TOP:       DW 0               ; Newest pending-operand record, or zero.
+ROOT_RET:       DW 0               ; ARG_PUSH's continuation while it pushes.
+; The allocation maps use a fixed work band outside the provider image,
+; B400H..CF00H, just below the transient bands.  Below them the heap grows up
+; from the image and the stack down from B400H.
+ROOT_VAL:     DW 0                 ; ARG_PUSH's payload while it pushes.
 ; These maps cover the full 3000H..C000H address span, including images
 ; below 4000H.
-CL_MAP      EQU 0A500H            ; 2304 bytes mark every allocated closure start.
-GC_MARKS      EQU 0AE00H          ; 2304 bytes: even marks, odd vector type bits.
-BND_MAP       EQU 0BB00H          ; 1152 bytes: one bit per four-byte binding cell.
+CL_MAP      EQU 0B400H            ; 2304 bytes mark every allocated closure start.
+GC_MARKS      EQU 0BD00H          ; 2304 bytes: even marks, odd vector type bits.
+BND_MAP       EQU 0CA00H          ; 1152 bytes: one bit per four-byte binding cell.
 NUM_LEFT:     DB 0                 ; Remaining values in an arithmetic or compare fold.
 NUM_ATAG:     DB 0                 ; Accumulator tag for a variadic numeric fold.
 NUM_AEXT:     DB 0                 ; Accumulator byte 2 for a variadic numeric fold.
@@ -49,7 +48,9 @@ HEAP_LIM:     DW RT_HIEND          ; Exclusive end of the closure/binding pool.
 FRM_CLEN:     DW 0                 ; Two-byte closure-map extent for the active shape.
 FRM_MLEN:      DW 0                ; Four-byte active-map extent for the active shape.
 FRM_SP:     DW 0                   ; Stack boundary before an activation map.
-RT_LOWSP:     DW 0E400H            ; Lowest native stack boundary observed.
+RT_LOWSP:     DW RT_STK            ; Lowest native stack boundary observed.
+STK_FLR:    DW 0                 ; The stack may not come below this: one page
+                                   ; above the highest heap page.
 CNT_BIND:      DW 0                ; Successful managed binding allocations.
 CNT_CLOS:      DW 0                ; Successful closure allocations.
 CNT_PAIR:      DW 0                ; Successful pair allocations.
@@ -87,7 +88,7 @@ QT_START:     DW 0                 ; Absolute start of quoted-list cache records
 QT_STOP:     DW 0                  ; Exclusive end of quoted-list cache records.
 DR_DIR:      DW 0                  ; Absolute start of the published symbol directory.
 DR_DEND:      DW 0                 ; Exclusive end of the published symbol directory.
-ARG_PKT      EQU 0C780H            ; ARG_MAX four-byte records, after PS_TABLE.
+ARG_PKT      EQU 0D680H            ; ARG_MAX four-byte records, after PS_TABLE.
 OPS_SP:       DW RT_OPLO       ; Operator side-stack cursor between heap and guard.
 OUT_BUF:   DS 32               ; Decimal output buffer terminated for BDOS function 9.
 TX_ERROR:  DB "RUNTIME ERROR",13,10,"$"

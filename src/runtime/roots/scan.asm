@@ -1,5 +1,5 @@
 ; Exact root discovery for stacks, packets, static slots and frames.
-; Entry points: ROOT_ALL, ROOT_ADD, ROOT_RAW and ROOT_ENV.
+; Entry points: ROOT_ALL, ROOT_RAW and ROOT_ENV.
 ; Included in runtime order by ../roots.asm.
 
 ; Exact root discovery for the scope-control runtime.
@@ -40,61 +40,6 @@ ROOT_ALL:
         LD HL,(QT_ACC)
         JP GC_VALUE
 
-; Record one generated operand in the exact shadow root stack.  A:CHL is
-; returned unchanged so EM_PUSH can continue with the native stack operation.
-ROOT_ADD:
-%IF PROBE
-        CALL PROBE
-%ENDIF
-        LD (ROOT_TAG),A
-        LD (ROOT_VAL),HL
-        LD A,(ROOT_CNT)
-        CP 255
-        JP NC,ERROR
-        LD L,A
-        LD H,0
-        ADD HL,HL
-        ADD HL,HL
-        LD DE,ROOT_TAB
-        ADD HL,DE
-        LD DE,(ROOT_VAL)
-        LD (HL),E
-        INC HL
-        LD (HL),D
-        INC HL
-        LD (HL),C                  ; Byte 2.
-        INC HL
-        LD A,(ROOT_TAG)
-        OR CELL_VAL                ; A live record and its tag.
-        LD (HL),A
-        LD A,(ROOT_CNT)
-        INC A
-        LD (ROOT_CNT),A
-        LD A,(ROOT_TAG)
-        LD HL,(ROOT_VAL)
-        RET
-
-; Remove B most-recent generated operand records while preserving A:CHL.
-ROOT_CUT:
-        PUSH AF
-        PUSH HL
-        LD A,(ROOT_CNT)
-        CP B
-        JR C,.BAD
-        SUB B
-        LD (ROOT_CNT),A
-        POP HL
-        POP AF
-        OR A                       ; A remains intact while successful removal clears carry.
-        RET
-.BAD:
-        JP ERROR
-
-; Remove one generated operand record while preserving A:CHL.
-ROOT_POP:
-        LD B,1
-        JP ROOT_CUT
-
 ; Mark the active reader value stack during a collection.
 ROOT_DR:
         LD A,(DR_LIVE)              ; An inactive reader has no temporary roots.
@@ -104,20 +49,24 @@ ROOT_DR:
         LD DE,(DR_SP)               ; The live cursor bounds the root range.
         JP ROOT_RAW
 
-; Scan the active generated-operand records.
+; Scan the pending operands: ARG_PUSH links their records on the native
+; stack, newest first, and each record starts with a cell image.
 ROOT_ARG:
-        LD A,(ROOT_CNT)
-        OR A
+        LD HL,(ROOT_TOP)
+.LOOP:
+        LD A,H
+        OR L
         RET Z
-        LD L,A
-        LD H,0
-        ADD HL,HL
-        ADD HL,HL
-        LD DE,ROOT_TAB
+        PUSH HL
+        CALL ROOT_REC
+        POP HL
+        LD DE,4
         ADD HL,DE
+        LD E,(HL)
+        INC HL
+        LD D,(HL)
         EX DE,HL
-        LD HL,ROOT_TAB
-        JP ROOT_RAW
+        JR .LOOP
 
 ; Walk a half-open range of four-byte static value records.  The final byte
 ; is the publication flag, so unused cache and static slots are ignored.

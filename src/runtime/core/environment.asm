@@ -27,7 +27,7 @@ ENV_NEW:
         OR A                       ; Clear carry before the subtraction.
         SBC HL,BC
         LD (DESC_PTR),HL           ; Keep the candidate while checking the guard.
-        LD DE,RT_GUARD              ; Leave frame words above the heap boundary.
+        LD DE,(STK_FLR)           ; Leave frame words above the heap.
         OR A                       ; Clear carry before the boundary comparison.
         SBC HL,DE
         JP C,ERROR                 ; Reject a frame before moving the native stack.

@@ -49,8 +49,8 @@ which they should be dealt with.
 
 | Limit | Today | Verdict | Proposal |
 | --- | --- | --- | --- |
-| Runnable program size | 41,472 bytes of `.COM` (an image ending at `A300H`); a larger image is `CAP` | Keep | The heap is whatever the program leaves below `A500H`. Sizing the collector maps to the heap, not to `3000H`–`C000H`, would add about 5 KB more (§6.2) |
-| Non-tail recursion depth | about 250 levels of a one-argument procedure | Rework | Each frame is now sized by its own procedure. The depth is bound by the 3,840-byte stack; a computed map (§6.2) can give it more |
+| Runnable program size | 44,032 bytes of `.COM` (an image ending at `AD00H`); a larger image is `CAP` | Keep | The heap and the stack share what the program leaves below `B400H`. Sizing the collector maps to the heap, not to `3000H`–`C000H`, would add about 5 KB more (§6.2) |
+| Non-tail recursion depth | Bounded by the memory the heap is not using: about 15 bytes a level for a one-argument procedure, so 1,500 levels in a small program (measured); each 8 KB of heap in use costs about 550 levels | Keep | The stack and the heap share one region (§6.2) |
 | Size of a `do` | 1,504 reader events for the form and its rewrite: a body of about 140 short forms | Keep | The replay buffer now lives in the staging window (§6.1) |
 | Elements per level of a quoted list or vector | 63 | Raise | Tied to the 255-record runtime quote stack; raise to 255 with a nesting check |
 | Vector length | 64 | Rework | `make-vector` uses one closure-slab class; longer vectors need page runs |
@@ -92,7 +92,7 @@ list. `number->string` has no radix argument yet.
 
 | Limit | Value | Reason | When exceeded |
 | --- | --- | --- | --- |
-| Compiled image | Must leave a metadata page and one free heap page below `RT_LOEND`, `A500H` (§5.2) | The runtime's memory map | `CAP` |
+| Compiled image | Must leave a metadata page, a heap page, a page between heap and stack, and 1 KB of stack below `RT_LOEND`, `B400H` (§5.2) | The runtime's memory map | `CAP` |
 | Source file | 65,535 bytes, lines and columns | 16-bit positions; the source is streamed, not buffered | `COMPILE ERROR`; split the program with includes |
 | Lexer token | 64 bytes; string literals 255 | `LX_BUF` | `CAP` |
 | Decimal literal | 64 significant digits held exactly, correctly rounded; the exponent saturates at 1000 | `decimal/parse.asm` | Harmless: any such exponent overflows or underflows anyway |
@@ -141,16 +141,16 @@ grows with a larger TPA.
 
 | Capacity | Value | Where | When exceeded | Verdict |
 | --- | --- | --- | --- | --- |
-| Runnable image | Ends at `A300H` at most: 41,472 bytes of `.COM` | `RT_LOEND`, `page/init.asm`; the compiler applies the same rule | `CAP` at compile time (pinned by `test:cpm:full-image`, which runs a 41,472-byte image and refuses one byte more) | Keep. Such a program has one free heap page |
+| Runnable image | Ends at `AD00H` at most: 44,032 bytes of `.COM` | `RT_LOEND`, `page/init.asm`; the compiler applies the same rule | `CAP` at compile time (pinned by `test:cpm:full-image`, which runs a 44,032-byte image and refuses one byte more) | Keep. Such a program has one heap page and 1 KB of stack |
 | Runtime size | Core 18,410 bytes, with standard procedures 20,849, with numeric procedures 22,479, full 26,145 | `RT_CORE`, `RT_STD`, `RT_NUMS`, `RT_SIZE` | — | Each 256 bytes of runtime or program costs one heap page (32 pairs) |
-| Live pairs | 2,720 with the core runtime and a small program | 8 bytes a pair; heap pages from the image end to `A500H`, 32 pairs each | `RUNTIME ERROR` after a collection | Raise by sizing the maps to the heap. Pinned by `PAIR2720` and `PAIR2721` |
-| Native stack | 3,840 bytes, `D500H`–`E400H` | `RT_GUARD`, `RT_TOP` | `RUNTIME ERROR` | Rework |
-| Non-tail recursion | About 250 levels of `(+ 1 (f (- n 1)))` (measured: 250 passes, 260 fails), whatever other procedures the program has. A frame is 6 bytes (the caller's return, environment and descriptor) plus 4 for each slot; a body ends with `JP FRM_RET`, which finds the frame's boundary from its map | Each frame holds 4 bytes for each of its own procedure's slots, and closures 2 bytes each; a tail call into a procedure with more slots builds a larger frame | `RUNTIME ERROR` | Rework with the computed map. Pinned by `DEEPOK`, `DEEPREC` and `FRAMES` |
-| Pending operand roots | 255 | `ROOT_TAB`, 1,020 bytes | `RUNTIME ERROR` | Keep |
-| Operator side stack | 255 records | `C000H`–`C400H` | `RUNTIME ERROR` | Keep; bounds nesting through computed-operator calls, `case` and `map` |
-| Quote, `list`, rest and `apply` stack | 255 records shared across nesting | `C800H`–`CC00H` | `RUNTIME ERROR` | Keep, but the compiler should check deep quoted data against it |
-| GC mark worklist | 512 entries | `D000H`–`D400H` | Never fails: collection rescans and slows down | Keep |
-| Runtime symbols (`read`, `string->symbol`) | 512 bytes, never freed | `CE00H`–`D000H` | `RUNTIME ERROR` after about 60 new seven-character symbols | Raise |
+| Live pairs | 3,136 with the core runtime and a small program that recurses only shallowly | 8 bytes a pair, 32 a page; pages from the image end up towards the stack | `RUNTIME ERROR` after a collection | Raise by sizing the maps to the heap. Pinned by `PAIR3136` and `PAIR3137`. The heap stays 4 KB below the stack's start until a collection has run; after one, a page may come up to a page below the stack pointer |
+| Native stack | From `B400H` down to a page above the highest heap page | `RT_STK`, `STK_FLR`; `PAGE_NEW` keeps each new page a page below the stack pointer | `RUNTIME ERROR` | Keep |
+| Non-tail recursion | About 15 bytes a level for `(+ 1 (f (- n 1)))`: 1,500 levels measured in a small program | A frame is 6 bytes (the caller's return, environment and descriptor) plus 4 for each slot, and each pending operand 6; a body ends with `JP FRM_RET`, which finds the frame's boundary from its map | `RUNTIME ERROR` | Keep. Pinned by `DEEPOK`, `DEEPREC` and `FRAMES` |
+| Pending operand roots | No fixed limit | `ARG_PUSH` links each pending operand's record through the native stack (`ROOT_TOP`); the collector follows the links | — | Keep |
+| Operator side stack | 255 records | `CF00H`–`D300H` | `RUNTIME ERROR` | Keep; bounds nesting through computed-operator calls, `case` and `map` |
+| Quote, `list`, rest and `apply` stack | 255 records shared across nesting | `D700H`–`DB00H` | `RUNTIME ERROR` | Keep, but the compiler should check deep quoted data against it |
+| GC mark worklist | 512 entries | `DF00H`–`E300H` | Never fails: collection rescans and slows down | Keep |
+| Runtime symbols (`read`, `string->symbol`) | 512 bytes, never freed | `DD00H`–`DF00H` | `RUNTIME ERROR` after about 60 new seven-character symbols | Raise |
 | `read`: pending list elements | 64 across all open lists | `datum-lists.asm` | `RUNTIME ERROR`; `read` cannot read a list longer than 64 | Rework: fold as it reads |
 | `read`: nesting and tokens | 32 open lists; symbols 31, integers 64, strings 255, vectors 64 | `datum-*.asm` | `RUNTIME ERROR` | Keep. `read` does not accept floats, `'x` or bytes of `80H` and above |
 | `write` and `display` nesting | Guarded | `WR_GUARD` | `RUNTIME ERROR` (pinned by `DEEPNEST`) | Keep |
@@ -183,18 +183,23 @@ memory in the workspace, not in code.
 | Range | Contents |
 | --- | --- |
 | `0100H` | Runtime (by tier), the 1 KB global area, generated code, descriptors, quoted data, literals |
-| Image end, rounded to a page (at least `3000H`) to `A500H` | Heap pages; the first holds page metadata |
-| `A500H`–`C000H` | Closure map, GC marks, `ROOT_TAB`, binding map |
-| `C000H`–`D000H` | Operator side stack, page tables, quote stack, datum reader, runtime symbols |
-| `D000H`–`D500H` | GC worklist and a spare band |
-| `D500H`–`E400H` | Native stack |
+| Image end, rounded to a page (at least `3000H`), up to `B400H` | Shared: heap pages grow up from the image (the first holds page metadata) and the native stack grows down from `B400H` |
+| `B400H`–`CF00H` | Closure map, GC marks, the old exact-root area (now spare), binding map |
+| `CF00H`–`DF00H` | Operator side stack, page tables, argument packet, quote stack, datum reader, runtime symbols |
+| `DF00H`–`E400H` | GC worklist and a spare page |
 
-The heap is one extent, so a program trades heap pages for code byte for
-byte, up to the 41,472-byte limit. The bands are still placed at assembly
-time. Two further steps would give more room: sizing the collector maps to
-the actual heap rather than to all of `3000H`–`C000H` (they take 5.8 KB, about
-5 KB more than a small heap needs), and placing the bands from the BDOS entry
-down so a larger TPA gives a larger stack.
+The heap and the stack meet wherever the program needs.  The heap grows
+only to `RT_SOFT`, 4 KB below the stack's start, until a collection has run;
+the allocation retried after a collection may take a page past it, up to a
+page below the stack pointer.  So garbage is collected before the heap takes
+memory the stack may want, and a program that keeps more live data than the
+soft line allows still gets it.  Every frame and nested runtime call checks
+the stack against `STK_FLR`, a page above the highest heap page.  A page, once
+used, is rarely returned, so stack space the heap has taken stays taken.  A program trades code for heap and stack byte
+for byte up to the 44,032-byte limit.  Sizing the collector maps to the
+actual heap rather than to all of `3000H`–`C000H` (they take 5.8 KB, about 5
+KB more than a small heap needs) would give still more room, as would
+placing the bands from the BDOS entry down on a larger TPA.
 
 ## 7. Silent failures
 
@@ -240,7 +245,7 @@ decimal exponent saturating, and runtime symbols that are never freed.
 ## 9. Tests
 
 Limits pinned by a test: 256 globals (`GLOB256`), 65 nested `if`s
-(`IF65`), a 64-element quoted list (`REVQCAP`), 2,720 live pairs, recursion
+(`IF65`), a 64-element quoted list (`REVQCAP`), 3,136 live pairs, recursion
 (`DEEPOK`, `DEEPREC`), `apply` of 33 values (`APPCOUNT`), `(make-vector 65)`
 (`VLONGERR`), stale escapes (`ECSTALE`, `ECREUSE`), 11,000 top-level forms
 (`TOOLONG`), deep `write` (`DEEPNEST`), 255- and 256-byte strings, and an
@@ -272,9 +277,11 @@ In order of value to a programmer:
 4. **Compile-only tables in the staging window.** Done: the replay buffer,
    symbols, strings, literals, fixups, procedures and the branch, `if`,
    `cond` and tail stacks are all at least twice their former size.
-5. **One heap extent.** Done: the maps moved below the transient bands, so
-   programs can be 41,472 bytes. Still to do: sizing the maps to the heap,
-   and a stack that grows with the TPA.
+5. **One region for heap and stack.** Done: frames are 6 bytes, pending
+   operands are linked through the stack instead of a 255-entry table, and the
+   heap and stack share the memory below `B400H`, so recursion is bounded by
+   free memory and programs can be 44,032 bytes. Still to do: sizing the maps
+   to the heap, and using a larger TPA.
 6. **Missing standard procedures.** Done: `list->vector`, `vector->list`,
    `string->list`, `list->string`, `make-string`, `string-set!`,
    `vector-fill!`, `list-copy`, `string->number` (integers) and

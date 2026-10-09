@@ -34,7 +34,7 @@ function readDatum(
   maxSteps = 50_000_000,
 ) {
   cpu.pc = assembled.address("DR_READ");
-  cpu.sp = 0xdff2;
+  cpu.sp = 0xb3f2;
   cpu.ix = 0xef00;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
@@ -45,7 +45,7 @@ function readDatum(
     );
     assembled.runtime.step();
   }
-  assert.equal(cpu.sp, terminalError ? 0xdff4 : 0xdff2);
+  assert.equal(cpu.sp, terminalError ? 0xb3f4 : 0xb3f2);
   return {
     carry: cpu.flags.C,
     tag: cpu.a,
@@ -264,7 +264,7 @@ Deno.test("datum reader cleans up when vector allocation is exhausted", async ()
   memory[assembled.address("VEC_REQ")] = 2;
   const size = assembled.address("VEC_SIZE");
   cpu.pc = size;
-  cpu.sp = 0xdff0;
+  cpu.sp = 0xb3f0;
   writeWord(memory, cpu.sp, 0xef00);
   let sizeSteps = 0;
   while (cpu.pc !== 0xef00) {

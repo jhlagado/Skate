@@ -74,7 +74,7 @@ async function rootRuntime() {
   }
 
   writeWord(memory, assembled.address("HEAP_LIM"), 0xc000);
-  writeWord(memory, assembled.address("RT_LIMIT"), 0xc200);
+  writeWord(memory, assembled.address("RT_LIMIT"), 0xe400);
   writeWord(memory, assembled.address("G_BASE"), 0);
   writeWord(memory, assembled.address("G_END"), 0);
   writeWord(memory, assembled.address("QT_START"), 0);
@@ -96,14 +96,14 @@ async function rootRuntime() {
     cpu.h = hl >>> 8;
     cpu.l = hl & 255;
     cpu.pc = assembled.address(label);
-    cpu.sp = 0xdff0;
+    cpu.sp = 0xb3f0;
     writeWord(memory, cpu.sp, 0xef00);
     let steps = 0;
     while (cpu.pc !== 0xef00) {
       assert.ok(++steps < 20_000_000, `${label} did not return`);
       assembled.runtime.step();
     }
-    assert.equal(cpu.sp, 0xdff2);
+    assert.equal(cpu.sp, 0xb3f2);
     return { carry: cpu.flags.C, a: cpu.a };
   }
 
@@ -187,11 +187,14 @@ Deno.test("exact roots preserve generated operands", async () => {
   const fixture = await rootRuntime();
   const { assembled, memory, pairBase, pair, call } = fixture;
   pair(pairBase);
-  const roots = assembled.address("ROOT_TAB");
-  writeWord(memory, roots, pairBase);
-  memory[roots + 2] = 0; // Clear extension byte.
-  memory[roots + 3] = 0x11;
-  memory[assembled.address("ROOT_CNT")] = 1;
+  // ARG_PUSH links pending operands through the native stack: a cell image
+  // and the previous record's address.
+  const record = 0xb000;
+  writeWord(memory, record, pairBase);
+  memory[record + 2] = 0; // Clear extension byte.
+  memory[record + 3] = 0x01;
+  writeWord(memory, record + 4, 0);
+  writeWord(memory, assembled.address("ROOT_TOP"), record);
   call("GC");
   assert.equal(memory[pairBase + CAR_META], 0x43);
 });
@@ -260,8 +263,8 @@ Deno.test("suspended environments remain roots through their frame maps", async 
   const callerMap = 0x7610;
   const currentBinding = 0x7200;
   const callerBinding = 0x7204;
-  const currentDescriptor = 0xc100;
-  const callerDescriptor = 0xc140;
+  const currentDescriptor = 0xe300;
+  const callerDescriptor = 0xe340;
   bindingStart(currentBinding);
   bindingStart(callerBinding);
   bindingPages(0x72);
@@ -301,7 +304,7 @@ Deno.test("a captured closure traces only its declared binding slots", async () 
     call,
   } = fixture;
   pair(pairBase);
-  const descriptor = 0xc100;
+  const descriptor = 0xe300;
   const closure = 0x7800;
   const binding = 0x7c00;
   bindingStart(binding);
@@ -329,7 +332,7 @@ Deno.test("a captured closure traces only its declared binding slots", async () 
 Deno.test("closure roots drain a full worklist without reporting an error", async () => {
   const fixture = await rootRuntime();
   const { assembled, memory, heapBase, call } = fixture;
-  const descriptor = 0xc100;
+  const descriptor = 0xe300;
   const closureBase = 0x7800;
   const roots = 0x8200;
   assert.ok(roots + 513 * 4 <= assembled.address("RT_LOEND"));
@@ -375,8 +378,8 @@ Deno.test("closure overflow fallback stays within the native stack", async () =>
     closureStart,
     call,
   } = fixture;
-  const branchDescriptor = 0xc100;
-  const emptyDescriptor = 0xc140;
+  const branchDescriptor = 0xe300;
+  const emptyDescriptor = 0xe340;
   const chainBase = 0x7800;
   const emptyBase = 0x8c00;
   const bindingBase = 0x7000;
@@ -478,7 +481,7 @@ Deno.test("a descriptor extent that wraps the address space is rejected", async 
   fixture.closureStart(closure);
   writeWord(memory, assembled.address("CL_OBJ"), closure);
   writeWord(memory, assembled.address("HEAP_LIM"), 0xc000);
-  writeWord(memory, assembled.address("RT_LIMIT"), 0xc200);
+  writeWord(memory, assembled.address("RT_LIMIT"), 0xe400);
   writeWord(memory, closure, descriptor);
   writeWord(memory, descriptor, 0x4000);
   memory[descriptor + 3] = 0;

@@ -3,26 +3,27 @@
 ; Included in runtime order by ../core.asm.
 
 RT_HEAP    EQU 03000H              ; Base used by the full-pool allocation maps.
-RT_LOEND EQU 0A500H              ; Low pages end before the external mark maps.
-RT_HIGH  EQU 0C000H               ; No high band: the maps reach RT_HIEND.
-RT_HPAGE  EQU 0C0H                ; High byte of RT_HIGH for page mapping.
-RT_HIEND  EQU 0C000H              ; Managed objects stop before transient storage.
+RT_LOEND EQU 0B400H              ; The heap and the stack share memory up to here.
+RT_STK   EQU 0B400H               ; The stack starts here and grows down to the heap.
+RT_HIGH  EQU 0B400H               ; No high band: the maps start at RT_HIEND.
+RT_HPAGE  EQU 0B4H                ; High byte of RT_HIGH for page mapping.
+RT_HIEND  EQU 0B400H              ; Managed objects stop below the stack's start.
 RT_EPAGE   EQU 0E0H               ; Pair tag-seven values above this byte are escapes.
 RT_ESC   EQU 0E000H               ; Escape generations occupy the non-heap range.
-RT_OPLO EQU 0C000H             ; Operator values use the next transient band.
-RT_OPHI  EQU 0C400H               ; A 1 KiB operator band; page tables follow it.
-RT_QTLO  EQU 0C800H               ; Quoted-data values use the following band.
-RT_QTHI   EQU 0CC00H              ; Keep 255 records for calls and rest lists.
-RT_DRVLO   EQU 0CC00H             ; Reader values occupy 64 four-byte slots.
-RT_DRVHI   EQU 0CD00H             ; Reader value stack end, exclusive.
-RT_DRFLO   EQU 0CD00H             ; Reader frames occupy 32 eight-byte records.
-RT_DRFHI   EQU 0CE00H             ; Reader frame stack end, exclusive.
-RT_GCLO  EQU 0D000H              ; Collector mark worklist starts here.
-RT_GCHI  EQU 0D400H              ; Collector mark worklist ends here.
-RT_SPARE  EQU 00100H              ; Reserve one page for calls below a frame.
-RT_GUARD  EQU RT_GCHI+RT_SPARE    ; Keep native stack work above the mark queue.
+RT_OPLO EQU 0CF00H             ; Operator values use the next transient band.
+RT_OPHI  EQU 0D300H               ; A 1 KiB operator band; page tables follow it.
+RT_QTLO  EQU 0D700H               ; Quoted-data values use the following band.
+RT_QTHI   EQU 0DB00H              ; Keep 255 records for calls and rest lists.
+RT_DRVLO   EQU 0DB00H             ; Reader values occupy 64 four-byte slots.
+RT_DRVHI   EQU 0DC00H             ; Reader value stack end, exclusive.
+RT_DRFLO   EQU 0DC00H             ; Reader frames occupy 32 eight-byte records.
+RT_DRFHI   EQU 0DD00H             ; Reader frame stack end, exclusive.
+RT_GCLO  EQU 0DF00H              ; Collector mark worklist starts here.
+RT_GCHI  EQU 0E300H              ; Collector mark worklist ends here.
+RT_SPARE  EQU 00100H              ; Keep one page between the stack and the heap.
+RT_SOFT  EQU RT_STK-01000H         ; The heap passes this only after a collection.
 RT_EXTRA EQU 0                   ; The external map band needs no extra pool pages.
-RT_TOP   EQU 0E400H               ; Stack ceiling: the TPA must extend at least this far.
+RT_TOP   EQU 0E400H               ; The TPA must extend at least this far.
 ; A descriptor's owned and capture masks are each W bytes, where the width W
 ; at offset DESC_LEN covers that procedure's highest owned or captured slot.
 ; The owned mask follows the width; the capture mask follows the owned mask.
@@ -40,9 +41,9 @@ RT_BOOT:                          ; START in entry.asm set the boot stack.
         SBC HL,DE
         JP C,RT_NOMEM             ; A smaller TPA would let the stack overwrite BDOS.
 .TPA_OK:
-        LD SP,RT_TOP              ; Use the full four-kilobyte guarded stack band.
+        LD SP,RT_STK              ; The stack grows down from the fixed bands.
         CALL RST_SET              ; Install the RST vectors generated code uses.
-        LD HL,RT_TOP              ; The native stack begins at the fixed ceiling.
+        LD HL,RT_STK              ; The native stack begins below the fixed bands.
         LD (RT_LOWSP),HL          ; Record its low-water mark for qualification.
         LD HL,0                    ; Reset the runtime counters for this program.
         LD (CNT_BIND),HL
@@ -53,7 +54,12 @@ RT_BOOT:                          ; START in entry.asm set the boot stack.
         LD HL,(RT_LIMIT)          ; Recover the compiler's final loaded image end.
         CALL PAGE_INI              ; Derive and initialise the page-domain metadata.
         JP C,ERROR                 ; Refuse to enter generated code without pages.
+        LD HL,(PAGE_MIN)           ; The stack may come down to a page above the
+        INC H                      ; highest heap page; PAGE_NEW raises this.
+        LD (STK_FLR),HL
         CALL DR_INIT               ; Reset the pinned symbol arena for this program.
+        LD A,1                     ; The first page may pass the soft line: a
+        LD (PAGE_HRD),A            ; large program has no page below it.
         CALL PAIR_INI              ; Reserve and clear the first eight-byte pair slab.
         JP C,ERROR                 ; Refuse to enter code without pair capacity.
         LD HL,RT_OPLO              ; The operator side stack starts above pair cells.
@@ -81,7 +87,8 @@ RT_BOOT:                          ; START in entry.asm set the boot stack.
         LD (OUT_FILE),A           ; No CP/M output file is open at program entry.
         LD (IN_MODE),A              ; Inactive file modes default to text.
         LD (OUT_MODE),A
-        LD (ROOT_CNT),A            ; No generated operands are pending at entry.
+        LD (ROOT_TOP),A            ; No generated operands are pending at entry.
+        LD (ROOT_TOP+1),A
         LD HL,CL_MAP               ; Clear closure-start metadata for this run.
         LD DE,CL_MAP+1
         LD BC,08FFH

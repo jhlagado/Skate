@@ -16,7 +16,7 @@ Deno.test("an unmapped binding cell stops before any cell bytes are written", as
   writeWord(memory, bad, 0);
 
   cpu.pc = assembled.address("HEAP_NEW");
-  cpu.sp = 0xdff0;
+  cpu.sp = 0xb3f0;
   writeWord(memory, cpu.sp, 0xef00);
   const error = assembled.address("ERROR");
   let steps = 0;

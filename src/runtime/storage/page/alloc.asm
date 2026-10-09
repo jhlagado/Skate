@@ -74,6 +74,35 @@ PAGE_NEW:
         LD (PAGE_IDX),HL           ; Keep the search bounded by the domain count.
         JR .SCAN                   ; Recheck the next candidate from its first page.
 .FOUND:
+        LD HL,(PAGE_IDX)           ; The run must end a page below the stack,
+        LD DE,(PAGE_RUN)           ; which shares this memory.  Every later
+        ADD HL,DE                  ; start is higher, so none would fit either.
+        LD A,(PAGE_ORG+1)
+        ADD A,L
+        LD B,A                     ; B: the page after the run.
+        LD A,(PAGE_HRD)           ; Until a collection has run, the heap stays
+        OR A                       ; below RT_SOFT, leaving the stack 4 KB.
+        JR NZ,.HARD
+        LD A,RT_SOFT/256
+        CP B
+        JP C,PAGE_OUT
+.HARD:
+        LD D,B                     ; DE: the end of the run plus one page.
+        INC D
+        LD E,0
+        LD HL,0
+        ADD HL,SP
+        OR A
+        SBC HL,DE
+        JP C,PAGE_OUT
+        LD HL,(STK_FLR)          ; Raise the stack's floor above the run.
+        OR A
+        SBC HL,DE
+        JR NC,.FLOOR
+        LD (STK_FLR),DE
+.FLOOR:
+        XOR A                      ; Only the page after a collection may pass
+        LD (PAGE_HRD),A           ; the soft line.
         LD HL,(PAGE_IDX)           ; Save the successful start before marking it.
         LD (PAGE_POS),HL           ; The returned address is based on this index.
         LD BC,(PAGE_RUN)           ; Mark exactly the requested number of entries.

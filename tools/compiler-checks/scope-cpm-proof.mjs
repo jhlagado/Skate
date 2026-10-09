@@ -25,13 +25,14 @@ const provider = await loadAssembly(
 const ceilingArgument = Deno.args.find((argument) =>
   argument.startsWith("--ceiling=")
 );
+// The heap and the stack share memory up to RT_HIEND; a lower ceiling is
+// not supported.
 const managedCeiling = ceilingArgument === undefined
-  ? 0xc000
+  ? provider.address("RT_HIEND")
   : Number.parseInt(ceilingArgument.slice("--ceiling=".length), 16);
 assert.ok(
-  Number.isInteger(managedCeiling) && managedCeiling >= 0xab00 &&
-    managedCeiling <= 0xc000 && (managedCeiling & 0xff) === 0,
-  "managed ceiling must be a page-aligned AB00H..C000H value",
+  managedCeiling === provider.address("RT_HIEND"),
+  "the managed ceiling must be RT_HIEND",
 );
 assert.equal(compiler.image.base, 0);
 assert.ok(compiler.address("CMD_MAIN") === 0x0100);

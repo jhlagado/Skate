@@ -23,7 +23,7 @@ export const runtimeErrorCases = [
   ["UNBSET.SK8", "(set! missing 42)", "UNBOUND\r\n"],
   [
     "DEEPREC.SK8",
-    "(define f (lambda (n) (if (zero? n) 0 (+ 1 (f (- n 1)))))) (f 400)",
+    "(define f (lambda (n) (if (zero? n) 0 (+ 1 (f (- n 1)))))) (f 3000)",
     "RUNTIME ERROR\r\n",
   ],
   [

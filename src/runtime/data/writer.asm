@@ -157,12 +157,12 @@ WR_PAIR:
         JP OUT_CHAR
 
 ; Raise a runtime error before nested printing can descend into the guarded
-; bands below RT_GUARD.  HL is preserved; A, DE and the flags are clobbered.
+; heap below STK_FLR.  HL is preserved; A, DE and the flags are clobbered.
 WR_GUARD:
         PUSH HL                    ; Keep the value payload while measuring SP.
         LD HL,0                    ; Copy the native stack pointer into HL.
         ADD HL,SP
-        LD DE,RT_GUARD             ; Compare it with the guarded band's top.
+        LD DE,(STK_FLR)          ; Compare it with the heap's top.
         OR A                       ; Clear carry before the subtraction.
         SBC HL,DE                  ; Carry means SP is already below the guard.
         POP HL                     ; Restore the payload; POP leaves flags unchanged.

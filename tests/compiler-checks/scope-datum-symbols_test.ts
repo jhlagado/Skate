@@ -33,7 +33,7 @@ function readDatum(
   terminalError = false,
 ) {
   cpu.pc = assembled.address("DR_READ");
-  cpu.sp = 0xdff2;
+  cpu.sp = 0xb3f2;
   cpu.ix = 0xef00;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
@@ -41,8 +41,8 @@ function readDatum(
     assert.ok(++steps < 50_000_000, "DR_READ did not return");
     assembled.runtime.step();
   }
-  if (terminalError) assert.ok(cpu.sp <= 0xdff2);
-  else assert.equal(cpu.sp, 0xdff2);
+  if (terminalError) assert.ok(cpu.sp <= 0xb3f2);
+  else assert.equal(cpu.sp, 0xb3f2);
   return { carry: cpu.flags.C, tag: cpu.a, payload: (cpu.h << 8) | cpu.l };
 }
 

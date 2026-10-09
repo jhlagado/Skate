@@ -154,11 +154,11 @@ PUB_END:
         OR A                       ; A is still ST_PCHI: past 0FFFFH cannot run.
         JP NZ,ERR_CAP
         LD A,L                     ; The runtime rounds the image end up to a
-        ADD A,0FFH                 ; page and needs a metadata page and one
-        LD A,H                     ; free page below RT_LOEND, so refuse the
-        ADC A,1                    ; image here rather than let it stop at
-        CP RT_LOEND/256-1          ; start-up.  The 1 is the 0100H origin.
-        JP NC,ERR_CAP
+        ADD A,0FFH                 ; page.  Below RT_LOEND it needs a metadata
+        LD A,H                     ; page, a heap page, a page between heap and
+        ADC A,1                    ; stack, and 1 KB of stack: refuse the image
+        CP RT_LOEND/256-6          ; here rather than let it stop at start-up.
+        JP NC,ERR_CAP              ; The 1 is the 0100H origin.
         CALL PUB_LINK              ; Point the runtime image at the generated program.
         CALL PUB_FIX               ; Replace every slot placeholder with an address.
         RET                        ; Carry reports any capacity or layout failure.

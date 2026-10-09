@@ -33,7 +33,7 @@ function readDatum(
   terminalError = false,
 ) {
   cpu.pc = assembled.address("DR_READ");
-  cpu.sp = 0xdff2;
+  cpu.sp = 0xb3f2;
   cpu.ix = 0xef00;
   writeWord(memory, cpu.sp, 0xef00);
   let steps = 0;
@@ -42,9 +42,9 @@ function readDatum(
     assembled.runtime.step();
   }
   if (terminalError) {
-    assert.ok(cpu.sp <= 0xdff2);
+    assert.ok(cpu.sp <= 0xb3f2);
   } else {
-    assert.equal(cpu.sp, 0xdff2);
+    assert.equal(cpu.sp, 0xb3f2);
   }
   return {
     carry: cpu.flags.C,
@@ -86,9 +86,11 @@ function stringBytes(memory: Uint8Array, payload: number) {
 }
 
 function exhaustManagedPages(
-  call: Awaited<ReturnType<typeof managedRuntime>>["call"],
+  { assembled, memory, call }: Awaited<ReturnType<typeof managedRuntime>>,
 ) {
   for (let index = 0; index < 256; index++) {
+    // Take every page, past the soft line kept for the stack.
+    memory[assembled.address("PAGE_HRD")] = 1;
     const result = call("PAGE_NEW", 1);
     if (result.carry) return index;
   }
@@ -158,7 +160,8 @@ Deno.test("datum reader accepts 255 decoded bytes and rejects the 256th", async 
 });
 
 Deno.test("managed strings survive collection while a 255-byte value is rooted", async () => {
-  const { assembled, memory, cpu, call } = await managedRuntime();
+  const fixture = await managedRuntime();
+  const { assembled, memory, cpu, call } = fixture;
   const rooted = 0xd700;
 
   memory[assembled.address("STR_LEN")] = 255;
@@ -182,7 +185,7 @@ Deno.test("managed strings survive collection while a 255-byte value is rooted",
   memory[discarded.payload] = 128;
   memory[discarded.payload + 1] = 0x5a;
 
-  const exhausted = exhaustManagedPages(call);
+  const exhausted = exhaustManagedPages(fixture);
   assert.ok(exhausted > 0, "page pool should contain resident runtime pages");
   installBdosReader(memory, [34, ...new Array(128).fill(0x42), 34, 0x1a]);
   memory[assembled.address("ARG_CNT")] = 0;
@@ -204,8 +207,9 @@ Deno.test("managed strings survive collection while a 255-byte value is rooted",
 });
 
 Deno.test("datum string allocation failure runs the reader cleanup hook", async () => {
-  const { assembled, memory, cpu, call } = await managedRuntime();
-  exhaustManagedPages(call);
+  const fixture = await managedRuntime();
+  const { assembled, memory, cpu } = fixture;
+  exhaustManagedPages(fixture);
   installBdosReader(memory, [34, 65, 34, 0x1a]);
   memory[assembled.address("ARG_CNT")] = 0;
   memory[assembled.address("IN_CR")] = 0;

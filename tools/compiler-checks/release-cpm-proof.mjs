@@ -292,7 +292,8 @@ const sourceBytes = await Promise.all(
 const sourceTotal = sourceBytes.reduce((sum, bytes) => sum + bytes.length, 0);
 assert.ok(sourceTotal >= 8192, `release source is only ${sourceTotal} bytes`);
 
-const heapPointerAddress = provider.address("HEAP_LIM");
+const heapPointerAddress = provider.address("STK_FLR");
+const pageMinAddress = provider.address("PAGE_MIN");
 const lowStackAddress = provider.address("RT_LOWSP");
 const records = {};
 let stableImage = disk;
@@ -314,8 +315,11 @@ try {
   const run = first.command("RELEASE", "95\r\n", "run the release program");
   const lowSp = readWord(machine, lowStackAddress);
   const heapEnd = readWord(machine, heapPointerAddress);
-  assert.ok(lowSp >= 0xd400, "generated program crossed the stack guard");
-  assert.ok(heapEnd < lowSp, "heap and native stack collided");
+  assert.ok(
+    lowSp >= readWord(machine, pageMinAddress),
+    "generated program's stack reached the heap",
+  );
+  assert.ok(heapEnd <= 0xb400, "the heap reached the stack");
   releaseImage = Uint8Array.from(stableImage);
   records.initial = {
     sourceBytes: sourceTotal,
