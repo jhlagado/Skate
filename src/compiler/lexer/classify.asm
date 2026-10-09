@@ -20,8 +20,11 @@ LX_MATCH: LD DE,LX_BUF
         RET              ; Return Z for exact equality, NZ for a longer constant.
 .LONGER: INC A           ; A=1: return NZ for a token longer than the constant.
         RET
-LX_SPACE: DB "space",0
-LX_LF: DB "newline",0
+; Character names and their bytes, ended by an empty name.
+LX_NAMES: DB "alarm",0,7,"backspace",0,8,"delete",0,127,"escape",0,27
+        DB "newline",0,10,"null",0,0,"return",0,13,"space",0,32,"tab",0,9,0
+LX_TRUE: DB "true",0
+LX_FALSE: DB "false",0
 LX_INF:  DB "+inf.0",0
 LX_NINF: DB "-inf.0",0
 LX_NAN:  DB "+nan.0",0

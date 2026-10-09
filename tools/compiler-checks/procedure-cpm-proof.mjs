@@ -942,6 +942,13 @@ const regressionCases = [
 (newline)`,
     '#(1 2 3)(a "b" 3)(#\\a #\\b #\\c)"xy"\r\n"zzz"2"aba"#(7 7 7)\r\n((1 2 3) #f #t)\r\n(42 -17 255 5 #f #f #f 8388607 -8388608)\r\n"""abcdef"(#\\h #\\i)',
   ],
+  // Character names, #true and #false, and strings that span lines; a
+  // carriage return in a string is dropped.
+  [
+    "LEXNAMES.SK8",
+    '(write (map char->integer (list #\\tab #\\null #\\delete #\\escape #\\alarm #\\backspace #\\return))) (write (list #true #false)) (write (string-length "a\nb")) (write (string-length "a\r\nb"))',
+    "(9 0 127 27 7 8 13)(#t #f)33",
+  ],
   // A nested procedure body must not overwrite the enclosing body's pending
   // tail-call records: a non-final named let or a lambda after a tail call
   // once returned from the enclosing procedure.
@@ -1003,6 +1010,8 @@ const regressionCases = [
 ];
 const regressionErrorCases = [
   ["VECDOT.SK8", "(write '#(1 . 2))", "COMPILE ERROR\r\n"],
+  ["CHARNAME.SK8", "(write #\\tabs)", "COMPILE ERROR\r\n"],
+  ["HASHTRU.SK8", "(write #tru)", "COMPILE ERROR\r\n"],
   ["IF65.SK8", "(if #t ".repeat(65) + "1" + " 2)".repeat(65), "CAP\r\n"],
   ["CTLTOKEN.SK8", "(quote ab\x01c)", "COMPILE ERROR\r\n"],
   ["NULTOKEN.SK8", "(write +inf.0\x00-inf.0)", "COMPILE ERROR\r\n"],

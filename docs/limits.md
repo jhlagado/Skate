@@ -75,9 +75,9 @@ which they should be dealt with.
 | `vector`, `string`, `list` | At most 32 arguments | The packet | `CAP` at compile time |
 | Vector length | 64 elements | The largest closure-slab class | `RUNTIME ERROR`. Rework |
 | `call/ec` | One-shot escapes only, 8 active at once | `EC_TABLE`, 8 × 21 bytes | `RUNTIME ERROR` |
-| Character names | `#\space`, `#\newline`, `#\xHH`, or one printable byte | Lexer | `COMPILE ERROR`. `#\tab`, `#\return`, `#\null` and the other R7RS names are missing |
-| `#` syntax | `#(`, `#t`, `#f`, `#\` | Lexer | `COMPILE ERROR`. No `#true`/`#false`, `#x` and other radix or exactness prefixes, `#|…|#` or `#;` |
-| String escapes | `\"` `\\` `\n` `\r` `\t` `\xHH;` | Lexer | A raw tab or line break inside a string is a `COMPILE ERROR`, so a string cannot span lines |
+| Character names | The R7RS names (`#\alarm`, `#\backspace`, `#\delete`, `#\escape`, `#\newline`, `#\null`, `#\return`, `#\space`, `#\tab`), `#\xHH`, or one printable byte | Lexer (`LX_NAMES`) | `COMPILE ERROR` for another name. `write` prints control characters as `#\xHH`, and `read` knows only `#\space` and `#\newline` |
+| `#` syntax | `#(`, `#t`, `#true`, `#f`, `#false`, `#\` | Lexer | `COMPILE ERROR`. No `#x` and other radix or exactness prefixes, `#|…|#` or `#;` |
+| String escapes | `\"` `\\` `\n` `\r` `\t` `\xHH;` | Lexer | A string may span lines: a raw line feed or tab is kept and a carriage return dropped. Other raw control bytes are a `COMPILE ERROR` |
 | Number syntax | Decimal integers and decimals with exponents, `+inf.0`, `-inf.0`, `+nan.0` | Lexer | No rationals, radix prefixes or exactness prefixes |
 | Quasiquote | Not supported | Design | `` ` `` and `,` are a `COMPILE ERROR` |
 | `include` | Only leading `(include "…")` forms | The include pre-pass reads only the head of a file | A later `include` is a `COMPILE ERROR` (pinned by `LATEINC`) |
@@ -280,4 +280,5 @@ In order of value to a programmer:
    `vector-fill!`, `list-copy`, `string->number` (integers) and
    `string-append` of any number of strings. Still to do: long vectors,
    more file ports and escapes, `read` of long lists and floats, decimal
-   `string->number`, and the missing character names and `#` syntax.
+   `string->number`, and `#x` and the other radix prefixes.  Character
+   names, `#true` and `#false`, and strings that span lines are done.

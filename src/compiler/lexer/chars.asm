@@ -9,10 +9,12 @@ LX_HASH:  CALL LX_TAKE       ; Consume the next hash-selector or character byte.
         JP Z,LX_PUNCT
         CP 116           ; Lowercase t selects the true singleton.
         LD HL,0FE01H     ; Prepare the true scalar payload without changing Z.
-        JP Z,.BOOL         ; Require a delimiter before returning this boolean.
+        LD DE,LX_TRUE
+        JP Z,.WORD       ; #t or #true.
         CP 102           ; Lowercase f selects the false singleton.
         LD HL,0FE00H     ; Prepare false while preserving the comparison result.
-        JP Z,.BOOL         ; Require a delimiter before returning this boolean.
+        LD DE,LX_FALSE
+        JP Z,.WORD       ; #f or #false.
         CP 92            ; Otherwise only backslash character syntax is supported.
         JP NZ,LX_BAD     ; Reject vectors, prefixes and other unsupported hash forms.
         CALL LX_TAKE       ; Consume the next hash-selector or character byte.
@@ -31,7 +33,7 @@ LX_HASH:  CALL LX_TAKE       ; Consume the next hash-selector or character byte.
         CALL LX_DELIM      ; Check whether the character name has ended.
         JR Z,.CLASSIFY   ; Validate the complete name now.
         LD A,(LX_LEN)      ; Read the buffered byte count.
-        CP 7             ; The longest supported name is newline, seven bytes.
+        CP 9             ; The longest supported name is backspace, nine bytes.
         JP Z,LX_BAD      ; No valid character name has an eighth byte.
         CALL LX_TAKE       ; Consume one additional name byte.
         CALL LX_CTRL     ; Control bytes cannot appear in a character name.
@@ -45,8 +47,8 @@ LX_HASH:  CALL LX_TAKE       ; Consume the next hash-selector or character byte.
         CP 3             ; Only xHH has a valid three-byte spelling.
         JR NZ,.NAMED     ; Other lengths must exactly match a supported name.
         LD A,(LX_BUF)    ; Check the selector before interpreting the remaining bytes.
-        CP 120           ; Hex characters use lowercase x.
-        JP NZ,LX_BAD     ; Three-byte names other than xHH are unsupported.
+        CP 120           ; Hex characters use lowercase x; tab is a name.
+        JP NZ,.NAMED
         LD A,(LX_BUF+1)  ; Fetch the high hex digit from the buffered name.
         CALL LX_HEX        ; Reduce an ASCII hex digit to a checked nibble.
         RLCA             ; Move the high nibble toward its final four high bits.
@@ -60,17 +62,27 @@ LX_HASH:  CALL LX_TAKE       ; Consume the next hash-selector or character byte.
         LD A,(LX_HI)      ; Read the shifted high nibble.
         OR B             ; Join both nibbles into the character byte.
         JR .CHAR         ; Wrap the byte in the scalar character encoding.
-; Try space and newline without accepting prefixes or trailing bytes.
+; Find the name in LX_NAMES without accepting prefixes or trailing bytes.
 .NAMED:
-        LD HL,LX_SPACE   ; Try the exact zero-terminated space spelling.
+        LD HL,LX_NAMES
+.NAME:
+        LD A,(HL)
+        OR A
+        JP Z,LX_BAD      ; Reject unknown names rather than truncating them.
+        PUSH HL
         CALL LX_MATCH      ; Z means all bytes and the name length match.
-        LD A,32          ; Prepare the space byte without disturbing Z.
-        JR Z,.CHAR       ; Use byte 32 for the matched name.
-        LD HL,LX_LF      ; The only other supported name is newline.
-        CALL LX_MATCH      ; Z means all bytes and the name length match.
-        JP NZ,LX_BAD     ; Reject unknown names rather than truncating them.
-        LD A,10          ; Newline denotes byte 10.
-        JR .CHAR         ; Construct its scalar character payload.
+        POP HL
+        PUSH AF
+.SKIP:
+        LD A,(HL)        ; Pass the name to its byte.
+        INC HL
+        OR A
+        JR NZ,.SKIP
+        POP AF
+        LD A,(HL)
+        INC HL
+        JR Z,.CHAR
+        JR .NAME
 ; The first raw printable byte is itself the character value.
 .ONE:
         LD A,(LX_BUF)
@@ -82,10 +94,36 @@ LX_HASH:  CALL LX_TAKE       ; Consume the next hash-selector or character byte.
         CALL LX_PEEK       ; Validate the byte following the complete scalar token.
         JR C,.SCALAR     ; EOF is a valid scalar delimiter.
         CALL LX_DELIM      ; Booleans and characters require an explicit token boundary.
-        JP NZ,LX_BAD     ; Reject glued-on suffixes such as #true or #\)x.
+        JP NZ,LX_BAD     ; Reject glued-on suffixes such as #\)x.
 ; Return the preserved boolean or character payload as scalar kind 7.
 .SCALAR:
         POP HL           ; Restore the completed scalar payload.
         LD A,7           ; Select public scalar-token kind 7.
         OR A             ; Clear carry for successful scalar delivery.
         RET              ; No token text is required for the returned scalar.
+; #t and #f may be spelt out.  HL is the value and DE the full spelling.
+.WORD:
+        PUSH HL
+        PUSH DE
+        CALL LX_ADD
+.LETTER:
+        CALL LX_PEEK
+        JR C,.SPELT
+        CALL LX_DELIM
+        JR Z,.SPELT
+        LD A,(LX_LEN)
+        CP 5
+        JP Z,LX_BAD
+        CALL LX_TAKE
+        CALL LX_ADD
+        JR .LETTER
+.SPELT:
+        POP HL
+        LD A,(LX_LEN)
+        DEC A
+        JR Z,.SHORT      ; #t or #f alone.
+        CALL LX_MATCH
+        JP NZ,LX_BAD
+.SHORT:
+        POP HL
+        JR .BOOL

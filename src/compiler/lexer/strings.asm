@@ -8,8 +8,16 @@ LX_STR:
         JR Z,LX_QUOTE    ; Do not append the closing delimiter.
         CP 92            ; A backslash introduces a decoded escape.
         JR Z,LX_ESC      ; The escape path returns through the common byte append.
-        CP 32            ; Raw controls must be spelled through escapes.
-        JP C,LX_BAD      ; Raw control bytes cannot appear in this literal position.
+        CP 32            ; A string may span lines: a line feed and a tab
+        JR NC,.RAW       ; are kept, a carriage return is dropped, and other
+        CP 13            ; controls must be spelled through escapes.
+        JR Z,LX_STR
+        CP 10
+        JR Z,LX_STORE
+        CP 9
+        JR Z,LX_STORE
+        JP LX_BAD
+.RAW:
         CP 127           ; DEL must also use a byte escape.
         JP Z,LX_BAD      ; Reject an unescaped DEL byte.
 ; Check decoded capacity before storing the next string byte.
@@ -58,7 +66,7 @@ LX_ESC:
 LX_QUOTE:
         LD A,8           ; Select the public string-token kind.
         LD (LX_KIND),A    ; Retain the text token kind.
-        JR LX_TEXT         ; Expose decoded bytes and decoded length.
+        JP LX_TEXT         ; Expose decoded bytes and decoded length.
 ; Combine two checked source hex digits into one byte.
 LX_HEX2:
         CALL LX_TAKE       ; Read the next required hex digit.
