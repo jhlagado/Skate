@@ -185,8 +185,8 @@ SLAB_SZ:
 SLAB_NEW:
         LD A,(CL_CLASS)
         CP 40H
-        JR NZ,.SMALL
-        CALL SLAB_RUN              ; A 260-byte closure owns a two-page run.
+        JR C,.SMALL
+        CALL SLAB_RUN              ; Run classes own two to four pages.
         RET C
         LD (CL_BASE),HL
         CALL SLAB_INC

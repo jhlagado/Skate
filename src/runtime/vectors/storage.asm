@@ -40,6 +40,17 @@ VEC_SIZE:
         RR L
         DEC L                      ; Four bytes per class index, zero based.
         LD A,L
+        CP 40H                     ; Above one page a vector owns a run of two
+        JR C,.CLASS                ; to four pages: classes 40H to 42H.
+        LD HL,(CL_SIZE)
+        LD DE,0FFH
+        ADD HL,DE
+        LD A,H                     ; Whole pages.
+        LD H,A
+        LD L,0
+        LD (CL_SIZE),HL
+        ADD A,3EH
+.CLASS:
         LD (CL_CLASS),A            ; Publish the selected class for SLAB_NEW.
         RET
 
@@ -74,17 +85,25 @@ VEC_CHK:
         LD A,(HL)                   ; The owner byte is class index plus one.
         CP 1
         JP C,.BAD
-        CP 42H                      ; Class 64 is the two-page upper limit.
+        CP 44H                      ; Class 42H, a four-page run, is the largest.
         JP NC,.BAD
         DEC A
         LD (CL_CLASS),A
         CALL SLAB_GET                ; Recover the physical page base.
         LD A,(CL_CLASS)              ; Rebuild the exact class extent from its owner.
+        CP 40H
+        JR C,.SMALL
+        SUB 3EH                      ; A run class's extent is its pages.
+        LD H,A
+        LD L,0
+        JR .SIZE
+.SMALL:
         INC A
         LD L,A
         LD H,0
         ADD HL,HL
         ADD HL,HL
+.SIZE:
         LD (CL_SIZE),HL
         LD HL,(CL_OBJ)
         LD DE,(CL_PBASE)
@@ -93,7 +112,7 @@ VEC_CHK:
         JP C,.BAD
         LD A,(CL_CLASS)
         CP 40H
-        JR Z,.TWO_PAGE              ; The 260-byte class may start only at zero.
+        JR NC,.TWO_PAGE             ; A run class may start only at zero.
         LD A,H
         OR A
         JP NZ,.BAD                  ; A one-page class cannot cross its page.
@@ -106,8 +125,6 @@ VEC_CHK:
         LD HL,(CL_OBJ)              ; Read the length only after ownership is proven.
         LD A,(HL)
         LD (VEC_LEN),A
-        CP 65
-        JP NC,.BAD                  ; The stored count must fit the supported class.
         LD L,A
         LD H,0
         ADD HL,HL                  ; Calculate count times four.

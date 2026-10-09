@@ -53,7 +53,6 @@ which they should be dealt with.
 | Non-tail recursion depth | Bounded by the memory the heap is not using: about 15 bytes a level for a one-argument procedure, so 1,500 levels in a small program (measured); each 8 KB of heap in use costs about 550 levels | Keep | The stack and the heap share one region (§6.2) |
 | Size of a `do` | 1,504 reader events for the form and its rewrite: a body of about 140 short forms | Keep | The replay buffer now lives in the staging window (§6.1) |
 | Elements per level of a quoted list or vector | 63 | Raise | Tied to the 255-record runtime quote stack; raise to 255 with a nesting check |
-| Vector length | 64 | Rework | `make-vector` uses one closure-slab class; longer vectors need page runs |
 | Active `call/ec` escapes | 8 | Raise | 21 bytes a slot; 16 slots cost 168 bytes |
 | Open file ports | 1 input and 1 output | Raise | One FCB and one 128-byte record buffer a port |
 | String length | 255 | Keep | One length byte; a Language limit, like Basie's 253 |
@@ -73,7 +72,7 @@ which they should be dealt with.
 | Arguments in one call | 32 (`ARG_MAX`) | The runtime's 128-byte argument packet | `CAP` (pinned by `ARGS33`); the runtime also refuses a larger packet |
 | `apply` | The leading arguments and the list's elements together at most 32 | The same packet | `RUNTIME ERROR` (pinned by `APPCOUNT`) |
 | `vector`, `string`, `list` | At most 32 arguments | The packet | `CAP` at compile time |
-| Vector length | 64 elements | The largest closure-slab class | `RUNTIME ERROR`. Rework |
+| Vector length | 255 elements | One count byte; a vector above 63 elements owns a run of two to four pages | `RUNTIME ERROR` (pinned by `VLONGERR`, `LONGVEC`). `read` still reads at most 64 |
 | `call/ec` | One-shot escapes only, 8 active at once | `EC_TABLE`, 8 × 21 bytes | `RUNTIME ERROR` |
 | Character names | The R7RS names (`#\alarm`, `#\backspace`, `#\delete`, `#\escape`, `#\newline`, `#\null`, `#\return`, `#\space`, `#\tab`), `#\xHH`, or one printable byte | Lexer (`LX_NAMES`); runtime `CH_NAMES` for `write` and `read` | `COMPILE ERROR` for another name; `write` prints these names and `read` reads them |
 | `#` syntax | `#(`, `#t`, `#true`, `#f`, `#false`, `#\` | Lexer | `COMPILE ERROR`. No `#x` and other radix or exactness prefixes, `#|…|#` or `#;` |
@@ -247,7 +246,7 @@ decimal exponent saturating, and runtime symbols that are never freed.
 
 Limits pinned by a test: 256 globals (`GLOB256`), 65 nested `if`s
 (`IF65`), a 64-element quoted list (`REVQCAP`), 3,264 live pairs, recursion
-(`DEEPOK`, `DEEPREC`), `apply` of 33 values (`APPCOUNT`), `(make-vector 65)`
+(`DEEPOK`, `DEEPREC`), `apply` of 33 values (`APPCOUNT`), `(make-vector 256)`
 (`VLONGERR`), stale escapes (`ECSTALE`, `ECREUSE`), 11,000 top-level forms
 (`TOOLONG`), deep `write` (`DEEPNEST`), 255- and 256-byte strings, and an
 out-of-range integer literal.
@@ -286,7 +285,8 @@ In order of value to a programmer:
 6. **Missing standard procedures.** Done: `list->vector`, `vector->list`,
    `string->list`, `list->string`, `make-string`, `string-set!`,
    `vector-fill!`, `list-copy`, `string->number` (integers) and
-   `string-append` of any number of strings. Still to do: long vectors,
+   `string-append` of any number of strings, vectors of 255 elements, and
+   the R7RS character names in `write` and `read`. Still to do:
    more file ports and escapes, `read` of long lists and floats, decimal
    `string->number`, and `#x` and the other radix prefixes.  Character
    names, `#true` and `#false`, and strings that span lines are done.

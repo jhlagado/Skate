@@ -60,9 +60,7 @@ VEC_PRIM:
         LD A,C                     ; Only a small nonnegative count is supported.
         OR H
         JP NZ,ERROR
-        LD A,L                     ; Preserve the checked count for allocation.
-        CP 65                      ; Class 64 is the largest supported vector.
-        JP NC,ERROR
+        LD A,L                     ; Up to 255 elements: a four-page run.
         LD (VEC_REQ),A             ; Preserve the request across a collection retry.
         LD A,(ARG_CNT)             ; Select the supplied fill only for arity two.
         CP 2

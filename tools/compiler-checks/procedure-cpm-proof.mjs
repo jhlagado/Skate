@@ -967,6 +967,13 @@ const regressionCases = [
     "(define c (list 1 2 3)) (set-cdr! (cddr c) c) (write (list? c)) (write (car (memq 2 c))) (write (list #\\tab #\\null #\\space #\\delete #\\a #\\x80))",
     "#f2(#\\tab #\\null #\\space #\\delete #\\a #\\x80)",
   ],
+  // Vectors of up to 255 elements own runs of two to four pages, and their
+  // elements survive collections.
+  [
+    "LONGVEC.SK8",
+    "(define v (make-vector 200 0)) (do ((i 0 (+ i 1))) ((= i 200)) (vector-set! v i (* i i))) (write (vector-ref v 199)) (write (vector-length v)) (define w (make-vector 255 'a)) (write (vector-ref w 254)) (write (vector-length (list->vector (vector->list v)))) (do ((i 0 (+ i 1))) ((= i 30)) (make-vector 100 i)) (write (vector-ref (make-vector 130 7) 129)) (define p (make-vector 150 '())) (do ((i 0 (+ i 1))) ((= i 150)) (vector-set! p i (list i))) (define (churn n) (if (> n 0) (begin (cons n n) (churn (- n 1))))) (churn 4000) (write (car (vector-ref p 149)))",
+    "39601200a2007149",
+  ],
   // A nested procedure body must not overwrite the enclosing body's pending
   // tail-call records: a non-final named let or a lambda after a tail call
   // once returned from the enclosing procedure.

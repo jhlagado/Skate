@@ -54,7 +54,7 @@ CL_FREE:  DS 130                 ; Heads for rounded four-byte closure classes.
 ; clears the four 128-byte tables as one block; PS_TABLE is read only up to
 ; PS_COUNT entries.
 CL_OWNER   EQU 0D300H            ; Class owner for each logical closure page.
-                                  ; Zero is free; 41H owns a two-page run; FFH continues it.
+                                  ; Zero is free; 41H..43H own a run of 2..4 pages; FFH continues it.
 CL_LIVE   EQU 0D380H             ; Live object count for each owned page.
 CL_PHYS   EQU 0D400H             ; Physical page high byte for each owner entry.
 BND_PHYS    EQU 0D480H           ; Physical page high bytes assigned to bindings.
@@ -66,6 +66,7 @@ CL_CAP:  DB 64,32,21,16,12,10,9,8,7,6,5,5,4,4,4,4
             DB 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
 CL_HEAD:  DW 0                  ; Active closure free-list head address.
 CL_BASE:  DW 0                  ; Base of the active closure allocation.
+CL_RUNP:   DB 0                  ; Pages in the run being allocated or freed.
 CL_PAGE:   DB 0                  ; Closure page index being selected or rebuilt.
 CL_LEFT:   DB 0                  ; Slots remaining while a slab chain is built.
 CL_TODO:   DB 0                  ; Remaining slots during a page sweep.

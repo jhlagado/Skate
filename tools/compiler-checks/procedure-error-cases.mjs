@@ -46,7 +46,7 @@ export const runtimeErrorCases = [
 export const vectorRuntimeErrorCases = [
   ["VREFERR.SK8", "(vector-ref (vector 1) 1)", "RUNTIME ERROR\r\n"],
   ["VSETERR.SK8", "(vector-set! (vector 1) 1 2)", "RUNTIME ERROR\r\n"],
-  ["VLONGERR.SK8", "(make-vector 65 0)", "RUNTIME ERROR\r\n"],
+  ["VLONGERR.SK8", "(make-vector 256 0)", "RUNTIME ERROR\r\n"],
   ["VTYPEERR.SK8", "(vector-length 1)", "RUNTIME ERROR\r\n"],
   [
     "VLENERR.SK8",

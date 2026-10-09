@@ -5,12 +5,10 @@
 ; A list argument stays in the packet, which is a root, while the result is
 ; allocated; a list being built is a constructor input of each PAIR_NEW.
 
-; (list->vector list): at most 64 elements, the largest vector.
+; (list->vector list): at most 255 elements, the largest vector.
 STD_L2V:
         CALL CV_LEN                ; B is the length of the packet's list.
         LD A,B
-        CP 65
-        JP NC,ERROR
         LD (VEC_REQ),A
         CALL VEC_NEW
         JP C,ERROR

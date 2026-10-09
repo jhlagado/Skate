@@ -95,26 +95,37 @@ SLAB_ERR:
         SCF
         RET
 
-; Allocate the two-page class used by a 128-slot closure (260 bytes).
+; Allocate a run of pages for a run class: 40H for a 260-byte closure or a
+; vector of up to 127 elements (two pages), 41H and 42H for longer vectors
+; (three and four pages).  The head entry owns the run; FFH continues it.
 SLAB_RUN:
+        LD A,(CL_CLASS)
+        SUB 3EH
+        LD (CL_RUNP),A             ; The run's page count.
         XOR A
         LD (CL_PAGE),A
 .LOOP:
         LD A,(CL_PAGE)
-        CP 7FH
+        LD B,A
+        LD A,(CL_RUNP)
+        ADD A,B
+        CP 81H                     ; Every entry of the run must exist.
         JR NC,SLAB_ERR
-        LD L,A
+        LD L,B
         LD H,0
         LD DE,CL_OWNER
         ADD HL,DE
-        LD A,(HL)
+        LD A,(CL_RUNP)
+        LD B,A
+.FREE:
+        LD A,(HL)                  ; Every entry of the run must be free.
         OR A
         JR NZ,.NEXT
         INC HL
-        LD A,(HL)
-        OR A
-        JR NZ,.NEXT
-        LD HL,2
+        DJNZ .FREE
+        LD A,(CL_RUNP)
+        LD L,A
+        LD H,0
         CALL PAGE_NEW
         RET C
         LD (CL_PBASE),HL
@@ -124,11 +135,16 @@ SLAB_RUN:
         LD H,0
         LD DE,CL_OWNER
         ADD HL,DE
-        LD A,41H                  ; Class 40H occupies this page and next.
+        LD A,(CL_CLASS)            ; The owner byte is the class plus one.
+        INC A
         LD (HL),A
+        LD A,(CL_RUNP)
+        DEC A
+        LD B,A
+.CONT:
         INC HL
-        LD A,0FFH
-        LD (HL),A
+        LD (HL),0FFH
+        DJNZ .CONT
         CALL SLAB_TOP
         LD HL,(CL_PBASE)
         XOR A
@@ -170,8 +186,10 @@ SLAB_TOP:
         LD HL,(CL_PBASE)
         LD A,(CL_CLASS)
         CP 40H
-        JR NZ,.ONE_PAGE
-        LD DE,200H                ; The largest class occupies two pages.
+        JR C,.ONE_PAGE
+        SUB 3EH                   ; A run class occupies its pages.
+        LD D,A
+        LD E,0
         JR .EXTEND
 .ONE_PAGE:
         LD DE,100H
@@ -262,7 +280,7 @@ SLAB_GC:
         CP 0FFH
         JR Z,.NEXT
         CP 41H
-        JR NZ,.ONE
+        JR C,.ONE
         CALL SLAB_GC2
         JR .NEXT
 .ONE:
@@ -437,7 +455,7 @@ SLAB_FIX:
         LD (CL_TODO),A
         JR .LOOP
 
-; Sweep a 260-byte two-page closure run.  There is one object and no free list.
+; Sweep a run of pages.  There is one object and no free list.
 SLAB_GC2:
         CALL SLAB_GET
         LD HL,(CL_PBASE)
@@ -466,28 +484,40 @@ SLAB_GC2:
         AND B                      ; Clear only this object's vector marker.
         LD (HL),A                  ; Retain neighboring allocation metadata.
         CALL GC_DROP
-        LD HL,(CL_PBASE)
-        LD DE,2
-        CALL PAGE_REL
-        RET C
         LD A,(CL_PAGE)
         LD L,A
         LD H,0
         LD DE,CL_OWNER
         ADD HL,DE
-        XOR A
-        LD (HL),A
-        INC HL
-        LD (HL),A                 ; Release both pages atomically.
-        LD A,(CL_PAGE)
-        LD L,A
+        LD A,(HL)                 ; The owner byte gives the run's pages.
+        SUB 3FH
+        LD (CL_RUNP),A
+        LD E,A
+        LD D,0
+        LD HL,(CL_PBASE)
+        CALL PAGE_REL
+        RET C
+        LD A,(CL_PAGE)            ; Free every entry of the run, and its
+        LD L,A                    ; physical base.
         LD H,0
+        PUSH HL
+        LD DE,CL_OWNER
+        ADD HL,DE
+        LD A,(CL_RUNP)
+        LD B,A
+.OWNERS:
+        LD (HL),0
+        INC HL
+        DJNZ .OWNERS
+        POP HL
         LD DE,CL_PHYS
         ADD HL,DE
-        XOR A
-        LD (HL),A                 ; The head entry keeps no physical base.
+        LD A,(CL_RUNP)
+        LD B,A
+.BASES:
+        LD (HL),0
         INC HL
-        LD (HL),A                 ; Nor does the FFH continuation entry.
+        DJNZ .BASES
         LD A,(CL_PAGE)
         LD L,A
         LD H,0

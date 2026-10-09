@@ -125,7 +125,7 @@ limit, its reason and what is planned for it.
 | Distinct symbols | 640 |
 | A `do` form, a `letrec` binding list, or leading internal definitions | 1,504 reader events (an atom or parenthesis each); a `do` needs room for its rewrite too |
 | String length | 255 |
-| Vector length | 64 |
+| Vector length | 255 |
 | Non-tail recursion | bounded by free memory: about 1,500 levels in a small program, fewer as the heap grows |
 | Program size | 45,056 bytes of `.COM`; a larger image is `CAP`. The heap and the stack share what the program leaves below `B800H` |
 
