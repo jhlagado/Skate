@@ -181,7 +181,7 @@ DEF_PROC:
         JP C,.BODY_BAD
         POP AF
         LD (ST_ALONE),A
-        CALL EM_RET
+        CALL EM_PRET
         JP C,.UNWIND
         CALL PROC_END
         JP C,.UNWIND

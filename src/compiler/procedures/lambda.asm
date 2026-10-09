@@ -73,7 +73,7 @@ LAM_FORM:
         JP C,LAM_QUIT              ; Restore isolation state before unwinding.
         POP AF                     ; Recover the enclosing body's isolation mode.
         LD (ST_ALONE),A            ; Restore it before compiling the outer form.
-        CALL EM_RET                ; A normal body returns its final A:HL value.
+        CALL EM_PRET                ; A normal body returns its final A:HL value.
         JP C,LAM_FAIL              ; The return byte itself is bounded output.
         CALL PROC_END              ; Save body address and patch the jump-over.
         JP C,LAM_FAIL              ; Preserve the descriptor-layout failure.

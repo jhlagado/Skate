@@ -86,7 +86,15 @@ RT_EMPTY:
 FRM_RET:
         LD (ARG_VAL),HL          ; Save the body result while removing frame words.
         LD (ARG_TAG),A           ; Preserve its tag across the frame restore.
-        POP HL                   ; Remove the target descriptor below the body return.
+        LD A,(SLOT_CNT)          ; The frame's map ends at its boundary: four
+        LD L,A                   ; bytes a slot above the map.
+        LD H,0
+        ADD HL,HL
+        ADD HL,HL
+        LD DE,(ENV_CUR)
+        ADD HL,DE
+        LD (FRM_SP),HL
+        POP HL                   ; The caller's descriptor.
         LD (DESC_CUR),HL         ; Restore the enclosing descriptor for nested calls.
         POP HL                   ; Restore the caller environment pointer.
         LD (ENV_CUR),HL          ; Nested closures resume their defining environment.
@@ -105,8 +113,6 @@ FRM_RET:
         LD (ENV_RCNT),A
         LD HL,(ENV_CUR)
         LD (FRM_BASE),HL         ; The caller map now identifies the active frame.
-        POP DE                   ; Restore the stack boundary below the map.
-        LD (FRM_SP),DE
         POP HL                   ; Recover the original caller return address.
         EX DE,HL                 ; Keep the return address while releasing the map.
         LD HL,(FRM_SP)

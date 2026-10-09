@@ -277,10 +277,10 @@ Deno.test("suspended environments remain roots through their frame maps", async 
   memory[callerBinding + 3] = 0x51;
   memory[currentDescriptor + 3] = 1;
   memory[callerDescriptor + 3] = 1;
-  writeWord(memory, currentMap - 10 + 4, callerMap);
-  writeWord(memory, currentMap - 10 + 2, currentDescriptor);
-  writeWord(memory, callerMap - 10 + 4, 0);
-  writeWord(memory, callerMap - 10 + 2, callerDescriptor);
+  writeWord(memory, currentMap - 4, callerMap);
+  writeWord(memory, currentMap - 6, currentDescriptor);
+  writeWord(memory, callerMap - 4, 0);
+  writeWord(memory, callerMap - 6, callerDescriptor);
   writeWord(memory, assembled.address("ENV_CUR"), currentMap);
   writeWord(memory, assembled.address("FRM_BASE"), currentMap);
   memory[assembled.address("SLOT_CNT")] = 1;

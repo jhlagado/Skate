@@ -251,18 +251,14 @@ INV_NEW:
         XOR A                      ; The closure now owns the argument values.
         LD (ARG_CNT),A             ; Retire the packet before entering its body.
         PUSH IX                    ; Preserve the generated caller return address.
-        LD DE,(FRM_SP)             ; Release the activation map when the body returns.
-        PUSH DE                    ; The old stack boundary follows the return word.
         LD DE,(ENV_RET)            ; Preserve the caller environment below the frame.
         PUSH DE                    ; FRM_RET restores it after the body returns.
-        LD HL,(DESC_RET)           ; Keep the caller descriptor for the epilogue.
-        PUSH HL                    ; The epilogue restores this descriptor state.
+        LD HL,(DESC_RET)           ; Keep the caller descriptor for FRM_RET.
+        PUSH HL
         LD HL,(DESC_CUR)           ; Read the descriptor body pointer.
         LD E,(HL)                  ; Body address low byte is descriptor offset zero.
         INC HL                     ; Advance to the body address high byte.
         LD D,(HL)                  ; DE now names the generated procedure body.
-        LD HL,FRM_RET              ; Body RET returns through this frame epilogue.
-        PUSH HL                    ; Keep descriptor and caller return below it.
         LD HL,(ENV_CUR)            ; The map base identifies this fixed frame.
         LD (FRM_BASE),HL           ; Exact roots can derive suspended frames from it.
         EX DE,HL                   ; HL receives the target body address.
@@ -333,9 +329,9 @@ INV_TLGO:
         CALL INV_KIND               ; Revalidate the primitive target.
         LD A,(PRIM_ID)              ; Inspect the target after validation.
         CP 45                       ; A nested apply must keep spreading in tail mode.
-        JR Z,.NESTED                ; Leave its frame epilogue for the next target.
-        POP IX                      ; Remove the active frame epilogue before return.
-        JP PRIM_RUN                 ; Evaluate the primitive through that epilogue.
+        JR Z,.NESTED
+        LD IX,FRM_RET               ; The primitive returns through the frame's end.
+        JP PRIM_RUN
 .NESTED:
         JP APPLY                     ; Preserve tail mode while applying the next target.
 .CLOSURE:
@@ -368,23 +364,26 @@ INV_TLGO:
         LD B,A
         LD A,(SLOT_CNT)
         CP B
-        JR Z,.FITS                 ; An equal shape fits the active map exactly.
-        JR NC,.GROW                ; A larger target needs a new map.
-.FITS:
+        JR NZ,.GROW                ; Another shape needs a new map: FRM_RET
+.FITS:                             ; derives the boundary from the map's size.
         CALL ENV_COPY              ; Replace captured pointers from the target closure.
         CALL ENV_OWN               ; Reuse owned cells or allocate missing entries.
         JR .ARGS
 .GROW:
-        POP DE                     ; Discard the current body epilogue address.
-        POP HL                     ; The caller's descriptor, environment and
-        LD (DESC_RET),HL           ; stack boundary become the new frame's.
+        POP HL                     ; The caller's descriptor and environment
+        LD (DESC_RET),HL           ; become the new frame's.
         POP HL
         LD (ENV_RET),HL
         LD (FRM_BASE),HL           ; A collection now walks from the caller.
-        POP HL
-        LD (FRM_SP),HL
         POP IX                     ; The caller's return.
-        LD SP,HL                   ; Release the current map.
+        LD A,(FRM_SPAN)            ; Release the current map: its boundary is
+        LD L,A                     ; four bytes a slot above it.
+        LD H,0
+        ADD HL,HL
+        ADD HL,HL
+        LD DE,(ENV_CUR)
+        ADD HL,DE
+        LD SP,HL
         LD HL,(DESC_RET)           ; The caller's map extent, or none at the
         LD A,H                     ; top level.
         OR L
@@ -401,23 +400,13 @@ INV_TLGO:
         JP C,ERROR                ; Reject an invalid descriptor slot.
         XOR A                      ; The tail target now owns the argument values.
         LD (ARG_CNT),A             ; Retire the packet before entering its body.
-        POP DE                    ; Discard the current body epilogue address.
         POP DE                    ; Recover the caller descriptor for the target.
         LD (DESC_RET),DE
         POP DE                    ; Recover the caller environment below this frame.
         LD (ENV_RET),DE
-        POP DE                    ; Recover the stack boundary below this frame.
-        LD (FRM_SP),DE
-        POP IX                    ; Recover the caller return below this frame.
-        PUSH IX                   ; Preserve the original caller return word.
-        LD DE,(FRM_SP)             ; Keep the reused activation map above the frame.
+        PUSH DE                   ; The frame words stay: tail recursion uses
+        LD DE,(DESC_RET)          ; constant stack.
         PUSH DE
-        LD DE,(ENV_RET)            ; Preserve the caller environment below the frame.
-        PUSH DE
-        LD HL,(DESC_RET)          ; Keep the caller descriptor on the new frame.
-        PUSH HL                   ; The target returns through FRM_RET.
-        LD HL,FRM_RET             ; Install the target's single epilogue.
-        PUSH HL                   ; Tail recursion therefore uses constant stack.
         LD HL,(DESC_CUR)          ; Read the target body address.
         LD E,(HL)                 ; Body address low byte.
         INC HL                    ; Advance to the high body byte.

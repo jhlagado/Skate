@@ -465,6 +465,14 @@ EM_ABORT:
         SCF                       ; Keep the staged-output diagnostic asserted.
         RET
 
+; End a procedure body: JP FRM_RET releases its frame.
+EM_PRET:
+        LD A,0C3H
+        CALL SINK_PUT
+        RET C
+        LD HL,FRM_RET
+        JP EM_WORD
+
 ; Append the return instruction used by the runtime entry point.
 EM_RET:
         LD A,0C9H                 ; RET hands the final value to RT_CALL.

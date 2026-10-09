@@ -172,7 +172,7 @@ LET_NAME:
         JR C,.BODY_BAD
         POP AF
         LD (ST_ALONE),A
-        CALL EM_RET
+        CALL EM_PRET
         JP C,.UNWIND
         CALL PROC_END             ; Patch the descriptor body and skip target.
         JP C,.UNWIND

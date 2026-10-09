@@ -126,7 +126,7 @@ limit, its reason and what is planned for it.
 | A `do` form, a `letrec` binding list, or leading internal definitions | 1,504 reader events (an atom or parenthesis each); a `do` needs room for its rewrite too |
 | String length | 255 |
 | Vector length | 64 |
-| Non-tail recursion | about 200 levels |
+| Non-tail recursion | about 250 levels |
 | Program size | 41,472 bytes of `.COM`; a larger image is `CAP`. The heap is what the program leaves below `A500H` |
 
 The runtime is loaded in one of four sizes: the core alone, the core and the

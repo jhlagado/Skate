@@ -228,8 +228,8 @@ ROOT_RAW:
         JR .LOOP
 
 ; Scan current and suspended environment maps.  Each entry is a binding
-; pointer.  A frame is always ten bytes below its map.  Its caller descriptor
-; is paired with the caller map saved in the same frame.
+; pointer.  A frame is the six bytes below its map: the caller descriptor,
+; then the caller map, then the return address.
 ROOT_ENV:
         LD HL,(ENV_CUR)
         LD A,(SLOT_CNT)
@@ -251,19 +251,13 @@ ROOT_ENV:
         JR Z,.CALLER
 .FRAME:
         LD HL,(ROOT_PTR)
-        LD DE,8
-        OR A
-        SBC HL,DE
+        LD DE,-6
+        ADD HL,DE
         LD E,(HL)
         INC HL
         LD D,(HL)
         LD (DESC_FRM),DE
-        LD HL,(ROOT_PTR)
-        LD DE,10
-        OR A
-        SBC HL,DE
-        LD DE,4
-        ADD HL,DE
+        INC HL
         LD E,(HL)
         INC HL
         LD D,(HL)

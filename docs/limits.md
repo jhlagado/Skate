@@ -50,7 +50,7 @@ which they should be dealt with.
 | Limit | Today | Verdict | Proposal |
 | --- | --- | --- | --- |
 | Runnable program size | 41,472 bytes of `.COM` (an image ending at `A300H`); a larger image is `CAP` | Keep | The heap is whatever the program leaves below `A500H`. Sizing the collector maps to the heap, not to `3000H`–`C000H`, would add about 5 KB more (§6.2) |
-| Non-tail recursion depth | about 210 levels of a one-argument procedure | Rework | Each frame is now sized by its own procedure. The depth is bound by the 3,840-byte stack; a computed map (§6.2) can give it more |
+| Non-tail recursion depth | about 250 levels of a one-argument procedure | Rework | Each frame is now sized by its own procedure. The depth is bound by the 3,840-byte stack; a computed map (§6.2) can give it more |
 | Size of a `do` | 1,504 reader events for the form and its rewrite: a body of about 140 short forms | Keep | The replay buffer now lives in the staging window (§6.1) |
 | Elements per level of a quoted list or vector | 63 | Raise | Tied to the 255-record runtime quote stack; raise to 255 with a nesting check |
 | Vector length | 64 | Rework | `make-vector` uses one closure-slab class; longer vectors need page runs |
@@ -145,7 +145,7 @@ grows with a larger TPA.
 | Runtime size | Core 18,410 bytes, with standard procedures 20,849, with numeric procedures 22,479, full 26,145 | `RT_CORE`, `RT_STD`, `RT_NUMS`, `RT_SIZE` | — | Each 256 bytes of runtime or program costs one heap page (32 pairs) |
 | Live pairs | 2,720 with the core runtime and a small program | 8 bytes a pair; heap pages from the image end to `A500H`, 32 pairs each | `RUNTIME ERROR` after a collection | Raise by sizing the maps to the heap. Pinned by `PAIR2720` and `PAIR2721` |
 | Native stack | 3,840 bytes, `D500H`–`E400H` | `RT_GUARD`, `RT_TOP` | `RUNTIME ERROR` | Rework |
-| Non-tail recursion | About 210 levels of `(+ 1 (f (- n 1)))` (measured: 200 passes, 250 fails), whatever other procedures the program has | Each frame holds 4 bytes for each of its own procedure's slots, and closures 2 bytes each; a tail call into a procedure with more slots builds a larger frame | `RUNTIME ERROR` | Rework with the computed map. Pinned by `DEEPOK`, `DEEPREC` and `FRAMES` |
+| Non-tail recursion | About 250 levels of `(+ 1 (f (- n 1)))` (measured: 250 passes, 260 fails), whatever other procedures the program has. A frame is 6 bytes (the caller's return, environment and descriptor) plus 4 for each slot; a body ends with `JP FRM_RET`, which finds the frame's boundary from its map | Each frame holds 4 bytes for each of its own procedure's slots, and closures 2 bytes each; a tail call into a procedure with more slots builds a larger frame | `RUNTIME ERROR` | Rework with the computed map. Pinned by `DEEPOK`, `DEEPREC` and `FRAMES` |
 | Pending operand roots | 255 | `ROOT_TAB`, 1,020 bytes | `RUNTIME ERROR` | Keep |
 | Operator side stack | 255 records | `C000H`–`C400H` | `RUNTIME ERROR` | Keep; bounds nesting through computed-operator calls, `case` and `map` |
 | Quote, `list`, rest and `apply` stack | 255 records shared across nesting | `C800H`–`CC00H` | `RUNTIME ERROR` | Keep, but the compiler should check deep quoted data against it |

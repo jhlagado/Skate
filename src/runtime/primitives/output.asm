@@ -51,7 +51,7 @@ PRIM_TCO:
         LD A,(PRIM_ID)             ; Apply keeps the current frame for dynamic transfer.
         CP 45
         JR Z,.APPLY
-        POP IX                     ; The current frame's epilogue is now the return.
+        LD IX,FRM_RET              ; The primitive returns through the frame's end.
         JP PRIM_RUN                ; Evaluate with the reused procedure frame.
 .APPLY:
         LD A,1
