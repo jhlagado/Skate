@@ -13,6 +13,7 @@
 ; and private `.NAME` labels for branches inside one routine.
 
 STD_BASE EQU 60                   ; First primitive kind handled here.
+LIST_MAX EQU 1400H                ; More cells than the heap holds pairs.
 
 ; The first byte of the optional standard-procedure module.  The generator
 ; records this address as the length of the core runtime.
@@ -622,6 +623,11 @@ STD_LEN:
         POP BC
         JP C,ERROR                 ; An improper list has no length.
         INC BC
+        LD D,A
+        LD A,B
+        CP LIST_MAX/256
+        JP NC,ERROR                ; Longer than the heap can hold: circular.
+        LD A,D
         JR .LOOP
 .DONE:
         LD H,B
@@ -631,16 +637,25 @@ STD_LEN:
         PUSH IX
         RET
 
-; list? is true for a proper list.
+; list? is true for a proper list, and false for a circular one.
 STD_PROP:
         LD A,1
         CALL PKT_NARG
         CALL PKT_ARG0
+        LD BC,LIST_MAX
 .LOOP:
         CALL STD_NIL
         JP Z,STD_YES
+        PUSH BC
         CALL PAIR_CDR
+        POP BC
         JP C,STD_NO
+        DEC BC
+        LD D,A
+        LD A,B
+        OR C
+        JP Z,STD_NO
+        LD A,D
         JR .LOOP
 
 ; reverse returns a new list.
@@ -1128,6 +1143,7 @@ STD_FIND:
         LD A,C
         LD (STD_KEY+2),A
         CALL PKT_ARG1
+        CALL STD_SINI
 .LOOP:
         LD (STD_LIST),HL
         LD (STD_LTAG),A
@@ -1141,6 +1157,7 @@ STD_FIND:
         LD A,(STD_LTAG)
         CALL PAIR_CDR
         JP C,ERROR
+        CALL STD_STEP
         JR .LOOP
 .FOUND:
         LD HL,(STD_LIST)
@@ -1164,6 +1181,7 @@ STD_LOOK:
         LD A,C
         LD (STD_KEY+2),A
         CALL PKT_ARG1
+        CALL STD_SINI
 .LOOP:
         LD (STD_LIST),HL
         LD (STD_LTAG),A
@@ -1181,11 +1199,34 @@ STD_LOOK:
         LD A,(STD_LTAG)
         CALL PAIR_CDR
         JP C,ERROR
+        CALL STD_STEP
         JR .LOOP
 .FOUND:
         LD HL,(STD_ENT)
         LD A,(STD_ETAG)
         PUSH IX
+        RET
+
+; A walk of more cells than the heap holds is a circular list: STD_SINI
+; starts the count and STD_STEP takes one cell, an error past the limit.
+; A, C and HL are kept.
+STD_SINI:
+        PUSH HL
+        LD HL,LIST_MAX
+        LD (STD_LEFT),HL
+        POP HL
+        RET
+STD_STEP:
+        PUSH AF
+        PUSH HL
+        LD HL,(STD_LEFT)
+        DEC HL
+        LD (STD_LEFT),HL
+        LD A,H
+        OR L
+        POP HL
+        JP Z,ERROR
+        POP AF
         RET
 
 ; Compare A:CHL with STD_KEY: identity when STD_MODE is zero, equal? otherwise.
@@ -1364,6 +1405,7 @@ STD_CASE:
 
 STD_REL:  DB 0                     ; Relation index for an ordered comparison.
 STD_PTR:  DW 0                     ; Packet or string cursor.
+STD_LEFT:  DW 0                    ; Cells left before a walk is circular.
 STD_R:    DS 4                     ; Right value cell for STD_DEEP.
 STD_LIST: DW 0                     ; List being walked.
 STD_LTAG: DB 0

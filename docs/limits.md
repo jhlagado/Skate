@@ -75,7 +75,7 @@ which they should be dealt with.
 | `vector`, `string`, `list` | At most 32 arguments | The packet | `CAP` at compile time |
 | Vector length | 64 elements | The largest closure-slab class | `RUNTIME ERROR`. Rework |
 | `call/ec` | One-shot escapes only, 8 active at once | `EC_TABLE`, 8 × 21 bytes | `RUNTIME ERROR` |
-| Character names | The R7RS names (`#\alarm`, `#\backspace`, `#\delete`, `#\escape`, `#\newline`, `#\null`, `#\return`, `#\space`, `#\tab`), `#\xHH`, or one printable byte | Lexer (`LX_NAMES`) | `COMPILE ERROR` for another name. `write` prints control characters as `#\xHH`, and `read` knows only `#\space` and `#\newline` |
+| Character names | The R7RS names (`#\alarm`, `#\backspace`, `#\delete`, `#\escape`, `#\newline`, `#\null`, `#\return`, `#\space`, `#\tab`), `#\xHH`, or one printable byte | Lexer (`LX_NAMES`); runtime `CH_NAMES` for `write` and `read` | `COMPILE ERROR` for another name; `write` prints these names and `read` reads them |
 | `#` syntax | `#(`, `#t`, `#true`, `#f`, `#false`, `#\` | Lexer | `COMPILE ERROR`. No `#x` and other radix or exactness prefixes, `#|…|#` or `#;` |
 | String escapes | `\"` `\\` `\n` `\r` `\t` `\xHH;` | Lexer | A string may span lines: a raw line feed or tab is kept and a carriage return dropped. Other raw control bytes are a `COMPILE ERROR` |
 | Number syntax | Decimal integers and decimals with exponents, `+inf.0`, `-inf.0`, `+nan.0` | Lexer | No rationals, radix prefixes or exactness prefixes |
@@ -220,13 +220,14 @@ Fixed:
 6. **A wildcard source name**, or a source whose type is one of the
    compiler's own output types, is refused before publication deletes or
    renames anything.
+7. **Circular lists:** `list?` is false for one, and `length`, `memq`,
+   `member`, `assq` and `assoc` stop with a `RUNTIME ERROR` after more cells
+   than the heap can hold (`CIRCLE`, `CIRCLEN`, `CIRCMEM`).
 
 Remaining:
 
-7. **Circular lists:** `length`, `list?`, `memq`, `member`, `assq` and
-   `assoc` with no match never return, and `display` of a list circular in
-   its cdrs never ends.
-8. **`call/ec` token generations wrap after 512 reopenings,** so a stale
+8. **`display` or `write` of a list circular in its cdrs** never ends.
+9. **`call/ec` token generations wrap after 512 reopenings,** so a stale
    escape can be accepted again; a stale file-port token reaches the file
    opened after it.
 

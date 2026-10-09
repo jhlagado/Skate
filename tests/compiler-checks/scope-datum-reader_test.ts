@@ -125,6 +125,24 @@ function pairPart(
   return call(selector, payload);
 }
 
+Deno.test("datum reader reads the R7RS character names", async () => {
+  const { assembled, memory, cpu } = await managedRuntime();
+  installBdosReader(
+    memory,
+    Array.from(new TextEncoder().encode(
+      "#\\tab #\\null #\\delete #\\space #\\newline #\\return #\\escape #\\alarm #\\backspace ",
+    )),
+  );
+  memory[assembled.address("ARG_CNT")] = 0;
+  memory[assembled.address("IN_CR")] = 0;
+  memory[assembled.address("IN_STATE")] = 0;
+  for (const byte of [9, 0, 127, 32, 10, 13, 27, 7, 8]) {
+    const character = readDatum(assembled, memory, cpu);
+    assert.equal(character.tag, 0);
+    assert.equal(character.payload, 0xff00 | byte);
+  }
+});
+
 Deno.test("datum reader returns scalar integers, booleans and characters", async () => {
   const { assembled, memory, cpu } = await managedRuntime();
   installBdosReader(

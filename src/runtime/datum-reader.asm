@@ -107,8 +107,8 @@ DR_DATUM:
         LD HL,0FE00H                ; FE00 is canonical #f.
         RET
 
-; Read a character spelling after #\: one printable byte, xHH, space or
-; newline.  The spelling is collected in the symbol buffer until a delimiter.
+; Read a character spelling after #\: one printable byte, xHH or an R7RS
+; name from CH_NAMES.  The spelling is collected in the symbol buffer until a delimiter.
 .CHAR:
         XOR A                       ; Start an empty spelling in the symbol buffer.
         LD (DR_LEN),A
@@ -152,13 +152,22 @@ DR_DATUM:
         OR B                        ; Join both nibbles into the character byte.
         JR .CHAR_VAL
 .NAMED:
-        LD HL,.SPACE                ; Try the exact space name.
-        CALL .MATCH
-        JR Z,.CHAR_VAL              ; A holds byte 32 after a match.
-        LD HL,.NEWLINE              ; Newline is the only other accepted name.
-        CALL .MATCH
-        JP NZ,ERROR                 ; Unknown names are malformed.
-        JR .CHAR_VAL                ; A holds byte 10 after a match.
+        LD HL,CH_NAMES
+.NAME:
+        LD A,(HL)                   ; The byte the name stands for.
+        CP 0FFH
+        JP Z,ERROR                  ; Unknown names are malformed.
+        LD C,A
+        INC HL
+        CALL .MATCH                 ; Z: the spelling is this name.
+        LD A,C
+        JR Z,.CHAR_VAL
+.PASS:
+        LD A,(HL)                   ; Move to the next entry.
+        INC HL
+        CP '$'
+        JR NZ,.PASS
+        JR .NAME
 .SINGLE:
         LD A,(HL)                   ; Return the single spelling byte.
 .CHAR_VAL:
@@ -167,27 +176,22 @@ DR_DATUM:
         XOR A                       ; Characters use the scalar logical tag.
         RET
 
-; Compare the collected spelling with the length-prefixed name at HL.  Z
-; reports an exact match and returns the byte stored after the name in A.
+; Compare the collected spelling with the $-ended name at HL.  Z reports an
+; exact match; HL is left inside the entry.  C is kept.
 .MATCH:
-        LD A,(DR_LEN)               ; Names must match the full spelling length.
-        CP (HL)
-        RET NZ
+        LD A,(DR_LEN)
         LD B,A                      ; B counts the bytes left to compare.
         LD DE,DR_TOKEN              ; DE walks the collected spelling.
 .CMP_LOOP:
-        INC HL                      ; Advance to the next name byte.
-        LD A,(DE)                   ; Compare one spelling byte.
+        LD A,(DE)
         CP (HL)
-        RET NZ                      ; A mismatch leaves NZ for the caller.
+        RET NZ                      ; A mismatch, or the name ended early.
         INC DE
+        INC HL
         DJNZ .CMP_LOOP
-        INC HL                      ; The character value follows the name.
-        LD A,(HL)                   ; Loading it keeps the final Z result.
+        LD A,(HL)                   ; The name must end here too.
+        CP '$'
         RET
-
-.SPACE: DB 5,"space",32             ; #\space denotes byte 32.
-.NEWLINE: DB 7,"newline",10         ; #\newline denotes byte 10.
 
 ; Skip spaces and semicolon comments.  A delimiter remains in lookahead.
 DR_SKIP:

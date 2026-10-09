@@ -721,6 +721,16 @@ integerCases.push([
 const integerRuntimeErrorCases = [
   ["CXRBAD.SK8", "(cadr '(1))", "RUNTIME ERROR\r\n"],
   ["MAPBAD.SK8", "(map car 5)", "RUNTIME ERROR\r\n"],
+  [
+    "CIRCLEN.SK8",
+    "(define c (list 1 2 3)) (set-cdr! (cddr c) c) (length c)",
+    "RUNTIME ERROR\r\n",
+  ],
+  [
+    "CIRCMEM.SK8",
+    "(define c (list 1 2 3)) (set-cdr! (cddr c) c) (memq 4 c)",
+    "RUNTIME ERROR\r\n",
+  ],
   ["STRREFW.SK8", '(string-ref "abc" 65536)', "RUNTIME ERROR\r\n"],
   ["SSETLIT.SK8", '(string-set! "abc" 0 #\\x)', "RUNTIME ERROR\r\n"],
   ["S2NDEC.SK8", '(string->number "1.5")', "RUNTIME ERROR\r\n"],
@@ -950,6 +960,12 @@ const regressionCases = [
     "LEXNAMES.SK8",
     '(write (map char->integer (list #\\tab #\\null #\\delete #\\escape #\\alarm #\\backspace #\\return))) (write (list #true #false)) (write (string-length "a\nb")) (write (string-length "a\r\nb"))',
     "(9 0 127 27 7 8 13)(#t #f)33",
+  ],
+  // A circular list is not a list, and write spells characters by name.
+  [
+    "CIRCLE.SK8",
+    "(define c (list 1 2 3)) (set-cdr! (cddr c) c) (write (list? c)) (write (car (memq 2 c))) (write (list #\\tab #\\null #\\space #\\delete #\\a #\\x80))",
+    "#f2(#\\tab #\\null #\\space #\\delete #\\a #\\x80)",
   ],
   // A nested procedure body must not overwrite the enclosing body's pending
   // tail-call records: a non-final named let or a lambda after a tail call

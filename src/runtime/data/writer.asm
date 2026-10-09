@@ -62,8 +62,8 @@ WR_VALUE:
 WR_SEND:
         JP OUT_TEXT                ; Send the spelling through the output adapter.
 
-; Print a character raw for display, or in write mode as #\c, #\space,
-; #\newline or #\xHH so the datum reader accepts the spelling again.
+; Print a character raw for display, or in write mode as #\c, by its R7RS
+; name, or as #\xHH, so the datum reader accepts the spelling again.
 WR_CHAR:
         LD A,(WR_MODE)             ; Zero selects display's raw byte output.
         OR A
@@ -72,14 +72,24 @@ WR_CHAR:
         CALL OUT_CHAR              ; OUT_CHAR preserves the character payload in HL.
         LD A,92                    ; The second prefix byte is a backslash.
         CALL OUT_CHAR
-        LD A,L                     ; Classify the character byte.
-        LD DE,WR_LINE              ; Line feed has the reader name newline.
-        CP 10
+        LD DE,CH_NAMES             ; A named character prints its name.
+.FIND:
+        LD A,(DE)
+        INC DE
+        CP 0FFH
+        JR Z,.PLAIN
+        CP L
         JP Z,OUT_TEXT
-        LD DE,WR_SPACE             ; Space has the reader name space.
-        CP 32
-        JP Z,OUT_TEXT
-        JR C,.HEX                  ; Other controls use the hexadecimal spelling.
+.SKIP:
+        LD A,(DE)
+        INC DE
+        CP '$'
+        JR NZ,.SKIP
+        JR .FIND
+.PLAIN:
+        LD A,L
+        CP 33                      ; Other controls use the hexadecimal spelling.
+        JR C,.HEX
         CP 127                     ; Printable ASCII is spelled as itself.
         JP C,OUT_CHAR
 .HEX:
@@ -344,5 +354,7 @@ IN_BYTE:
 
 WR_PROC:  DB "#<procedure>$"
 WR_PORT:  DB "#<port>$"
-WR_SPACE:  DB "space$"
-WR_LINE:  DB "newline$"
+; The R7RS character names: each byte, then its name ended by $, and FFH last.
+; The datum reader reads the same names.
+CH_NAMES: DB 7,"alarm$",8,"backspace$",127,"delete$",27,"escape$"
+        DB 10,"newline$",0,"null$",13,"return$",32,"space$",9,"tab$",0FFH
