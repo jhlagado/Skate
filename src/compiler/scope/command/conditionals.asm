@@ -84,7 +84,7 @@ IF_LOGIC:
         CALL REC_NEXT              ; The first operand, or the close.
         JP C,.FAIL
         CP 2
-        JP Z,.EMPTY
+        JR Z,.EMPTY
 .OPERAND:
         PUSH AF                    ; Keep the operand's first event.
         PUSH HL
@@ -97,21 +97,21 @@ IF_LOGIC:
         POP HL
         POP AF
         CALL CMD_EXPR              ; Compile the operand.
-        JP C,.FAIL
+        JR C,.FAIL
         CALL REC_NEXT              ; A close makes it the final operand.
-        JP C,.FAIL
+        JR C,.FAIL
         CP 2
-        JP Z,.DONE
+        JR Z,.DONE
         PUSH AF                    ; Keep the next operand's first event.
         PUSH HL
         LD A,(RD_TAG)
         PUSH AF
         PUSH BC                    ; C is the operand's byte 2.
         CALL EM_PLAIN              ; Not final: its tail calls must return.
-        JP C,.NEXTFAIL
+        JR C,.NEXTFAIL
         LD HL,RT_TEST              ; Z means the value is #f; A:HL is kept.
         CALL EM_CALL
-        JP C,.NEXTFAIL
+        JR C,.NEXTFAIL
         LD HL,15                   ; The mode is 15 bytes up.
         ADD HL,SP
         LD A,(HL)
@@ -122,15 +122,15 @@ IF_LOGIC:
 .OR_TEST:
         CALL EM_JNZ                ; or stops at the first true value.
 .BRANCH:
-        JP C,.NEXTFAIL
+        JR C,.NEXTFAIL
         CALL BR_PUSH
-        JP C,.NEXTFAIL
+        JR C,.NEXTFAIL
         POP BC
         POP AF
         LD (RD_TAG),A
         POP HL
         POP AF
-        JP .OPERAND
+        JR .OPERAND
 .EMPTY:
         LD HL,7                    ; (and) is #t and (or) is #f.
         ADD HL,SP
@@ -139,7 +139,7 @@ IF_LOGIC:
         LD L,A
         LD H,0FEH
         CALL EM_IMM
-        JP C,.FAIL
+        JR C,.FAIL
 .DONE:
         LD HL,(ST_PC)              ; Every decisive operand lands here.
         CALL BR_ABS
@@ -154,7 +154,7 @@ IF_LOGIC:
         LD HL,(IF_JOIN)
         CALL BR_PATCH
         POP BC
-        JP C,.UNWIND
+        JR C,.UNWIND
         JR .PATCH
 .RESTORE:
         POP AF
@@ -359,10 +359,10 @@ IF_COND:
         LD (ST_EVTAG),A
         LD A,(ST_EVENT)
         CP 5
-        JP NZ,.TEST                ; Non-symbol events are ordinary test expressions.
+        JR NZ,.TEST                ; Non-symbol events are ordinary test expressions.
         LD DE,K_ELSE
         CALL CMD_SAME
-        JP Z,IF_ELSE               ; Else is accepted only as the final clause.
+        JR Z,IF_ELSE               ; Else is accepted only as the final clause.
 .TEST:
         CALL IF_TAIL               ; Restore the enclosing tail state for this clause.
         XOR A                      ; The test itself is never in tail position.
@@ -404,7 +404,7 @@ IF_ELSE:
         JP C,IF_FAIL
         CP 2
         JP NZ,IF_FAIL              ; Else must be the final clause.
-        JP IF_CLOSE
+        JR IF_CLOSE
 
 IF_NONE:
         CALL EM_VOID                ; No clause matched, including an empty cond.
@@ -512,7 +512,7 @@ IF_PATCH:
 .LOOP:
         LD A,B
         OR A
-        JP Z,.DONE
+        JR Z,.DONE
         DEC B
         LD A,B
         LD C,A
@@ -529,7 +529,7 @@ IF_PATCH:
         EX DE,HL
         LD DE,(ST_DEST)
         CALL SINK_FIX
-        JP .LOOP
+        JR .LOOP
 .DONE:
         CALL IF_POP                ; Release this cond's patch frame.
         XOR A                      ; Return carry clear after a complete cond.

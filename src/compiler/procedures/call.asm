@@ -74,21 +74,21 @@ CALL_END:
         OR A
         JR NZ,.OP_TAIL
         LD HL,INV_OP                ; Dispatch the saved operator value.
-        JP CALL_RUN
+        JR CALL_RUN
 .OP_TAIL:
         LD A,2                      ; CALL_JP selects the side-stack tail wrapper.
         LD (ST_ROUTE),A
         LD HL,INV_OPTL
-        JP CALL_JP
+        JR CALL_JP
 .GENERAL:
         LD A,(ST_ATAIL)            ; Recover the application's tail context.
         OR A                       ; A tail call uses a jump through the runtime.
         JR NZ,.TAIL                ; The target returns directly to our caller.
         LD HL,INV_CALL            ; Ordinary calls preserve the current return.
-        JP CALL_RUN                ; Emit the count load and runtime CALL.
+        JR CALL_RUN                ; Emit the count load and runtime CALL.
 .TAIL:
         LD HL,INV_TAIL             ; Tail calls reuse the current return address.
-        JP CALL_JP                 ; Emit the count load and runtime JP.
+        JR CALL_JP                 ; Emit the count load and runtime JP.
 
 ; Emit CALL PRIM_OP, or a patchable CALL PRIM_TL in tail position, then the
 ; primitive's payload byte and the argument count.

@@ -25,7 +25,7 @@ DIAG_OUT:
         LD (ST_ELINE),HL
         LD HL,(LX_TCOL)
         LD (ST_ECOL),HL
-        JP .POSITION                ; Prefix the existing diagnostic with its source.
+        JR .POSITION                ; Prefix the existing diagnostic with its source.
 .PLAIN:
         LD DE,(ST_ERROR)            ; All rejected forms remain unpublished.
         JP CMD_QUIT                 ; Print the diagnostic and warm-start CP/M.
@@ -102,7 +102,7 @@ DIAG_NUM:
         LD A,L                         ; The final remainder is one decimal digit.
         ADD A,'0'
         LD E,A
-        JP DIAG_CHR
+        JR DIAG_CHR
 
 ; Emit one decimal place and return HL reduced modulo DE.
 .PLACE:
@@ -119,7 +119,7 @@ DIAG_NUM:
         POP AF
         ADD A,'0'
         LD E,A
-        JP DIAG_CHR
+        JR DIAG_CHR
 
 ; Divide HL by the positive 16-bit divisor in DE using bounded subtraction.
 ; The quotient returns in A and the remainder in HL.  Diagnostic coordinates

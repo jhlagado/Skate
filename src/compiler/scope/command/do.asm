@@ -42,7 +42,7 @@ DO_FORM:
         LD (ST_NEST),A
 .CAPTURE:
         CALL REC_NEXT
-        JP C,.FAIL
+        JR C,.FAIL
         OR A
         JR Z,.FAIL                 ; EOF inside the form.
         CALL DEF_PUT

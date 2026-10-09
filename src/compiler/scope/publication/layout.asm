@@ -51,7 +51,7 @@ PUB_END:
         LD BC,(ST_GLOBS)          ; One four-byte record is reserved per global.
         XOR A                     ; Global slot zero is the first primitive mark.
         LD (ST_GIDX),A
-        JP .GLOBALS                ; Skip the helper body before entering the loop.
+        JR .GLOBALS                ; Skip the helper body before entering the loop.
 
 ; Seed one predefined global with its primitive procedure value.  The area
 ; was emitted as zeroes, which leave ordinary names unbound, so only

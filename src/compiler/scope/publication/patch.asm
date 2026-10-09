@@ -81,7 +81,7 @@ PUB_LINK:
         CALL BR_ABS
         LD (PUB_ABS),HL
         LD HL,0100H+DR_DEND
-        JP .FIELD
+        JR .FIELD
 
 ; Resolve every four-byte slot fixup recorded by the emitter.
 PUB_FIX:

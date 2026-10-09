@@ -134,34 +134,34 @@ LET_NAME:
         LD L,A
         LD A,1
         CALL EM_LOAD               ; Load the closure as the compact call operator.
-        JP C,.FAIL
+        JR C,.FAIL
         LD HL,OPS_PUSH
         CALL EM_CALL               ; Save it beside the staged argument packet.
-        JP C,.FAIL
+        JR C,.FAIL
         LD A,(ST_TAIL)
         LD (ST_ATAIL),A            ; The named call inherits the enclosing tail context.
         LD A,1
         LD (ST_ROUTE),A
         CALL CALL_END              ; Emit ordinary or tail invocation from the packet.
-        JP C,.FAIL
+        JR C,.FAIL
         LD HL,(ST_SKIP)            ; Preserve the enclosing jump-over patch.
         LD (ST_NLID),HL            ; The name is no longer needed after the call.
         CALL EM_JP                 ; The ordinary path jumps over the procedure body.
-        JP C,.FAIL
+        JR C,.FAIL
         LD (ST_SKIP),HL
         LD A,(ST_NLOWN)            ; Let LAM_OPEN save the actual enclosing owner.
         LD (ST_DESC),A
         CALL LAM_OPEN              ; Formal slots and the body use a new owner.
-        JP C,.FAIL
+        JR C,.FAIL
         LD A,(ST_NLNEW)            ; Restore the named descriptor for its formals.
         LD (ST_DESC),A
         LD (ST_PROC),A
         LD HL,(ST_PC)              ; The named body starts after its skip prefix.
         LD (ST_PBODY),HL
         CALL .SKIP_FIX             ; Restore the enclosing skip when this body closes.
-        JP C,.FAIL
+        JR C,.FAIL
         CALL .FORMALS              ; Add saved names as fixed procedure formals.
-        JP C,.UNWIND
+        JR C,.UNWIND
         LD A,1
         LD (ST_TAIL),A
         LD A,(ST_ALONE)
@@ -173,12 +173,12 @@ LET_NAME:
         POP AF
         LD (ST_ALONE),A
         CALL EM_PRET
-        JP C,.UNWIND
+        JR C,.UNWIND
         CALL PROC_END             ; Patch the descriptor body and skip target.
-        JP C,.UNWIND
+        JR C,.UNWIND
         CALL CAP_POP
-        JP C,.FAIL
-        JP .DONE
+        JR C,.FAIL
+        JR .DONE
 
 .BODY_BAD:
         POP AF
@@ -260,7 +260,7 @@ LET_NAME:
         LD D,(HL)
         LD (ST_SYMID),DE
         CALL CAP_DUP
-        JP C,.FORM_DUP
+        JR C,.FORM_DUP
         CALL BIND_NEW
         RET C
         LD (ST_SLOT),A

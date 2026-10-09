@@ -82,24 +82,24 @@ CMD_MAIN:
         LD DE,0E020H              ; Keep the compiler stack below CP/M's upper guard.
         OR A                      ; Clear carry before the ceiling comparison.
         SBC HL,DE                 ; Check the qualified TPA has the required guard.
-        JP C,.MEMORY              ; Refuse an installation with too little memory.
+        JR C,.MEMORY              ; Refuse an installation with too little memory.
         LD SP,0E020H              ; Parser and emitter calls share this stack.
         CALL CMD_NAME             ; Refuse a name the outputs would destroy.
         JR C,.NAME
         CALL PUB_TIDY              ; Recover stale stages before opening the spool.
         JR C,.RECOVERY             ; A recovery failure has no source location.
         CALL CMD_INIT             ; Clear tables and load the checked runtime provider.
-        JP C,.FAIL                ; Refuse to parse when the provider was not loaded.
+        JR C,.FAIL                ; Refuse to parse when the provider was not loaded.
         CALL CMD_PASS             ; Read the source package and emit native code.
-        JP C,.FAIL                ; No output is opened until parsing succeeds.
+        JR C,.FAIL                ; No output is opened until parsing succeeds.
         LD A,1                    ; Subsequent failures are finalisation/publication.
         LD (ST_PHASE),A           ; Do not mislabel generated-image errors as source.
         CALL PUB_END              ; Resolve slots and append the complete image.
-        JP C,.FAIL                ; Reject an image that crosses a measured bound.
+        JR C,.FAIL                ; Reject an image that crosses a measured bound.
         CALL PUB_MAIN             ; Publish checked COM and ASO files.
-        JP C,.FAIL                ; Report a transport or publication failure.
+        JR C,.FAIL                ; Report a transport or publication failure.
         LD DE,M_OK                ; Successful compilation message.
-        JP CMD_QUIT               ; Print it and return to CP/M.
+        JR CMD_QUIT               ; Print it and return to CP/M.
 .RECOVERY:
         LD A,1                     ; Recovery failure has no source location.
         LD (ST_PHASE),A            ; Force the plain output diagnostic path.
@@ -348,7 +348,7 @@ CMD_PASS:
         LD (ST_ALLOW),A            ; CMD_FORM consumes and clears this permission.
         LD A,B                     ; Recover the top-level event kind.
         CALL CMD_EXPR              ; Compile the event and leave its value in A/HL.
-        JP NC,.COUNT                ; Continue after a complete top-level form.
+        JR NC,.COUNT                ; Continue after a complete top-level form.
         RET                        ; Stop at the first syntax or capacity error.
 .COUNT:
         LD HL,(ST_FORMS)           ; Count successful top-level forms as a word.
@@ -377,7 +377,7 @@ CMD_EXPR:
         CP 5                       ; Symbol events carry an interned reference.
         JR Z,CMD_REF               ; Resolve a local or package-global slot.
         CP 8                       ; String events become copied immutable literals.
-        JP Z,CMD_STR
+        JR Z,CMD_STR
         CP 3                       ; Quote prefixes introduce literal data.
         JP Z,QUO_TICK             ; Read and emit the following quoted datum.
         CP 1                       ; An open parenthesis introduces a form.
@@ -388,7 +388,7 @@ CMD_EXPR:
 CMD_NEXT:
         CALL REC_NEXT              ; The caller has not consumed this expression.
         RET C                      ; Preserve the reader's latched error code.
-        JP CMD_EXPR                ; Dispatch the returned event.
+        JR CMD_EXPR                ; Dispatch the returned event.
 
 CMD_NUM:
         LD A,(RD_TAG)              ; Reader tag zero is the boolean scalar form.

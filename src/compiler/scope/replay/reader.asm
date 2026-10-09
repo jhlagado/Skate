@@ -12,7 +12,7 @@ REC_BUF  EQU W_RECBUF           ; Four bytes per retained reader event.
 REC_NEXT:
         LD A,(ST_PLAY)            ; Zero selects the ordinary source stream.
         OR A
-        JP NZ,.REPLAY              ; Retained events already carry their numeric kind.
+        JR NZ,.REPLAY              ; Retained events already carry their numeric kind.
         CALL RD_NEXT               ; Read one event from the source reader.
         JR NC,.READ
         CP 129                     ; A full reader or interner table, or an
@@ -46,13 +46,13 @@ REC_NEXT:
         OR A
         JR Z,.FAIL
         CALL REC_EXIT
-        JP C,.FAIL
+        JR C,.FAIL
         LD A,(ST_PLAY)             ; Nested replay keeps its enclosing auto flag.
         OR A
-        JP NZ,REC_NEXT
+        JR NZ,REC_NEXT
         XOR A
         LD (ST_BACK),A
-        JP REC_NEXT
+        JR REC_NEXT
 .GET:
         LD HL,(ST_GETP)           ; Recover the event address after the check.
         LD A,(HL)                 ; Return its structural kind in A.

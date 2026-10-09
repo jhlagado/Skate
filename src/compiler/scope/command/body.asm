@@ -107,11 +107,11 @@ CMD_BODY:
         LD HL,(ST_EVVAL)           ; Restore its payload for CMD_EXPR.
         CALL CMD_EXPR              ; Compile this complete expression immediately.
         JR NC,.EXPR_OK             ; Continue after a successful body expression.
-        JP .FAIL                   ; No later event is consumed on expression failure.
+        JR .FAIL                   ; No later event is consumed on expression failure.
 .EXPR_OK:
         LD A,(ST_ISDEF)             ; Definitions do not count as body expressions.
         OR A
-        JP NZ,.WAS_DEF
+        JR NZ,.WAS_DEF
         XOR A                      ; The first ordinary expression seals definitions.
         LD (ST_BDEF),A
         LD (ST_VALUE),HL           ; Save the expression result before reading ahead.
@@ -121,13 +121,13 @@ CMD_BODY:
         LD (ST_EXPRS),A
         CALL REC_NEXT              ; The next event distinguishes final from non-final.
         JR NC,.NEXT_OK
-        JP .FAIL                   ; The expression result is discarded on source failure.
+        JR .FAIL                   ; The expression result is discarded on source failure.
 .NEXT_OK:
         CP 2                       ; A close leaves the preceding expression final.
-        JP Z,.FINAL                ; Leave tail wrappers intact for the final value.
+        JR Z,.FINAL                ; Leave tail wrappers intact for the final value.
         OR A                       ; EOF cannot terminate a body.
         JR NZ,.MORE
-        JP .FAIL                   ; Reject an incomplete body.
+        JR .FAIL                   ; Reject an incomplete body.
 .MORE:
         LD (ST_EVENT),A            ; Save the next expression while rewriting candidates.
         LD (ST_EVVAL),HL           ; Preserve its payload across EM_PLAIN.
@@ -137,9 +137,9 @@ CMD_BODY:
         LD (ST_EVTAG),A
         CALL EM_PLAIN              ; Non-final tail calls become ordinary calls.
         JR NC,.FIXED
-        JP .FAIL
+        JR .FAIL
 .FIXED:
-        JP .EXPR                  ; Compile the saved next event without rereading.
+        JR .EXPR                  ; Compile the saved next event without rereading.
 .WAS_DEF:
         JP .READ                   ; Continue through the leading definition region.
 .FINAL:

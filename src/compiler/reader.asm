@@ -142,7 +142,7 @@ RD_NEXT:
     LD (HL),C               ; Publish the pending list or quote state.
     INC A                   ; One more structural frame is now active.
     LD (RD_DEPTH),A         ; Record the new depth.
-    JP RD_OK                  ; Return the open or quote event.
+    JR RD_OK                  ; Return the open or quote event.
 
 ; Close only a list with no missing dotted-tail datum.
 .CLOSE:
@@ -155,7 +155,7 @@ RD_NEXT:
     DEC A                   ; The enclosing frame becomes the new top.
     LD (RD_DEPTH),A         ; Publish the reduced structural depth.
     CALL RD_DATUM              ; The completed list may finish enclosing quotes.
-    JP RD_OK                  ; Emit its close event.
+    JR RD_OK                  ; Emit its close event.
 
 ; A dot requires at least one completed element and no previous dot.
 .DOT:
@@ -163,7 +163,7 @@ RD_NEXT:
     CP 1                    ; Only an ordinary nonempty list permits a dot.
     JR NZ,RD_BAD            ; Reject bare dots, leading dots and repeated dots.
     LD (HL),3               ; This list now requires exactly one tail datum.
-    JP RD_OK                  ; Expose the separator to the consuming compiler.
+    JR RD_OK                  ; Expose the separator to the consuming compiler.
 
 ; Return A=top state and HL=its address, or A=FF when the stack is empty.
 RD_TOP:
@@ -207,9 +207,9 @@ RD_DATUM:
 RD_EOF:
     LD A,(RD_DEPTH)         ; Check for unfinished structure at lexical EOF.
     OR A                    ; Zero means the source ended between datums.
-    JP Z,RD_EOFOK            ; A complete source ends between datums.
+    JR Z,RD_EOFOK            ; A complete source ends between datums.
     CALL LX_MARK             ; Refresh the location to the actual EOF cursor.
-    JP RD_BAD                ; Report incomplete structure at the EOF location.
+    JR RD_BAD                ; Report incomplete structure at the EOF location.
 RD_EOFOK:
     LD A,1                  ; Record terminal successful EOF.
     LD (RD_ENDED),A         ; Further calls need not invoke the source.

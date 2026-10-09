@@ -132,7 +132,7 @@ ASO_COM:
         OR A
         SBC HL,DE
         JP NZ,.BAD                 ; Reject gaps, overlaps and descending images.
-        JP .BOUNDS
+        JR .BOUNDS
 .PATCH:
         LD A,(ASO_LEN)
         CP 3
@@ -206,7 +206,7 @@ ASO_COM:
 .COPY:
         LD A,(ASO_LEN)
         OR A
-        JP Z,.REC_DONE
+        JR Z,.REC_DONE
         CALL .READ                 ; Read the payload even when it is out of range.
         JP C,.BAD
         LD (ST_BYTE),A             ; Keep the byte while comparing its address.
@@ -271,14 +271,14 @@ ASO_COM:
         CP B
         JP NZ,.BAD
         CALL .END_WORD             ; Compare the final-cursor low word.
-        JP C,.BAD
-        JP NZ,.BAD                 ; Both END words describe the same image.
+        JR C,.BAD
+        JR NZ,.BAD                 ; Both END words describe the same image.
         CALL .READ                 ; Read the final-cursor endpoint top byte.
-        JP C,.BAD
+        JR C,.BAD
         LD B,A
         LD A,(ASO_TOP)
         CP B
-        JP NZ,.BAD
+        JR NZ,.BAD
         CALL CPM_ENDR              ; A clean close completes this replay pass.
         RET C
         XOR A
@@ -288,32 +288,32 @@ ASO_COM:
 .MAGIC:
         LD A,'A'
         CALL .EXPECT
-        JP C,.BAD
-        JP NZ,.BAD
+        JR C,.BAD
+        JR NZ,.BAD
         LD A,'S'
         CALL .EXPECT
-        JP C,.BAD
-        JP NZ,.BAD
+        JR C,.BAD
+        JR NZ,.BAD
         LD A,'O'
         CALL .EXPECT
-        JP C,.BAD
-        JP NZ,.BAD
+        JR C,.BAD
+        JR NZ,.BAD
         LD A,1
         CALL .EXPECT
-        JP C,.BAD
-        JP NZ,.BAD
+        JR C,.BAD
+        JR NZ,.BAD
         XOR A
         CALL .EXPECT
-        JP C,.BAD
-        JP NZ,.BAD
+        JR C,.BAD
+        JR NZ,.BAD
         LD A,1
         CALL .EXPECT
-        JP C,.BAD
-        JP NZ,.BAD
+        JR C,.BAD
+        JR NZ,.BAD
         XOR A
         CALL .EXPECT               ; The current emitter uses zero fill.
-        JP C,.BAD
-        JP NZ,.BAD
+        JR C,.BAD
+        JR NZ,.BAD
         XOR A
         RET
 

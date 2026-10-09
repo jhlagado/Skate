@@ -82,7 +82,7 @@ CMD_FORM:
         LD DE,K_CALLEC             ; Compare with the bounded escape form.
         CALL CMD_SAME              ; call/ec receives one procedure expression.
         JP Z,CALL_EC
-        JP .NAMED                  ; Other names are ordinary procedure values.
+        JR .NAMED                  ; Other names are ordinary procedure values.
 
 ; Compile a computed operator list and continue with its argument sequence.
 .COMPUTED:

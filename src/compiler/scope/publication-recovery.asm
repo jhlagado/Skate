@@ -19,29 +19,29 @@ PUB_SWAP:
         LD A,1                     ; Bit zero records an old legacy-object recovery file.
         LD (PUB_BIT),A             ; .SAVE uses this bit after a successful rename.
         CALL .SAVE                 ; Move a previous legacy object aside when it exists.
-        JP C,.FAIL                 ; Restore anything moved before reporting failure.
+        JR C,.FAIL                 ; Restore anything moved before reporting failure.
         LD A,'C'                   ; Select the COM output class.
         LD (PUB_KIND),A            ; Keep the class across CP/M calls.
         LD A,2                     ; Bit one records an old COM recovery file.
         LD (PUB_BIT),A             ; .SAVE uses this bit after a successful rename.
         CALL .SAVE                 ; Move the previous COM aside when it exists.
-        JP C,.FAIL                 ; Restore the legacy output if this move fails.
+        JR C,.FAIL                 ; Restore the legacy output if this move fails.
         LD A,'A'                   ; Select the ASO output class.
         LD (PUB_KIND),A            ; Keep the class across CP/M calls.
         LD A,4                     ; Bit two records an old ASO recovery file.
         LD (PUB_BIT),A             ; .SAVE uses this bit after a successful rename.
         CALL .SAVE                 ; Move the previous ASO aside when it exists.
-        JP C,.FAIL                 ; Restore earlier outputs if this move fails.
+        JR C,.FAIL                 ; Restore earlier outputs if this move fails.
         LD A,'C'                   ; Install the staged COM next.
         LD (PUB_KIND),A            ; Select CBS to COM for PUB_MOVE.
         CALL PUB_MOVE             ; Rename the complete COM stage.
-        JP C,.FAIL                 ; Remove COM and restore the old generation.
+        JR C,.FAIL                 ; Remove COM and restore the old generation.
         LD A,2                     ; Mark the installed COM for rollback.
         CALL PUB_MARK            ; Add this bit to the installation mask.
         LD A,'A'                   ; Install the staged ASO last.
         LD (PUB_KIND),A            ; Select SPL to ASO for PUB_MOVE.
         CALL PUB_MOVE             ; Rename the complete ASO stage.
-        JP C,.FAIL                 ; Remove installed files and restore the old set.
+        JR C,.FAIL                 ; Remove installed files and restore the old set.
         LD A,4                     ; Mark the installed ASO for rollback.
         CALL PUB_MARK            ; Add this bit to the installation mask.
         CALL PUB_DROP             ; Remove old recovery names after all installs.
@@ -63,14 +63,14 @@ PUB_SWAP:
         CALL PUB_OUT               ; Build the selected final FCB in PUB_FCB.
         LD HL,PUB_FCB              ; Point CPM_OPEN at the final output.
         CALL CPM_OPEN              ; A carry means that this output is absent.
-        JP C,.ABSENT             ; An absent old output needs no recovery record.
+        JR C,.ABSENT             ; An absent old output needs no recovery record.
         CALL CPM_ENDR              ; Close the successful existence probe.
-        JP C,.SAVE_BAD            ; Do not rename when the probe close failed.
+        JR C,.SAVE_BAD            ; Do not rename when the probe close failed.
         CALL PUB_KEEP             ; Copy the final basename and choose a recovery suffix.
         LD HL,PUB_FCB              ; The old final remains the rename source.
         LD DE,PUB_DST              ; PUB_DST contains the recovery destination.
         CALL CPM_REN                ; Move the old output out of the final name.
-        JP C,.SAVE_BAD            ; The caller rolls back earlier moves.
+        JR C,.SAVE_BAD            ; The caller rolls back earlier moves.
         LD A,(PUB_BIT)             ; Recover the bit assigned to this output class.
         LD B,A                     ; Keep that bit while loading the old mask.
         LD A,(PUB_OLD)             ; Read the outputs already moved to recovery names.
@@ -88,9 +88,9 @@ PUB_HEAL:
         CALL PUB_PREV              ; Build the selected recovery FCB in PUB_FCB.
         LD HL,PUB_FCB              ; Point CPM_OPEN at the recovery output.
         CALL CPM_OPEN              ; A carry means that there is nothing to restore.
-        JP C,.ABSENT             ; Continue when this class has no recovery file.
+        JR C,.ABSENT             ; Continue when this class has no recovery file.
         CALL CPM_ENDR              ; Close the successful recovery existence probe.
-        JP C,.FAIL                ; Keep the recovery file when close fails.
+        JR C,.FAIL                ; Keep the recovery file when close fails.
         LD A,(PUB_KIND)            ; Preserve the selected class across stage probes.
         PUSH AF                    ; PUB_ANY selects each class while probing.
         CALL PUB_ANY               ; Determine whether an interrupted install remains.
@@ -98,16 +98,16 @@ PUB_HEAL:
         LD (PUB_KIND),A            ; Name the selected final and recovery files again.
         LD A,(PUB_ROLL)            ; A rollback in this process always restores old data.
         OR A                       ; Do not classify a failed rollback as stale cleanup.
-        JP NZ,.RESTORE              ; Preserve the recovery file until it is restored.
+        JR NZ,.RESTORE              ; Preserve the recovery file until it is restored.
         LD A,(PUB_LIVE)            ; A set flag means that a stage still exists.
         OR A                       ; Select restoration for an incomplete transaction.
-        JP NZ,.RESTORE              ; Restore the old file before staging a new one.
+        JR NZ,.RESTORE              ; Restore the old file before staging a new one.
         CALL PUB_DEST           ; Build the selected final FCB in PUB_DST.
         LD HL,PUB_DST              ; Probe the final installed by a completed run.
         CALL CPM_OPEN              ; A missing final means that restoration is required.
-        JP C,.RESTORE                ; Restore the recovery file into its missing final.
+        JR C,.RESTORE                ; Restore the recovery file into its missing final.
         CALL CPM_ENDR              ; Close the final existence probe.
-        JP C,.FAIL                ; Preserve both files when the close failed.
+        JR C,.FAIL                ; Preserve both files when the close failed.
         CALL PUB_PREV              ; Rebuild the recovery name after CPM_OPEN changed it.
         LD HL,PUB_FCB              ; Point CPM_ERA at the stale recovery file.
         CALL CPM_ERA               ; The new final is already the committed generation.
@@ -116,13 +116,13 @@ PUB_HEAL:
         CALL PUB_DEST           ; Build the final destination in PUB_DST.
         LD HL,PUB_DST              ; Point CPM_ERA at any partial new final.
         CALL CPM_ERA               ; CP/M treats an absent final as a successful delete.
-        JP C,.FAIL                ; Do not overwrite an uncertain directory entry.
+        JR C,.FAIL                ; Do not overwrite an uncertain directory entry.
         CALL PUB_PREV              ; Rebuild the recovery source in PUB_FCB.
         CALL PUB_DEST           ; Rebuild the final destination in PUB_DST.
         LD HL,PUB_FCB              ; Point CPM_REN at the recovery source.
         LD DE,PUB_DST              ; Point CPM_REN at the final destination.
         CALL CPM_REN                ; Restore the previous generation by name.
-        JP C,.FAIL                ; Leave recovery in place when restoration fails.
+        JR C,.FAIL                ; Leave recovery in place when restoration fails.
 .ABSENT:
         XOR A                      ; A missing recovery file is normal.
         RET                        ; Continue recovery for the other output classes.

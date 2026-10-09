@@ -38,7 +38,7 @@ DEF_BODY:
         CALL REC_NEXT              ; A name is either a variable or a header list.
         JP C,ERR_BAD
         CP 1
-        JP Z,DEF_PROC              ; Procedure-definition shorthand.
+        JR Z,DEF_PROC              ; Procedure-definition shorthand.
         CP 5
         JP NZ,ERR_NAME
         LD (ST_SYMID),HL
@@ -57,7 +57,7 @@ DEF_BODY:
         LD A,(ST_SLOT)
         PUSH AF
         CALL LET_INIT              ; Initializers run before the body expression.
-        JP C,.INIT_BAD
+        JR C,.INIT_BAD
         POP AF
         LD (ST_SLOT),A
         LD A,(ST_SLOT)
@@ -137,21 +137,21 @@ DEF_PROC:
         JR .FORMAL
 .REST:
         CALL REC_NEXT               ; Read the dotted rest name.
-        JP C,.UNWIND
+        JR C,.UNWIND
         CP 5
-        JP NZ,.UNWIND
+        JR NZ,.UNWIND
         LD (ST_SYMID),HL
         CALL CAP_REST               ; Add the rest binding after fixed formals.
-        JP C,.UNWIND
+        JR C,.UNWIND
         CALL REC_NEXT               ; The rest name must be followed by the close.
-        JP C,.UNWIND
+        JR C,.UNWIND
         CP 2
-        JP NZ,.UNWIND
+        JR NZ,.UNWIND
 .CLOSURE:
         CALL CAP_META               ; Publish the rest policy and its local slot.
-        JP C,.UNWIND
+        JR C,.UNWIND
         CALL LAM_MAKE               ; Build the closure without a body jump yet.
-        JP C,.UNWIND
+        JR C,.UNWIND
         LD A,(ST_DSLOT)             ; Store the closure in the definition's cell.
         LD L,A
         LD A,(ST_INPKG)
@@ -159,15 +159,15 @@ DEF_PROC:
         JR Z,.LOCAL
         XOR A                       ; Kind zero denotes a package-global cell.
         CALL EM_STORE
-        JP C,.UNWIND
+        JR C,.UNWIND
         JR .STORED
 .LOCAL:
         LD A,1                      ; Kind one denotes an enclosing local cell.
         CALL EM_STORE
-        JP C,.UNWIND
+        JR C,.UNWIND
 .STORED:
         CALL EM_JP                  ; Skip the procedure body during definition.
-        JP C,.UNWIND
+        JR C,.UNWIND
         LD (ST_SKIP),HL
         LD HL,(ST_PC)
         LD (ST_PBODY),HL
@@ -178,15 +178,15 @@ DEF_PROC:
         LD A,1
         LD (ST_ALONE),A
         CALL CMD_BODY
-        JP C,.BODY_BAD
+        JR C,.BODY_BAD
         POP AF
         LD (ST_ALONE),A
         CALL EM_PRET
-        JP C,.UNWIND
+        JR C,.UNWIND
         CALL PROC_END
-        JP C,.UNWIND
+        JR C,.UNWIND
         CALL CAP_POP
-        JP C,DEF_FAIL
+        JR C,DEF_FAIL
         LD A,1
         LD (ST_ISDEF),A
         LD (ST_BDEF),A

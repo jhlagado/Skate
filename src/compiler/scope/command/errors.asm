@@ -14,19 +14,19 @@ ERR_BAD:
 ERR_END:
         LD HL,M_END
         LD (ST_ERROR),HL
-        JP ERR_BAD
+        JR ERR_BAD
 ERR_OP:
         LD HL,M_OP
         LD (ST_ERROR),HL
-        JP ERR_BAD
+        JR ERR_BAD
 ERR_DEF:
         LD HL,M_DEF
         LD (ST_ERROR),HL
-        JP ERR_BAD
+        JR ERR_BAD
 ERR_NAME:
         LD HL,M_DEFNAM
         LD (ST_ERROR),HL
-        JP ERR_BAD
+        JR ERR_BAD
 ERR_TODO:
         LD HL,M_UNSUP
         LD (ST_ERROR),HL

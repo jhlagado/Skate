@@ -32,7 +32,7 @@ QUO_TICK:
         CALL REC_NEXT              ; Read the datum following the prefix.
         RET C                      ; Preserve a reader failure.
         CP 3                       ; A second apostrophe is a quoted symbol.
-        JP Z,QUO_NEST              ; Preserve it as (quote datum).
+        JR Z,QUO_NEST              ; Preserve it as (quote datum).
         JP QUO_DATA                ; Emit the quoted value directly.
 
 ; Quoted lists are compiled as data: CALL QT_BUILD, the cache and end words,
@@ -92,7 +92,7 @@ QUO_NEST:
         RET C
         CALL .ENCODE
         RET C
-        JP QUO_FOOT
+        JR QUO_FOOT
 .ENCODE:
         LD A,QUO_LIST
         CALL SINK_PUT
@@ -127,7 +127,7 @@ QUO_DATA:
         CP 11                      ; #( starts a vector.
         JP Z,.VECTOR
         CP 3                       ; Quoted shorthand inside data is a pair.
-        JP Z,QUO_NEST              ; Construct (quote datum) without collapsing it.
+        JR Z,QUO_NEST              ; Construct (quote datum) without collapsing it.
         JP ERR_BAD                 ; Close, dot and EOF are invalid datum starts.
 .NUMBER:
         LD A,(QUO_ENC)

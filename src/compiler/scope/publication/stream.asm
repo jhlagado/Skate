@@ -32,15 +32,15 @@ PUB_ASO:
 ; Replay ASO into the COM stage, then publish the checked pair.
 PUB_MAIN:
         CALL PUB_ASO               ; Build and close the temporary ASO stage.
-        JP C,.FAIL                 ; Preserve the old outputs on ASO failure.
+        JR C,.FAIL                 ; Preserve the old outputs on ASO failure.
         CALL PUB_CBS               ; Build the temporary COM FCB name.
         LD HL,PUB_FCB              ; Point CPM_MAKE at the temporary COM.
         CALL CPM_MAKE              ; Create a fresh stage file.
-        JP C,.FAIL                 ; Leave the completed ASO stage untouched.
+        JR C,.FAIL                 ; Leave the completed ASO stage untouched.
         CALL ASO_COM                ; Replay every ASO window into the COM stage.
-        JP C,.FAIL                 ; Close and abandon a failed replay.
+        JR C,.FAIL                 ; Close and abandon a failed replay.
         CALL CPM_ENDW              ; Flush and close the COM stage.
-        JP C,.FAIL                 ; A close failure prevents replacement.
+        JR C,.FAIL                 ; A close failure prevents replacement.
         JP PUB_SWAP                ; Replace the COM and ASO outputs through recovery names.
 .FAIL:
         CALL CPM_ENDW              ; Close any open stage and flush no bad bytes.

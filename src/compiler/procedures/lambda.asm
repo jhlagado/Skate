@@ -18,7 +18,7 @@ LAM_FORM:
         LD (ST_SYMID),HL           ; Preserve the all-rest name for slot allocation.
         CALL CAP_REST           ; Add the name as the procedure's rest binding.
         JP C,LAM_FAIL              ; Duplicate or exhausted locals are source errors.
-        JP .BODY                   ; The body follows the scalar rest name directly.
+        JR .BODY                   ; The body follows the scalar rest name directly.
 .FORMAL:
         CALL REC_NEXT              ; Read a parameter name or the list close.
         JP C,LAM_FAIL              ; Restore the enclosing scope before returning.
@@ -62,7 +62,7 @@ LAM_FORM:
         CALL LAM_HEAD              ; Emit the closure value and jump-over branch.
         LD HL,(ST_PC)
         LD (ST_PBODY),HL           ; The body starts immediately after the prefix.
-        JP C,LAM_FAIL              ; Preserve an output or metadata failure.
+        JR C,LAM_FAIL              ; Preserve an output or metadata failure.
         LD A,1                     ; A lambda body is always a tail context.
         LD (ST_TAIL),A             ; CMD_BODY passes this to its final expression.
         LD A,(ST_ALONE)            ; Preserve the enclosing body's isolation mode.
@@ -70,14 +70,14 @@ LAM_FORM:
         LD A,1                     ; Its tail candidates belong to this procedure.
         LD (ST_ALONE),A            ; Ask CMD_BODY for a private candidate list.
         CALL CMD_BODY              ; Compile expressions through the lambda close.
-        JP C,LAM_QUIT              ; Restore isolation state before unwinding.
+        JR C,LAM_QUIT              ; Restore isolation state before unwinding.
         POP AF                     ; Recover the enclosing body's isolation mode.
         LD (ST_ALONE),A            ; Restore it before compiling the outer form.
         CALL EM_PRET                ; A normal body returns its final A:HL value.
-        JP C,LAM_FAIL              ; The return byte itself is bounded output.
+        JR C,LAM_FAIL              ; The return byte itself is bounded output.
         CALL PROC_END              ; Save body address and patch the jump-over.
-        JP C,LAM_FAIL              ; Preserve the descriptor-layout failure.
-        JP LAM_DONE                ; Restore the enclosing scope and return closure.
+        JR C,LAM_FAIL              ; Preserve the descriptor-layout failure.
+        JR LAM_DONE                ; Restore the enclosing scope and return closure.
 
 ; Save local cursors and select the newly-created procedure as owner.
 LAM_OPEN:
@@ -145,4 +145,4 @@ LAM_FAIL:
 LAM_QUIT:
         POP AF                     ; Remove the saved enclosing isolation mode.
         LD (ST_ALONE),A            ; Restore it before unwinding the scope frame.
-        JP LAM_FAIL                ; Share the ordinary lambda failure path.
+        JR LAM_FAIL                ; Share the ordinary lambda failure path.

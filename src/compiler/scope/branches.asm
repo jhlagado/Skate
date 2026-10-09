@@ -5,7 +5,7 @@ CMD_END:
         CALL REC_NEXT              ; The enclosing form must close now.
         RET C                      ; Preserve a source read failure.
         CP 2                       ; Event kind two is a closing parenthesis.
-        JP NZ,.BAD                  ; Reject a missing or overlong form.
+        JR NZ,.BAD                  ; Reject a missing or overlong form.
         XOR A                      ; Carry clear reports a complete form.
         RET                        ; Return to the caller with its value intact.
 
@@ -126,7 +126,7 @@ BR_IFEND:
 
 ; Patch the current if false jump to the absolute address in HL.
 BR_ELSE:
-        JP BR_FALSE              ; The false and end paths share address math.
+        JR BR_FALSE              ; The false and end paths share address math.
 
 ; Patch the current if end jump to the absolute address in HL.
 BR_JOIN:

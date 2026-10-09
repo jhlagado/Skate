@@ -13,7 +13,7 @@ LIT_ADD:
         LD H,A
         LD A,(LIT_KIND)
         CP 4
-        JP Z,.SYMBOL
+        JR Z,.SYMBOL
 
 ; String descriptor: four bytes per identity and an arbitrary byte length.
         LD D,H
@@ -31,7 +31,7 @@ LIT_ADD:
         LD (LIT_LEN),A
         LD DE,W_STRBUF
         LD (LIT_POOL),DE
-        JP .SPELL
+        JR .SPELL
 
 ; Symbol descriptor: three bytes per identity and a one-byte length.
 .SYMBOL:
@@ -105,7 +105,7 @@ LIT_ADD:
         LD A,(LIT_CNT)
         INC A
         LD (LIT_CNT),A
-        JP .POINTER
+        JR .POINTER
 
 ; Find an existing literal with the same runtime kind and copied spelling.
 ; LIT_IDX returns the matching record, or the next free index on a miss.
@@ -226,7 +226,7 @@ LIT_EMIT:
 .RECORD:
         LD A,(LIT_STOP)
         OR A
-        JP Z,.SYMBOLS
+        JR Z,.SYMBOLS
         LD A,(LIT_IDX)
         CALL LIT_REC
         LD E,(HL)
@@ -250,7 +250,7 @@ LIT_EMIT:
 .BYTE:
         LD A,(LIT_LEFT)
         OR A
-        JP Z,.BASE
+        JR Z,.BASE
         LD HL,(LIT_SRCP)
         LD A,(HL)
         INC HL
@@ -260,7 +260,7 @@ LIT_EMIT:
         LD A,(LIT_LEFT)
         DEC A
         LD (LIT_LEFT),A
-        JP .BYTE
+        JR .BYTE
 .BASE:
         LD A,(LIT_IDX)
         CALL LIT_OUT
@@ -275,7 +275,7 @@ LIT_EMIT:
         LD B,A
         LD A,(LIT_IDX)
         CP B
-        JP C,.RECORD
+        JR C,.RECORD
 .SYMBOLS:
         CALL .SYM_DIR              ; Publish a pointer directory for symbol literals.
         RET C

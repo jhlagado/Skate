@@ -269,7 +269,7 @@ BIND_SET:
         CALL REC_NEXT              ; Read the target binding name.
         RET C                      ; Preserve source failure.
         CP 5                       ; A mutation target must be an identifier.
-        JP NZ,.BAD_NAME             ; Reject a literal or nested list target.
+        JR NZ,.BAD_NAME             ; Reject a literal or nested list target.
         LD (ST_SYMID),HL           ; Preserve the target identity across lookup.
         CALL .TARGET                ; Select the local or global storage slot.
         RET C                      ; An unknown or full binding table is terminal.

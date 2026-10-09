@@ -48,7 +48,7 @@ LX_HASH:  CALL LX_TAKE       ; Consume the next hash-selector or character byte.
         JR NZ,.NAMED     ; Other lengths must exactly match a supported name.
         LD A,(LX_BUF)    ; Check the selector before interpreting the remaining bytes.
         CP 120           ; Hex characters use lowercase x; tab is a name.
-        JP NZ,.NAMED
+        JR NZ,.NAMED
         LD A,(LX_BUF+1)  ; Fetch the high hex digit from the buffered name.
         CALL LX_HEX        ; Reduce an ASCII hex digit to a checked nibble.
         RLCA             ; Move the high nibble toward its final four high bits.

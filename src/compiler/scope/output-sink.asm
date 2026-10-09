@@ -105,7 +105,7 @@ SINK_FIX:
         SBC HL,DE
         JR C,.WRITE
         JR Z,.WRITE
-        JP .FULL
+        JR .FULL
 .WRITE:
         LD A,2                     ; ASO record kind two denotes PATCH.
         CALL CPM_PUT

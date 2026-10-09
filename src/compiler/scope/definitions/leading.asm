@@ -15,7 +15,7 @@ DEF_TOP:
         CALL REC_NEXT              ; Read the new global's symbol name.
         RET C                      ; Propagate source failure before allocation.
         CP 1                       ; An opening list selects procedure shorthand.
-        JP Z,.PROC                 ; The header list supplies the procedure name.
+        JR Z,.PROC                 ; The header list supplies the procedure name.
         CP 5                       ; Definitions require one identifier.
         JP NZ,ERR_NAME             ; A list or literal is not a binding name.
         LD (ST_SYMID),HL           ; Preserve the full identity across the initializer.
@@ -71,7 +71,7 @@ DEF_LEAD:
         LD (ST_RTOP),A
         LD A,(ST_BMODE)
         CP 2
-        JP NZ,.FORMALS
+        JR NZ,.FORMALS
         LD A,(ST_LETLO)
         LD (ST_DEFLO),A            ; Let bindings and definitions share one scope.
         JR .STATE
@@ -93,9 +93,9 @@ DEF_LEAD:
         JP C,.FAIL
         LD A,(ST_EVENT)
         CP 2                       ; A close is an empty or definition-only body.
-        JP Z,.CAPTURED
+        JR Z,.CAPTURED
         CP 1                       ; Every body form starts with an opening list.
-        JP NZ,.CAPTURED            ; A scalar body form needs only one replay event.
+        JR NZ,.CAPTURED            ; A scalar body form needs only one replay event.
         LD A,1
         LD (ST_NEST),A
         CALL REC_NEXT              ; The operator identifies a definition form.
@@ -104,13 +104,13 @@ DEF_LEAD:
         JP C,.FAIL
         LD A,(ST_EVENT)
         CP 5
-        JP NZ,.CAPTURED            ; Computed operators are ordinary body forms.
+        JR NZ,.CAPTURED            ; Computed operators are ordinary body forms.
         LD DE,K_DEFINE
         CALL CMD_SAME
         JR Z,.DEFINE
         XOR A
         LD (ST_LEAD),A
-        JP .CAPTURED               ; Let the normal body parser read the rest.
+        JR .CAPTURED               ; Let the normal body parser read the rest.
 .DEFINE:
         LD A,1
         LD (ST_LEAD),A
@@ -137,7 +137,7 @@ DEF_LEAD:
         JR NZ,.SKIP
         LD A,(ST_LEAD)
         OR A
-        JP NZ,.FORM               ; Keep buffering another leading definition.
+        JR NZ,.FORM               ; Keep buffering another leading definition.
 .CAPTURED:
         LD A,(ST_PLAY)
         OR A
@@ -179,7 +179,7 @@ DEF_LEAD:
         JP NZ,.DECLARED
         LD DE,K_DEFINE
         CALL CMD_SAME
-        JP NZ,.DECLARED
+        JR NZ,.DECLARED
         CALL REC_NEXT              ; A variable name or shorthand header follows.
         RET C
         CP 1
@@ -218,7 +218,7 @@ DEF_LEAD:
         LD (ST_LEADS),A
         CALL .DEF_SKIP              ; Skip the rest of this definition form.
         RET C
-        JP .NEXT_DEF
+        JR .NEXT_DEF
 
 ; Return carry when ST_SYMID is already active in the current definition scope.
 .DUP_CHK:
@@ -240,7 +240,7 @@ DEF_LEAD:
         INC HL
         LD A,(ST_SYMID+1)
         CP (HL)
-        JP Z,.DUP_YES
+        JR Z,.DUP_YES
         DEC HL
 .DUP_NEXT:
         INC HL

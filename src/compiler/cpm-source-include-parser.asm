@@ -49,14 +49,14 @@ INC_SCAN:
         LD (INC_ARG),A                 ; Two means at least one name is complete.
         JR .ARGS                       ; More filenames may follow in this form.
 .ARG_END:
-        JP .BAD                         ; EOF or a physical read failure is malformed.
+        JR .BAD                         ; EOF or a physical read failure is malformed.
 .CLOSE:
         LD A,(INC_ARG)
         OR A
         JR Z,.BAD                      ; Empty include forms are not accepted.
         LD HL,(INC_POS)
         LD (INC_END),HL                ; Blank this form when the part is streamed.
-        JP .FORM
+        JR .FORM
 .EMPTY: LD A,(SRC_ERR)                ; A read error is not a clean empty source.
         OR A
         JR NZ,.BAD
@@ -230,7 +230,7 @@ INC_ADD:  LD A,(SRC_CNT)               ; Build the candidate in the next slot;
         JR .NEXT
 .LETTER:
         CALL .UPPER                     ; Return the checked uppercase byte in A.
-        JP C,.BAD
+        JR C,.BAD
         LD C,A                          ; Preserve the character during indexing.
         LD A,(INC_DOT)
         OR A
@@ -238,7 +238,7 @@ INC_ADD:  LD A,(SRC_CNT)               ; Build the candidate in the next slot;
         LD A,(INC_BASE)
         INC A
         CP 9
-        JP NC,.BAD
+        JR NC,.BAD
         LD (INC_BASE),A
         LD E,A
         DEC E
@@ -254,7 +254,7 @@ INC_ADD:  LD A,(SRC_CNT)               ; Build the candidate in the next slot;
 .EXT:   LD A,(INC_EXT)
         INC A
         CP 4
-        JP NC,.BAD
+        JR NC,.BAD
         LD (INC_EXT),A
         LD E,A
         DEC E
@@ -273,7 +273,7 @@ INC_ADD:  LD A,(SRC_CNT)               ; Build the candidate in the next slot;
         DJNZ .NAME
         LD A,(INC_BASE)
         OR A
-        JP Z,.BAD
+        JR Z,.BAD
         LD A,(SRC_CNT)
         LD B,A                          ; Compare against all prior prefixes.
         LD HL,SRC_SEEN                  ; HL walks prior slots.

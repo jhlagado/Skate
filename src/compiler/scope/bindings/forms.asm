@@ -111,40 +111,40 @@ LET_REC:
         CALL REC_OPEN               ; Save an enclosing replay before buffering.
         JP C,LET_FAIL               ; The replay-frame bound is explicit.
         CALL REC_KEEP              ; Retain the list while all names are installed.
-        JP C,.FAIL
+        JR C,.FAIL
         CALL REC_DECL              ; Make every recursive name visible to every initializer.
-        JP C,.FAIL
+        JR C,.FAIL
 .BINDING:
         CALL REC_NEXT              ; Read a binding or the container close.
-        JP C,.FAIL
+        JR C,.FAIL
         CP 2
         JR Z,.BODY
         CP 1
-        JP NZ,.FAIL
+        JR NZ,.FAIL
         CALL REC_NEXT              ; Every binding starts with one identifier.
-        JP C,.FAIL
+        JR C,.FAIL
         CP 5
-        JP NZ,.FAIL
+        JR NZ,.FAIL
         LD (ST_SYMID),HL           ; Preserve the complete name identity.
         CALL REC_SLOT              ; The replay prepass already installed this name.
-        JP C,.FAIL
+        JR C,.FAIL
         LD (ST_SLOT),A             ; The initializer store uses this slot.
         LD A,(ST_SLOT)
         PUSH AF
         CALL LET_INIT              ; All recursive names are visible here.
-        JP C,.INIT_BAD
+        JR C,.INIT_BAD
         POP AF
         LD (ST_SLOT),A
         CALL EM_PUSH               ; Keep the value uninstalled until all initializers finish.
-        JP C,.FAIL
+        JR C,.FAIL
         CALL CMD_END               ; Close this binding pair.
-        JP C,.FAIL
+        JR C,.FAIL
         JR .BINDING
 .BODY:
         CALL BIND_CHK              ; Reject names referenced but never declared.
-        JP C,.FAIL
+        JR C,.FAIL
         CALL REC_FILL              ; Install deferred values in reverse declaration order.
-        JP C,.FAIL
+        JR C,.FAIL
         CALL REC_POP                ; Resume the enclosing stream at the body.
         JP C,LET_FAIL               ; A missing replay frame is compiler corruption.
         CALL LET_BODY              ; Compile the body with all cells active.

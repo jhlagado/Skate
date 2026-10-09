@@ -41,7 +41,7 @@ EM_CALL:
         CALL SINK_PUT               ; Append the opcode.
         RET C                     ; Preserve a staged-output capacity failure.
         LD HL,(ST_WORD)           ; Restore the target word.
-        JP EM_WORD                ; Append it and return.
+        JR EM_WORD                ; Append it and return.
 
 ; Runtime helpers reached by RST 08H..30H, in vector order (see RST_SET).
 .VECTORS: DW ARG_PUSH,L_LOAD,PRIM_OP,QT_PUSH,G_OPSH,INV_OP
@@ -105,7 +105,7 @@ EM_PRIM:
         LD A,0FEH
         CALL SINK_PUT                 ; All primitive payloads use the reserved high byte.
         RET C
-        JP EM_ZERO
+        JR EM_ZERO
 
 ; Emit and save a predefined procedure on the runtime operator side stack.
 .SAVE:
@@ -126,7 +126,7 @@ EM_BOOL:
         LD L,A                    ; FE00H and FE01H distinguish the booleans.
         CALL EM_WORD              ; Append the payload word.
         RET C                     ; Preserve a staged-output capacity failure.
-        JP EM_ZERO
+        JR EM_ZERO
 
 ; Emit a byte character.  Characters share the scalar tag with booleans, but
 ; keep the FFxx payload so predicates can distinguish them from numbers.
@@ -138,7 +138,7 @@ EM_CHAR:
         LD HL,(ST_IMMED)          ; Recover the character payload.
         CALL EM_WORD              ; Append both payload bytes unchanged.
         RET C                     ; Preserve a staged-output capacity failure.
-        JP EM_ZERO
+        JR EM_ZERO
 
 ; Emit the canonical unspecified value (tag zero, payload FE04H).
 EM_VOID:
@@ -152,7 +152,7 @@ EM_IMM:
         RET C                     ; Preserve a staged-output capacity failure.
         CALL EM_WORD               ; Append the payload in little-endian order.
         RET C                     ; Preserve a staged-output capacity failure.
-        JP EM_ZERO
+        JR EM_ZERO
 
 ; Root the value in A:CHL and push it as a cell image.  The runtime collector
 ; uses the parallel records while a nested allocation is in progress.
@@ -229,12 +229,12 @@ EM_LOAD:
         CALL EM_ISPKG              ; Package-owned locals remain static.
         JR Z,.STATIC
         LD HL,L_LOAD               ; Load through the active environment map.
-        JP EM_SLOT
+        JR EM_SLOT
 .STATIC:
         LD A,(ST_FKIND)
         OR A
         LD HL,G_LOAD               ; Globals have fixed slots.
-        JP Z,EM_SLOT
+        JR Z,EM_SLOT
         LD A,21H                  ; LD HL,nn receives the slot address.
         CALL SINK_PUT               ; Append the load opcode.
         RET C
@@ -258,9 +258,9 @@ EM_STORE:
         LD HL,L_STORE              ; Store through the active environment map.
         LD A,(ST_CHECK)        ; Mutation selects the checked local helper.
         OR A
-        JP Z,EM_SLOT              ; Definitions use the initializing helper.
+        JR Z,EM_SLOT              ; Definitions use the initializing helper.
         LD HL,L_SET
-        JP EM_SLOT
+        JR EM_SLOT
 .STATIC:
         LD A,(ST_FKIND)
         OR A
@@ -268,7 +268,7 @@ EM_STORE:
         LD HL,G_STORE              ; Globals have fixed slots.
         LD A,(ST_CHECK)
         OR A
-        JP Z,EM_SLOT
+        JR Z,EM_SLOT
         LD HL,G_SET
         JP EM_SLOT
 .ADDRESS:
