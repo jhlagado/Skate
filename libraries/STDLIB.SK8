@@ -2,7 +2,8 @@
 ;
 ; Include this file with (include "STDLIB.SK8") before the program's own
 ; forms.  Procedures such as length, append, reverse, memq, assoc, equal?,
-; map and for-each are built into the runtime.
+; map, for-each, list-copy and the list, vector and string conversions are
+; built into the runtime.
 ;
 ; Loops are iterative so that long lists do not exhaust the native stack:
 ; results are built in reverse and then reversed once.
@@ -30,8 +31,6 @@
       default
       (fold-left f (car items) (cdr items))))
 
-(define (list-copy items) (append items '()))
-
 (define (last-pair items)
   (if (pair? (cdr items)) (last-pair (cdr items)) items))
 
@@ -43,35 +42,3 @@
     (if (< n 0)
         result
         (loop (- n 1) base (cons (+ base n) result)))))
-
-(define (list->vector items)
-  (let ((v (make-vector (length items))))
-    (let loop ((items items) (i 0))
-      (when (pair? items)
-        (vector-set! v i (car items))
-        (loop (cdr items) (+ i 1))))
-    v))
-
-(define (vector->list v)
-  (let loop ((i (- (vector-length v) 1)) (result '()))
-    (if (< i 0)
-        result
-        (loop (- i 1) (cons (vector-ref v i) result)))))
-
-(define (vector-fill! v x)
-  (let loop ((i 0))
-    (when (< i (vector-length v))
-      (vector-set! v i x)
-      (loop (+ i 1)))))
-
-(define (string->list s)
-  (let loop ((i (- (string-length s) 1)) (result '()))
-    (if (< i 0)
-        result
-        (loop (- i 1) (cons (string-ref s i) result)))))
-
-(define (list->string chars)
-  (let loop ((chars chars) (result ""))
-    (if (null? chars)
-        result
-        (loop (cdr chars) (string-append result (string (car chars)))))))

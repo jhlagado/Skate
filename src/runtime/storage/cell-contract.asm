@@ -30,7 +30,7 @@ META_LO       EQU 00FH              ; Metadata bits 3..0 stay reserved.
 
 ; Tag-zero payloads FE20H up to FE00H+PRIM_LIM (exclusive) are primitive
 ; procedures; the low byte less 20H is the zero-based primitive kind.
-PRIM_LIM       EQU 9FH
+PRIM_LIM       EQU 0A8H
 ARG_MAX        EQU 32                ; Records in the argument packet, ARG_PKT.
 
 ; Current logical tag values.  Tag zero is the scalar family; tag eight is the

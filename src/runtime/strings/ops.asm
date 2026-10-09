@@ -87,49 +87,66 @@ STR_COPY:
         CALL STR_MOVE
         JP STR_RET
 
-; Concatenate two literal or managed strings into one managed string.
+; Concatenate any number of literal or managed strings into one managed
+; string.  The packet keeps every argument rooted while the result is made.
 STR_JOIN:
         LD A,(ARG_CNT)
-        CP 2
-        JP NZ,ERROR
-        LD HL,ARG_PKT
-        CALL PKT_VAL
-        CALL STR_ARG
-        JP C,ERROR
-        LD (STR_LHS),HL
-        LD A,(HL)
-        LD (STR_LLEN),A
-        LD HL,ARG_PKT+4
-        CALL PKT_VAL
-        CALL STR_ARG
-        JP C,ERROR
-        LD (STR_RHS),HL
-        LD A,(HL)
-        LD (STR_RLEN),A
-        LD A,(STR_LLEN)
         LD B,A
-        LD A,(STR_RLEN)
-        ADD A,B
+        LD C,0                     ; C totals the lengths.
+        LD HL,ARG_PKT
+        OR A
+        JR Z,.ALLOC                ; (string-append) is the empty string.
+.SUM:
+        PUSH BC
+        PUSH HL
+        CALL PKT_VAL
+        CALL STR_ARG
+        JP C,ERROR
+        LD A,(HL)
+        POP HL
+        POP BC
+        ADD A,C
         JP C,ERROR                ; A result above 255 cannot fit the length byte.
+        LD C,A
+        INC HL
+        INC HL
+        INC HL
+        INC HL
+        DJNZ .SUM
+.ALLOC:
+        LD A,C
         LD (STR_LEN),A
         CALL STR_NEW
         JP C,ERROR
-        LD (STR_DST),HL
         LD A,(STR_LEN)
         LD (HL),A
         INC HL
         LD (STR_DSTP),HL
-        LD HL,(STR_LHS)
-        INC HL
-        LD (STR_SRCP),HL
-        LD A,(STR_LLEN)
-        CALL STR_MOVE
-        LD HL,(STR_RHS)
-        INC HL
-        LD (STR_SRCP),HL
+        LD HL,ARG_PKT
+        LD (STR_LHS),HL            ; The packet cursor.
+        LD A,(ARG_CNT)
+        LD (STR_RLEN),A            ; Strings still to copy.
+.COPY:
         LD A,(STR_RLEN)
+        OR A
+        JP Z,STR_RET
+        DEC A
+        LD (STR_RLEN),A
+        LD HL,(STR_LHS)
+        PUSH HL
+        CALL PKT_VAL
+        CALL STR_ARG
+        LD A,(HL)
+        INC HL
+        LD (STR_SRCP),HL
         CALL STR_MOVE
-        JP STR_RET
+        POP HL
+        INC HL
+        INC HL
+        INC HL
+        INC HL
+        LD (STR_LHS),HL
+        JR .COPY
 
 ; Validate a string argument and leave its length-prefixed address in HL.
 ; Literal strings are compiler-owned and tag five; managed strings are tag six.

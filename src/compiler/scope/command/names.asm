@@ -183,6 +183,15 @@ NAME_TAB:   DB 1,'+'+80H                        ; +
             DB 85,"ass",'v'+80H                 ; assv
             DB 126,"ma",'p'+80H                ; map
             DB 127,"for-eac",'h'+80H           ; for-each
+            DB 128,F_LIST,"->",F_VEC+80H      ; list->vector
+            DB 129,F_VEC,"->",F_LIST+80H      ; vector->list
+            DB 130,F_STR,"->",F_LIST+80H      ; string->list
+            DB 131,F_LIST,"->",F_STR+80H      ; list->string
+            DB 132,"make-",F_STR+80H          ; make-string
+            DB 133,F_STR,"-set",'!'+80H       ; string-set!
+            DB 134,F_VEC,"-fill",'!'+80H      ; vector-fill!
+            DB 135,F_LIST,"-cop",'y'+80H      ; list-copy
+            DB 136,F_STR,"->numbe",'r'+80H    ; string->number
 ; The fragments, numbered from one in the order of the equates above.
 NAME_FRG:
             DB "strin",'g'+80H

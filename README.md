@@ -23,19 +23,18 @@ The built-in procedures are:
 
 | Group | Procedures |
 | --- | --- |
-| Pairs and lists | `cons` `car` `cdr` `caar` … `cdddr` (two and three levels) `set-car!` `set-cdr!` `list` `length` `append` `reverse` `list-tail` `list-ref` `memq` `memv` `member` `assq` `assv` `assoc` `list?` `pair?` `null?` |
+| Pairs and lists | `cons` `car` `cdr` `caar` … `cdddr` (two and three levels) `set-car!` `set-cdr!` `list` `list-copy` `length` `append` `reverse` `list-tail` `list-ref` `memq` `memv` `member` `assq` `assv` `assoc` `list?` `pair?` `null?` |
 | Equivalence | `eq?` `eqv?` `equal?` |
-| Numbers | `+` `-` `*` `/` `quotient` `remainder` `modulo` `abs` `=` `<` `>` `<=` `>=` `zero?` `number?` `number->string` `min` `max` `gcd` `lcm` `expt` `sqrt` `floor` `ceiling` `truncate` `round` `exact->inexact` `inexact->exact` `exact` `inexact` `even?` `odd?` `positive?` `negative?` `exact?` `inexact?` `integer?` |
+| Numbers | `+` `-` `*` `/` `quotient` `remainder` `modulo` `abs` `=` `<` `>` `<=` `>=` `zero?` `number?` `number->string` `string->number` `min` `max` `gcd` `lcm` `expt` `sqrt` `floor` `ceiling` `truncate` `round` `exact->inexact` `inexact->exact` `exact` `inexact` `even?` `odd?` `positive?` `negative?` `exact?` `inexact?` `integer?` |
 | Characters | `char=?` `char<?` `char>?` `char<=?` `char>=?` `char-upcase` `char-downcase` `char-alphabetic?` `char-numeric?` `char-whitespace?` `char->integer` `integer->char` `char?` |
-| Strings and symbols | `string` `string-length` `string-ref` `string-copy` `string-append` `substring` `string=?` `string<?` `string>?` `string<=?` `string>=?` `symbol->string` `string->symbol` `string?` `symbol?` |
-| Vectors | `vector` `make-vector` `vector-length` `vector-ref` `vector-set!` `vector?` |
+| Strings and symbols | `string` `make-string` `string-length` `string-ref` `string-set!` `string-copy` `string-append` `substring` `string->list` `list->string` `string=?` `string<?` `string>?` `string<=?` `string>=?` `symbol->string` `string->symbol` `string?` `symbol?` |
+| Vectors | `vector` `make-vector` `vector-length` `vector-ref` `vector-set!` `vector-fill!` `vector->list` `list->vector` `vector?` |
 | Control and other | `apply` `map` `for-each` `not` `boolean?` `procedure?` `eof-object?` |
 | Input and output | `read` `read-char` `write` `display` `newline` `write-char`, the port procedures and the file openers |
 
 [`libraries/STDLIB.SK8`](libraries/STDLIB.SK8) adds
-`filter`, `fold-left`, `fold-right`, `reduce`, `list-copy`, `last-pair`,
-`iota`, `list->vector`, `vector->list`, `vector-fill!`, `string->list` and
-`list->string` in Skate itself. Including it adds several kilobytes of code, so a
+`filter`, `fold-left`, `fold-right`, `reduce`, `last-pair` and `iota` in
+Skate itself. Including it adds several kilobytes of code, so a
 program that needs only a few of them may be better off copying those.
 
 The compiler and runtime are written in Z80 assembly using the ATOM assembler.

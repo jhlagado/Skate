@@ -49,6 +49,8 @@ STD_DISP:
         DW STD_CXR,STD_CXR,STD_CXR,STD_CXR,STD_CXR      ; 118..122
         DW STD_CXR,STD_CXR                              ; 123..124
         DW STD_MAP,STD_EACH                             ; 125..126
+        DW STD_L2V,STD_V2L,STD_S2L,STD_L2S,STD_MKS      ; 127..131
+        DW STD_SSET,STD_VFIL,STD_LCPY,STD_S2N           ; 132..135
 
 ; ---- Packet and result helpers --------------------------------------------
 
@@ -646,15 +648,15 @@ STD_REV:
         LD A,1
         CALL PKT_NARG
         CALL PKT_ARG0
-        CALL .START
-        CALL .CONS_ALL
+        CALL STD_RINI
+        CALL STD_RALL
         LD HL,(STD_ACC)
         LD A,(STD_ATAG)
         PUSH IX
         RET
 
 ; Start a reversal of A:HL into an empty accumulator.
-.START:
+STD_RINI:
         LD (STD_LIST),HL
         LD (STD_LTAG),A
         LD HL,0FE02H
@@ -666,7 +668,7 @@ STD_REV:
 ; Cons each element of STD_LIST onto STD_ACC.  The list being read must be
 ; reachable from a root; the accumulator is a constructor input whenever a
 ; collection can run.
-.CONS_ALL:
+STD_RALL:
         LD A,(STD_LTAG)
         LD HL,(STD_LIST)
         CALL STD_NIL
@@ -691,7 +693,7 @@ STD_REV:
         CALL PAIR_NEW
         LD (STD_ACC),HL
         LD (STD_ATAG),A
-        JR .CONS_ALL
+        JR STD_RALL
 
 ; append copies every list but the last, which becomes the shared tail.  Each
 ; list is copied front to back, linking every new cell to the one before, so

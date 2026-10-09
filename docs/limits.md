@@ -73,7 +73,6 @@ which they should be dealt with.
 | Arguments in one call | 32 (`ARG_MAX`) | The runtime's 128-byte argument packet | `CAP` (pinned by `ARGS33`); the runtime also refuses a larger packet |
 | `apply` | The leading arguments and the list's elements together at most 32 | The same packet | `RUNTIME ERROR` (pinned by `APPCOUNT`) |
 | `vector`, `string`, `list` | At most 32 arguments | The packet | `CAP` at compile time |
-| `string-append` | Exactly 2 arguments | Implementation | `RUNTIME ERROR`; should accept any number |
 | Vector length | 64 elements | The largest closure-slab class | `RUNTIME ERROR`. Rework |
 | `call/ec` | One-shot escapes only, 8 active at once | `EC_TABLE`, 8 × 21 bytes | `RUNTIME ERROR` |
 | Character names | `#\space`, `#\newline`, `#\xHH`, or one printable byte | Lexer | `COMPILE ERROR`. `#\tab`, `#\return`, `#\null` and the other R7RS names are missing |
@@ -83,10 +82,11 @@ which they should be dealt with.
 | Quasiquote | Not supported | Design | `` ` `` and `,` are a `COMPILE ERROR` |
 | `include` | Only leading `(include "…")` forms | The include pre-pass reads only the head of a file | A later `include` is a `COMPILE ERROR` (pinned by `LATEINC`) |
 
-Procedures still missing from the standard set: `string->number`,
-`make-string`, `string-set!`, `string->list`, `list->string`,
-`list->vector`, `vector->list`, `vector-fill!`, `list-copy`, and a radix for
-`number->string`. Some are in `libraries/STDLIB.SK8`.
+`string->number` reads exact integers in radix 2, 8, 10 or 16 and gives `#f`
+for text that is not a number; a decimal point or an exponent is a `RUNTIME
+ERROR` until the runtime has a correctly rounded decimal parser (`S2NDEC`).
+`string-set!` refuses a literal string (`SSETLIT`). `list-copy` needs a proper
+list. `number->string` has no radix argument yet.
 
 ## 4. Format and CP/M limits
 
@@ -275,5 +275,9 @@ In order of value to a programmer:
 5. **One heap extent.** Done: the maps moved below the transient bands, so
    programs can be 41,472 bytes. Still to do: sizing the maps to the heap,
    and a stack that grows with the TPA.
-6. Long vectors, more file ports and escapes, `read` of long lists and
-   floats, and the missing standard procedures.
+6. **Missing standard procedures.** Done: `list->vector`, `vector->list`,
+   `string->list`, `list->string`, `make-string`, `string-set!`,
+   `vector-fill!`, `list-copy`, `string->number` (integers) and
+   `string-append` of any number of strings. Still to do: long vectors,
+   more file ports and escapes, `read` of long lists and floats, decimal
+   `string->number`, and the missing character names and `#` syntax.

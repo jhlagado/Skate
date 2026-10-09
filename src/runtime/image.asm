@@ -43,6 +43,7 @@
 ; their state or reach their code except through a primitive the compiler's
 ; pre-scan detects.
 %INCLUDE "primitives/standard.asm"
+%INCLUDE "primitives/convert.asm"
 %INCLUDE "primitives/numbers.asm"
 %INCLUDE "io-start.asm"
 %INCLUDE "../compiler/cpm-transport.asm"
