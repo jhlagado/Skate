@@ -40,7 +40,7 @@ LX_SKIP:  CALL LX_PEEK      ; One-byte lookahead owns callback clobbers.
         JP Z,LX_HASH       ; Dispatch the byte immediately after the hash.
         CALL LX_CTRL     ; Source controls cannot begin an ordinary token.
         CALL LX_ADD      ; Save the first ordinary token byte.
-.TOKEN: CALL LX_PEEK         ; Keep the terminator available to the next token request.
+LX_TOKEN: CALL LX_PEEK         ; Keep the terminator available to the next token request.
         JP C,LX_CLASS      ; EOF terminates an otherwise complete token.
         CALL LX_DELIM      ; Check whether the peeked byte belongs to the next token.
         JP Z,LX_CLASS      ; Classify the accumulated spelling before consuming a delimiter.
@@ -50,7 +50,7 @@ LX_SKIP:  CALL LX_PEEK      ; One-byte lookahead owns callback clobbers.
         CALL LX_TAKE       ; Consume a nondelimiter already known to fit.
         CALL LX_CTRL     ; Control bytes are invalid anywhere in a token.
         CALL LX_ADD      ; Append this raw token byte.
-        JR .TOKEN          ; Continue until a delimiter or EOF.
+        JR LX_TOKEN        ; Continue until a delimiter or EOF.
 ; Reject a control byte or DEL in A as malformed source; otherwise return.
 LX_CTRL: CP 32           ; Bytes below space are controls.
         JP C,LX_BAD      ; The error unwinds to LX_NEXT's caller.

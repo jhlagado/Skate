@@ -15,9 +15,15 @@ LX_HASH:  CALL LX_TAKE       ; Consume the next hash-selector or character byte.
         LD HL,0FE00H     ; Prepare false while preserving the comparison result.
         LD DE,LX_FALSE
         JP Z,.WORD       ; #f or #false.
-        CP 92            ; Otherwise only backslash character syntax is supported.
-        JP NZ,LX_BAD     ; Reject vectors, prefixes and other unsupported hash forms.
-        CALL LX_TAKE       ; Consume the next hash-selector or character byte.
+        CP 92            ; Backslash introduces a character.
+        JR Z,.CHAR1
+        LD B,A           ; Any other byte is a radix prefix, #b, #o, #d or
+        LD A,'#'         ; #x; the number parser checks it and reads the rest.
+        CALL LX_ADD
+        LD A,B
+        CALL LX_ADD
+        JP LX_TOKEN
+.CHAR1: CALL LX_TAKE       ; Consume the next hash-selector or character byte.
         JP C,LX_BAD      ; The hash or character prefix requires another source byte.
         CP 33            ; Raw characters must be printable, excluding whitespace.
         JP C,LX_BAD      ; Raw control bytes cannot appear in this literal position.

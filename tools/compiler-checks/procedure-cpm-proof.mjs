@@ -739,6 +739,7 @@ const integerRuntimeErrorCases = [
   ["STRREFW.SK8", '(string-ref "abc" 65536)', "RUNTIME ERROR\r\n"],
   ["SSETLIT.SK8", '(string-set! "abc" 0 #\\x)', "RUNTIME ERROR\r\n"],
   ["S2NBIG.SK8", '(string->number "8388608")', "RUNTIME ERROR\r\n"],
+  ["S2NHEX.SK8", '(string->number "800000" 16)', "RUNTIME ERROR\r\n"],
   ["L2SBAD.SK8", "(list->string '(1 2))", "RUNTIME ERROR\r\n"],
   [
     "DEEPEQ.SK8",
@@ -984,6 +985,11 @@ const regressionCases = [
     "S2NDEC.SK8",
     '(write (list (string->number "1.5") (string->number "1e3") (string->number "-0.25") (string->number "+inf.0") (string->number "abc") (string->number "1.5" 16) (string->number "ff" 16) (= (string->number "0.1") 0.1)))',
     "(1.5 1000.0 -0.25 +inf.0 #f #f 255 #t)",
+  ],
+  [
+    "RADIX.SK8",
+    '(write (list #xff #XFF #b-101 #o17 #d10 #d1.5 #x7fffff #x-800000 (string->number "#x10") (string->number "-101" 2) (string->number "17" 8) (string->number "1e3" 16) (string->number "z" 16) (string->number "#q1") (string->number "12" 2)))',
+    "(255 255 -5 15 10 1.5 8388607 -8388608 16 -5 15 483 #f #f #f)",
   ],
   // A nested procedure body must not overwrite the enclosing body's pending
   // tail-call records: a non-final named let or a lambda after a tail call
@@ -1244,7 +1250,11 @@ function errorCasesFor(mode) {
     case "runtime-errors":
     case "apply":
     case "integers":
-      return [["INTWIDE.SK8", "(write 8388608)", "COMPILE ERROR\r\n"]];
+      return [
+        ["INTWIDE.SK8", "(write 8388608)", "COMPILE ERROR\r\n"],
+        ["HEXWIDE.SK8", "(write #x800000)", "COMPILE ERROR\r\n"],
+        ["BADPFX.SK8", "(write #q1)", "COMPILE ERROR\r\n"],
+      ];
     case "ec":
       return errorCases.filter(([name]) => name.startsWith("EC"));
     case "data":

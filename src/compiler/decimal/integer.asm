@@ -69,4 +69,59 @@ DEC_LONG:   LD A,129
 DEC_OVER: LD A,130
         SCF                  ; Mark this diagnostic as a failed conversion.
         RET
+; Read an exact integer of B bits per digit from DEC_SRCP into DEC_NUM, with
+; an optional sign.  A bit shifted out of the third byte sets the fourth,
+; which DEC_INT reports as out of range.
+DEC_INTB: LD HL,(DEC_SRCP)
+        LD A,(HL)
+        CP '+'
+        JR Z,.SIGN
+        CP '-'
+        JR NZ,.NEXT
+        LD A,128
+        LD (DEC_NEG),A
+.SIGN:  CALL DEC_BYTE
+.NEXT:  LD A,(DEC_LEFT)
+        OR A
+        JP Z,DEC_BAD            ; A digit must follow the prefix and sign.
+.MORE:  CALL DEC_BYTE
+        SUB '0'
+        CP 10
+        JR C,.DIGIT
+        ADD A,'0'
+        OR 20H
+        SUB 'a'
+        CP 6
+        JP NC,DEC_BAD
+        ADD A,10
+.DIGIT: LD E,A
+        LD A,1                  ; The radix is two to the B.
+        LD D,B
+.POW:   ADD A,A
+        DEC D
+        JR NZ,.POW
+        DEC A
+        CP E
+        JP C,DEC_BAD            ; Not a digit in this radix.
+        LD HL,(DEC_NUM)
+        LD A,(DEC_NUM+2)
+        LD C,A
+        LD D,B
+.SHIFT: ADD HL,HL
+        RL C
+        JR NC,.KEEP
+        LD A,1
+        LD (DEC_NUM+3),A
+.KEEP:  DEC D
+        JR NZ,.SHIFT
+        LD A,L
+        OR E
+        LD L,A
+        LD (DEC_NUM),HL
+        LD A,C
+        LD (DEC_NUM+2),A
+        LD A,(DEC_LEFT)
+        OR A
+        JR NZ,.MORE
+        JP DEC_INT
 ; DEC_BYTE consumes a byte only after the caller has proved one remains.

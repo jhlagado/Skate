@@ -87,9 +87,24 @@ DR_DATUM:
         JP Z,.FALSE
         CP 92                       ; Backslash introduces one byte character data.
         JP Z,.CHAR
-        CP '('                      ; #(...) is a bounded datum vector.
+        CP '('                      ; #(...) is a datum vector.
         JP Z,DR_VEC
-        JP ERROR                    ; Other dispatch forms wait for later units.
+        LD (DR_NBUF+1),A            ; #b, #o, #d and #x prefix a number.
+        OR 20H
+        CP 'b'
+        JR Z,.RADIX
+        CP 'o'
+        JR Z,.RADIX
+        CP 'd'
+        JR Z,.RADIX
+        CP 'x'
+        JP NZ,ERROR                 ; Other dispatch forms are unsupported.
+.RADIX:
+        LD A,'#'
+        LD (DR_NBUF),A
+        LD A,2
+        LD (DR_LEN),A
+        JP DR_NUMS
 
 ; Return true after checking that the token has ended at a delimiter.
 .TRUE:
@@ -335,6 +350,7 @@ DR_NUM:
         LD (DR_NBUF),A
         LD A,1
         LD (DR_LEN),A
+DR_NUMS:                          ; A radix prefix enters with its two bytes.
 .LOOP:
         CALL DR_PEEK              ; Leave the terminating delimiter pending.
         JR C,.CONVERT             ; EOF ends the final token.

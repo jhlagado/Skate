@@ -182,6 +182,12 @@ const cases = [
     "42\r",
   ],
   [
+    "READHEX.SK8",
+    "(begin (write (list (read) (read))) (newline))",
+    "#x1F #b-11\r(31 -3)\r\n",
+    "#x1F #b-11\r",
+  ],
+  [
     "READSTR.SK8",
     "(begin (write (read)) (newline))",
     '"hello""hello"\r\n',

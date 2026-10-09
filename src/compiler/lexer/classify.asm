@@ -31,7 +31,10 @@ LX_NAN:  DB "+nan.0",0
 LX_DOTS:   DB "...",0
 
 ; Classification first recognizes decimal grammar, then identifier spelling.
-LX_CLASS: LD A,(LX_LEN)
+LX_CLASS: LD A,(LX_BUF)
+        CP '#'           ; A radix prefix leaves the whole check to DEC_READ.
+        JP Z,.NUM_DONE
+        LD A,(LX_LEN)
         CP 1             ; Dot is punctuation only when it is the complete token.
         JR NZ,.SPECIAL   ; Longer spellings must undergo numeric or identifier checks.
         LD A,(LX_BUF)    ; Inspect the single buffered byte.

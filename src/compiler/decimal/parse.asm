@@ -30,6 +30,33 @@ DEC_READ: LD A,B            ; A byte count above 255 exceeds the token bound.
         LD (DEC_SRCP),HL         ; Save the next input address.
         LD A,C
         LD (DEC_LEFT),A         ; Save the remaining token-byte count.
+        LD A,(DEC_BASE)
+        LD B,A                  ; B is the bits per digit; zero is decimal.
+        LD A,(HL)
+        CP '#'                  ; #b, #o, #d or #x selects the radix.
+        JR NZ,.RADIX
+        LD A,C
+        CP 3
+        JP C,DEC_BAD
+        CALL DEC_BYTE
+        CALL DEC_BYTE
+        OR 20H
+        LD B,0
+        CP 'd'
+        JR Z,.RADIX
+        INC B
+        CP 'b'
+        JR Z,.RADIX
+        LD B,3
+        CP 'o'
+        JR Z,.RADIX
+        INC B
+        CP 'x'
+        JP NZ,DEC_BAD
+.RADIX: LD A,B
+        OR A
+        JP NZ,DEC_INTB          ; Binary, octal and hex read exact integers.
+        LD HL,(DEC_SRCP)
         LD A,(HL)
         CP '+'
         JR Z,.SIGNED

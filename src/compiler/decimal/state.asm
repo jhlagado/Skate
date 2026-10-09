@@ -23,3 +23,4 @@ DEC_BITS:   DS 3                ; Seventeen extracted significand bits before ro
 DEC_NUM:   DS 40                ; Exact numerator, then division remainder.
 DEC_DEN:   DS 40                ; Exact denominator, then normalized divisor.
 .WORK_END:
+DEC_BASE:  DB 0                 ; Bits per digit of unprefixed text; zero is decimal.

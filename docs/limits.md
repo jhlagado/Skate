@@ -75,16 +75,18 @@ which they should be dealt with.
 | Vector length | 255 elements | One count byte; a vector above 63 elements owns a run of two to four pages | `RUNTIME ERROR` (pinned by `VLONGERR`, `LONGVEC`, `RDVEC256`) |
 | `call/ec` | One-shot escapes only, 8 active at once | `EC_TABLE`, 8 × 21 bytes | `RUNTIME ERROR` |
 | Character names | The R7RS names (`#\alarm`, `#\backspace`, `#\delete`, `#\escape`, `#\newline`, `#\null`, `#\return`, `#\space`, `#\tab`), `#\xHH`, or one printable byte | Lexer (`LX_NAMES`); runtime `CH_NAMES` for `write` and `read` | `COMPILE ERROR` for another name; `write` prints these names and `read` reads them |
-| `#` syntax | `#(`, `#t`, `#true`, `#f`, `#false`, `#\` | Lexer | `COMPILE ERROR`. No `#x` and other radix or exactness prefixes, `#|…|#` or `#;` |
+| `#` syntax | `#(`, `#t`, `#true`, `#f`, `#false`, `#\`, and the radix prefixes `#b`, `#o`, `#d`, `#x` | Lexer | `COMPILE ERROR`. No exactness prefixes, `#|…|#` or `#;` |
 | String escapes | `\"` `\\` `\n` `\r` `\t` `\xHH;` | Lexer | A string may span lines: a raw line feed or tab is kept and a carriage return dropped. Other raw control bytes are a `COMPILE ERROR` |
-| Number syntax | Decimal integers and decimals with exponents, `+inf.0`, `-inf.0`, `+nan.0` | Lexer | No rationals, radix prefixes or exactness prefixes |
+| Number syntax | Decimal integers and decimals with exponents, `+inf.0`, `-inf.0`, `+nan.0`; exact integers in radix 2, 8 and 16 after `#b`, `#o` or `#x` (pinned by `RADIX`, `HEXWIDE`) | Lexer and `DEC_READ` | No rationals or exactness prefixes |
 | Quasiquote | Not supported | Design | `` ` `` and `,` are a `COMPILE ERROR` |
 | `include` | Only leading `(include "…")` forms | The include pre-pass reads only the head of a file | A later `include` is a `COMPILE ERROR` (pinned by `LATEINC`) |
 
 `string->number` reads text in radix 10 with the compiler's own decimal
 parser, so it gives exactly the value the same literal would: an exact
-integer, or a float correctly rounded (`S2NDEC`). Radix 2, 8 and 16 read
-exact integers. Text that is not a number gives `#f`; an exact integer out of
+integer, or a float correctly rounded (`S2NDEC`). Radix 2, 8 and 16, given
+as the second argument or as a `#b`, `#o` or `#x` prefix, read exact
+integers through the same parser.  Literals, `read` and `string->number`
+therefore accept exactly the same number syntax. Text that is not a number gives `#f`; an exact integer out of
 range is a `RUNTIME ERROR`, as it is a `COMPILE ERROR` for a literal.
 `read` uses the same parser for numbers.
 `string-set!` refuses a literal string (`SSETLIT`). `list-copy` needs a proper
@@ -292,7 +294,7 @@ In order of value to a programmer:
    `vector-fill!`, `list-copy`, `string->number` (integers) and
    `string-append` of any number of strings, vectors of 255 elements, and
    the R7RS character names in `write` and `read`. Still to do:
-   more file ports and escapes, and `#x` and the other radix prefixes.
-   Decimal `string->number`, `read` of floats, and `read` of lists of any
+   more file ports and escapes.  The radix prefixes `#b`, `#o`, `#d` and
+   `#x` are done.  Decimal `string->number`, `read` of floats, and `read` of lists of any
    length and vectors of 255 are done.  Character names, `#true` and
    `#false`, and strings that span lines are done.
