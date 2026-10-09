@@ -363,7 +363,7 @@ proofs; `deno task test:all` runs both plus `test:cpm:stress`.
 | `deno task test:cpm:stress` | `test:cpm:capacity`, `test:cpm:large` and `test:cpm:full-image` |
 | `deno task test:cpm:capacity` | Compiler capacity: 256 globals with short, long and string-valued definitions, and a 256-form `begin` |
 | `deno task test:cpm:large` | Compilation and run of a 2,400-form source file with 300 comment lines after it |
-| `deno task test:cpm:full-image` | The largest image the runtime accepts (44,032 bytes with the core runtime) compiles and runs; one byte more is `CAP` |
+| `deno task test:cpm:full-image` | The largest image the runtime accepts (45,056 bytes with the core runtime) compiles and runs; one byte more is `CAP` |
 
 The procedure proof accepts several mode flags in one run (for example
 `--vectors --apply --ec`), so related groups share one assembly of the

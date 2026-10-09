@@ -23,7 +23,7 @@
     "test:cpm:recovery": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych tools/compiler-checks/scope-recovery-proof.mjs",
     "test:cpm:capacity": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych tools/compiler-checks/scope-capacity-proof.mjs",
     "test:cpm:large": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych tools/compiler-checks/scope-large-cpm-proof.mjs --count=2400 --comment=300 --run",
-    "test:cpm:full-image": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych tools/compiler-checks/scope-large-cpm-proof.mjs --fill-image=44032 --expect-image=44032 --expect-com=44032 --run && deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych tools/compiler-checks/scope-large-cpm-proof.mjs --fill-image=44033 --expect-cap",
+    "test:cpm:full-image": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych tools/compiler-checks/scope-large-cpm-proof.mjs --fill-image=45056 --expect-image=45056 --expect-com=45056 --run && deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services,../triptych tools/compiler-checks/scope-large-cpm-proof.mjs --fill-image=45057 --expect-cap",
     "measure": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services tools/compiler-checks/scope-budget.ts",
     "runtime": "deno run --config deno.runtime.json --allow-read=.,../atom,../z80-tool-services --allow-write=src/runtime tools/compiler-checks/generate-scope-runtime.ts",
     "probe:on": "mkdir -p build && echo on > build/PROBE && deno task runtime",

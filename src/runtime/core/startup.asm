@@ -3,11 +3,11 @@
 ; Included in runtime order by ../core.asm.
 
 RT_HEAP    EQU 03000H              ; Base used by the full-pool allocation maps.
-RT_LOEND EQU 0B400H              ; The heap and the stack share memory up to here.
-RT_STK   EQU 0B400H               ; The stack starts here and grows down to the heap.
-RT_HIGH  EQU 0B400H               ; No high band: the maps start at RT_HIEND.
-RT_HPAGE  EQU 0B4H                ; High byte of RT_HIGH for page mapping.
-RT_HIEND  EQU 0B400H              ; Managed objects stop below the stack's start.
+RT_LOEND EQU 0B800H              ; The heap and the stack share memory up to here.
+RT_STK   EQU 0B800H               ; The stack starts here and grows down to the heap.
+RT_HIGH  EQU 0B800H               ; No high band: the maps start at RT_HIEND.
+RT_HPAGE  EQU 0B8H                ; High byte of RT_HIGH for page mapping.
+RT_HIEND  EQU 0B800H              ; Managed objects stop below the stack's start.
 RT_EPAGE   EQU 0E0H               ; Pair tag-seven values above this byte are escapes.
 RT_ESC   EQU 0E000H               ; Escape generations occupy the non-heap range.
 RT_OPLO EQU 0CF00H             ; Operator values use the next transient band.

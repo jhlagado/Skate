@@ -294,6 +294,7 @@ assert.ok(sourceTotal >= 8192, `release source is only ${sourceTotal} bytes`);
 
 const heapPointerAddress = provider.address("STK_FLR");
 const pageMinAddress = provider.address("PAGE_MIN");
+const stackStart = provider.address("RT_STK");
 const lowStackAddress = provider.address("RT_LOWSP");
 const records = {};
 let stableImage = disk;
@@ -319,7 +320,7 @@ try {
     lowSp >= readWord(machine, pageMinAddress),
     "generated program's stack reached the heap",
   );
-  assert.ok(heapEnd <= 0xb400, "the heap reached the stack");
+  assert.ok(heapEnd <= stackStart, "the heap reached the stack");
   releaseImage = Uint8Array.from(stableImage);
   records.initial = {
     sourceBytes: sourceTotal,

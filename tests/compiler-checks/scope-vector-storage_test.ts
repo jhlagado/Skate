@@ -4,9 +4,9 @@ import { managedRuntime, writeWord } from "./scope-runtime-fixture.ts";
 Deno.test("vector overflow fallback preserves every rooted pair", async () => {
   const { assembled, memory, call } = await managedRuntime(true);
   const count = 513;
-  // Above the page tables at C400H..C780H; the records cross only the empty
-  // quoted-data and reader stacks and end below the mark worklist at D000H.
-  const roots = 0xc780;
+  // In the shared region, above the pages this test allocates and below the
+  // fixture's stack at B3F0H.
+  const roots = 0xa000;
   const vectors: number[] = [];
   const pairs: number[] = [];
 

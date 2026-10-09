@@ -12,13 +12,13 @@ REST_LEN:     DB 0                 ; Original surplus count passed to QT_FOLD.
 ROOT_TOP:       DW 0               ; Newest pending-operand record, or zero.
 ROOT_RET:       DW 0               ; ARG_PUSH's continuation while it pushes.
 ; The allocation maps use a fixed work band outside the provider image,
-; B400H..CF00H, just below the transient bands.  Below them the heap grows up
-; from the image and the stack down from B400H.
+; B800H..CF00H, just below the transient bands.  Below them the heap grows up
+; from the image and the stack down from B800H.
 ROOT_VAL:     DW 0                 ; ARG_PUSH's payload while it pushes.
 ; These maps cover the full 3000H..C000H address span, including images
 ; below 4000H.
-CL_MAP      EQU 0B400H            ; 2304 bytes mark every allocated closure start.
-GC_MARKS      EQU 0BD00H          ; 2304 bytes: even marks, odd vector type bits.
+CL_MAP      EQU 0B800H            ; 2304 bytes mark every allocated closure start.
+GC_MARKS      EQU 0C100H          ; 2304 bytes: even marks, odd vector type bits.
 BND_MAP       EQU 0CA00H          ; 1152 bytes: one bit per four-byte binding cell.
 NUM_LEFT:     DB 0                 ; Remaining values in an arithmetic or compare fold.
 NUM_ATAG:     DB 0                 ; Accumulator tag for a variadic numeric fold.
