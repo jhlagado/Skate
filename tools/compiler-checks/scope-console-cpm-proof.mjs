@@ -108,7 +108,7 @@ const cases = [
   [
     "CHARCTL.SK8",
     "(begin (write #\\newline) (write #\\x00) (write #\\x7f) (newline))",
-    "#\\newline#\\x00#\\x7f\r\n",
+    "#\\newline#\\null#\\delete\r\n",
   ],
   [
     "DISPLAYP.SK8",

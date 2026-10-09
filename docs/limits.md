@@ -142,7 +142,7 @@ grows with a larger TPA.
 | --- | --- | --- | --- | --- |
 | Runnable image | Ends at `B100H` at most: 45,056 bytes of `.COM` | `RT_LOEND`, `page/init.asm`; the compiler applies the same rule | `CAP` at compile time (pinned by `test:cpm:full-image`, which runs a 45,056-byte image and refuses one byte more) | Keep. Such a program has one heap page and 1 KB of stack |
 | Runtime size | Core 18,410 bytes, with standard procedures 20,849, with numeric procedures 22,479, full 26,145 | `RT_CORE`, `RT_STD`, `RT_NUMS`, `RT_SIZE` | — | Each 256 bytes of runtime or program costs one heap page (32 pairs) |
-| Live pairs | 3,264 with the core runtime and a small program that recurses only shallowly | 8 bytes a pair, 32 a page; pages from the image end up towards the stack | `RUNTIME ERROR` after a collection | Raise by sizing the maps to the heap. Pinned by `PAIR3264` and `PAIR3265`. The heap stays 4 KB below the stack's start until a collection has run; after one, a page may come up to a page below the stack pointer |
+| Live pairs | 3,232 with the core runtime and a small program that recurses only shallowly | 8 bytes a pair, 32 a page; pages from the image end up towards the stack | `RUNTIME ERROR` after a collection | Raise by sizing the maps to the heap. Pinned by `PAIR3232` and `PAIR3233`. The heap stays 4 KB below the stack's start until a collection has run; after one, a page may come up to a page below the stack pointer |
 | Native stack | From `B800H` down to a page above the highest heap page | `RT_STK`, `STK_FLR`; `PAGE_NEW` keeps each new page a page below the stack pointer | `RUNTIME ERROR` | Keep |
 | Non-tail recursion | About 15 bytes a level for `(+ 1 (f (- n 1)))`: 1,500 levels measured in a small program | A frame is 6 bytes (the caller's return, environment and descriptor) plus 4 for each slot, and each pending operand 6; a body ends with `JP FRM_RET`, which finds the frame's boundary from its map | `RUNTIME ERROR` | Keep. Pinned by `DEEPOK`, `DEEPREC` and `FRAMES` |
 | Pending operand roots | No fixed limit | `ARG_PUSH` links each pending operand's record through the native stack (`ROOT_TOP`); the collector follows the links | — | Keep |
@@ -223,9 +223,11 @@ Fixed:
    `member`, `assq` and `assoc` stop with a `RUNTIME ERROR` after more cells
    than the heap can hold (`CIRCLE`, `CIRCLEN`, `CIRCMEM`).
 
+8. **`display` and `write`** stop a list circular in its cdrs with a
+   `RUNTIME ERROR` after as many elements (`CIRCDISP`).
+
 Remaining:
 
-8. **`display` or `write` of a list circular in its cdrs** never ends.
 9. **`call/ec` token generations wrap after 512 reopenings,** so a stale
    escape can be accepted again; a stale file-port token reaches the file
    opened after it.
@@ -245,7 +247,7 @@ decimal exponent saturating, and runtime symbols that are never freed.
 ## 9. Tests
 
 Limits pinned by a test: 256 globals (`GLOB256`), 65 nested `if`s
-(`IF65`), a 64-element quoted list (`REVQCAP`), 3,264 live pairs, recursion
+(`IF65`), a 64-element quoted list (`REVQCAP`), 3,232 live pairs, recursion
 (`DEEPOK`, `DEEPREC`), `apply` of 33 values (`APPCOUNT`), `(make-vector 256)`
 (`VLONGERR`), stale escapes (`ECSTALE`, `ECREUSE`), 11,000 top-level forms
 (`TOOLONG`), deep `write` (`DEEPNEST`), 255- and 256-byte strings, and an

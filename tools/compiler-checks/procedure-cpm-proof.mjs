@@ -65,9 +65,9 @@ if (Deno.args.includes("--data")) {
 }
 
 // Pin the live-pair ceiling of four-byte pair cells.  This program loads only
-// the core runtime and keeps 3,264 pairs (102 full 32-record pair pages) live;
+// the core runtime and keeps 3,232 pairs (101 full 32-record pair pages) live;
 // one more pair must stop with RUNTIME ERROR rather than corrupt the heap.
-const livePairCeiling = 3264;
+const livePairCeiling = 3232;
 function livePairSource(count) {
   return `(define build (lambda (n acc) (if (zero? n) acc (build (- n 1) (cons n acc))))) (define len (lambda (l n) (if (null? l) n (len (cdr l) (+ n 1))))) (define keep (build ${count} '())) (begin (write (len keep 0)) (newline))`;
 }
@@ -724,6 +724,11 @@ const integerRuntimeErrorCases = [
   [
     "CIRCLEN.SK8",
     "(define c (list 1 2 3)) (set-cdr! (cddr c) c) (length c)",
+    "RUNTIME ERROR\r\n",
+  ],
+  [
+    "CIRCDISP.SK8",
+    "(define c (list 1 2)) (set-cdr! (cdr c) c) (display c)",
     "RUNTIME ERROR\r\n",
   ],
   [

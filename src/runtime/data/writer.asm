@@ -129,20 +129,31 @@ WR_PAIR:
         CALL WR_GUARD              ; Refuse nesting that would reach the guard band.
         LD A,'('                   ; Open the list; OUT_CHAR preserves the pair in HL.
         CALL OUT_CHAR
-.LOOP:
+        LD BC,LIST_MAX             ; More elements than the heap holds pairs
+.LOOP:                             ; means the list is circular.
+        PUSH BC
         PUSH HL                    ; Keep this pair while printing its CAR.
         LD A,1                     ; HL names a pair record.
         CALL PAIR_CAR              ; Decode the packed CAR field into A:HL.
         JP C,ERROR                 ; A corrupt pair cannot be printed safely.
         CALL WR_VALUE              ; Nested values recurse only through the CAR.
         POP HL                     ; Recover this pair for its CDR.
+        POP BC
+        DEC BC
+        LD A,B
+        OR C
+        JP Z,ERROR
+        PUSH BC
         LD A,1                     ; HL still names a pair record.
         CALL PAIR_CDR              ; Decode the packed CDR field into A:HL.
+        POP DE                     ; The count; C is the CDR's byte 2.
         JP C,ERROR                 ; A corrupt pair cannot be printed safely.
         CP 1                       ; A pair CDR continues the same list.
         JR NZ,.TAIL
+        PUSH DE
         LD A,' '                   ; Separate the next element.
         CALL OUT_CHAR              ; OUT_CHAR preserves the CDR pair in HL.
+        POP BC
         JR .LOOP                   ; Iterate rather than recurse along the list.
 .TAIL:
         OR A                       ; Only a scalar can be the empty list.
