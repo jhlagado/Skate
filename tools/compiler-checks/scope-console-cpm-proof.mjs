@@ -93,7 +93,9 @@ disk = installCpm22File(disk, {
 });
 const vector255Input = `#(${Array(255).fill("1").join(" ")})\r`;
 const vector256Input = `#(${Array(256).fill("1").join(" ")})\r`;
-const list300Input = `(${Array.from({ length: 300 }, (_, i) => i).join(" ")})\r`;
+const list300Input = `(${
+  Array.from({ length: 300 }, (_, i) => i).join(" ")
+})\r`;
 
 const cases = [
   [

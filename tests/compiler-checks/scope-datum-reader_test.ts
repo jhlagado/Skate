@@ -471,12 +471,13 @@ Deno.test("datum reader rejects malformed list punctuation", async () => {
 Deno.test("datum reader rejects excessive list depth", async () => {
   const deep = `${"(".repeat(33)}1${")".repeat(33)}\x1a`;
   await readDatumError(Array.from(new TextEncoder().encode(deep)));
-
 });
 
 Deno.test("datum reader reads a list longer than 255 elements", async () => {
   const { assembled, memory, cpu, call } = await managedRuntime(true);
-  const wide = `(${Array.from({ length: 300 }, (_, i) => i).join(" ")} . 7)\x1a`;
+  const wide = `(${
+    Array.from({ length: 300 }, (_, i) => i).join(" ")
+  } . 7)\x1a`;
   installBdosReader(memory, Array.from(new TextEncoder().encode(wide)));
   memory[assembled.address("ARG_CNT")] = 0;
   memory[assembled.address("IN_CR")] = 0;
