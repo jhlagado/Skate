@@ -55,9 +55,9 @@ ERROR:
         LD DE,TX_ERROR          ; Explain an arithmetic or runtime failure.
 OUT_FAIL:
         PUSH DE                    ; Keep the message while files are closed.
-        LD A,(OUT_FILE)            ; Only the I/O module can have opened a file.
+        LD A,(FS_OUTS)             ; Only the I/O module can have opened a file.
         OR A
-        CALL NZ,OUT_SHUT           ; Flush and close it; ignore status.
+        CALL NZ,FS_ALL             ; Flush and close them; ignore status.
         POP DE                     ; Recover the diagnostic message.
 .NEXT:
         LD A,(DE)                  ; Read the next diagnostic byte.

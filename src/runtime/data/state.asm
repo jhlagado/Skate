@@ -122,5 +122,3 @@ GC_FREC:  DW 0                    ; Fallback scan's saved record cursor.
 ; One-byte staging for a BDOS console input call that may clobber registers.
 CON_BYTE:    DB 0
 OUT_BYTE:  DB 0                   ; One-byte staging for a file output call.
-; A returned CR sets this flag so the following physical LF is consumed.
-IN_CR:   DB 0

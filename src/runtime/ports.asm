@@ -1,15 +1,13 @@
 ; Standard Scheme ports for the direct CP/M console.
 ;
 ; The runtime represents the three default ports as immediate tag-eight
-; values. F008H, F009H and F00AH identify input, output and error. F00BH and
-; F00CH identify the native CP/M file handles, which use the same checked port
-; value contract as the standard streams.
+; values. F008H, F009H and F00AH identify input, output and error. F00BH to
+; F00EH identify the four native CP/M file slots, which use the same checked
+; port value contract as the standard streams.
 
 CON_IN EQU 0F008H                 ; Current input port token.
 CON_OUT EQU 0F009H                ; Current output port token.
 CON_ERR EQU 0F00AH                ; Current error port token.
-FILE_IN EQU 0F00BH                ; Native CP/M file input token.
-FILE_OUT EQU 0F00CH               ; Native CP/M file output token.
 
 ; Accept a generation-one tag-eight port token in A:HL.  Carry means invalid.
 PORT_CHK:
@@ -18,10 +16,10 @@ PORT_CHK:
         LD A,H                     ; The port namespace occupies F000H upward.
         CP 0F0H
         JR NZ,.BAD                 ; Reject escape tokens and ordinary values.
-        LD A,L                     ; Generation one uses slots eight through twelve.
+        LD A,L                     ; Generation one uses slots eight through 14.
         CP 8
         JR C,.BAD
-        CP 0DH
+        CP 0FH
         JR NC,.BAD
         XOR A                      ; Clear carry for a valid standard token.
         RET
@@ -71,48 +69,45 @@ IN_ARG:
         JP C,ERROR
         XOR A                      ; Normalize the explicit form to no arguments.
         LD (ARG_CNT),A
-        LD A,L                     ; PORT_CHK left a token in F008H..F00CH.
+        LD A,L                     ; PORT_CHK left a token in F008H..F00EH.
         CP 8                       ; The standard input port uses the console hook.
         JR Z,.CONSOLE
         CP 0BH                     ; Output and error ports cannot be read.
-        JP NZ,ERROR
-        LD A,(IN_FILE)             ; An open file is flagged with exactly one.
-        OR A
-        JP Z,ERROR                  ; A closed file token cannot be read.
-        JR IN_USE                  ; A is one: select the native file adapter.
+        JP C,ERROR
+        LD A,1                     ; A file port must be an open input.
+        CALL FS_OPEN               ; A is its slot.
+        JR IN_USE
 .CONSOLE:
         XOR A                      ; Zero selects the console adapter.
 
-; Make input source A live (zero console, one file).  Each source owns its
-; lookahead state, pending byte and pending CR; the inactive source's copy is
-; parked so file lookahead or EOF never leaks into console reads.
+; Make input source A live (zero console, or a file slot).  Each source owns
+; its lookahead state, pending byte and pending CR; the others' copies are
+; parked so one file's lookahead or EOF never leaks into another's reads.
 IN_USE:
         LD HL,IN_SRC               ; Compare the request with the live source.
         CP (HL)
         RET Z                      ; The requested source already owns live state.
-        LD (HL),A                  ; Publish the new live source.
-        LD HL,(IN_STATE)           ; The live state and pending byte form one word.
-        LD DE,(IN_OLD)             ; Load the other source's parked word.
-        LD (IN_STATE),DE           ; The parked source becomes live.
-        LD (IN_OLD),HL             ; The previous live source is parked.
-        LD A,(IN_CR)               ; Exchange the pending-CR flags as well.
-        LD B,A
-        LD A,(IN_OLDCR)
-        LD (IN_CR),A
-        LD A,B
-        LD (IN_OLDCR),A
+        PUSH AF
+        LD A,(HL)                  ; Park the live state with its source.
+        CALL IN_PARK
+        EX DE,HL
+        LD HL,IN_STATE
+        LD BC,3
+        LDIR
+        POP AF
+        LD (IN_SRC),A              ; Publish the new live source and fetch its
+        CALL IN_PARK               ; parked state.
+        LD DE,IN_STATE
+        LD BC,3
+        LDIR
         RET
 
-; Return to console input and forget the file's input state.  File open and
-; close use this so a new or closed file starts with no lookahead or EOF.
-IN_RESET:
-        XOR A                      ; Console input becomes the live source.
-        CALL IN_USE
-        LD HL,0                    ; Empty state and no pending byte for the file.
-        LD (IN_OLD),HL
-        XOR A                      ; No CR is pending for the file either.
-        LD (IN_OLDCR),A
-        RET
+; HL = where source A parks IN_STATE, IN_PEEK and IN_CR.
+IN_PARK:
+        OR A
+        LD HL,IN_CON
+        RET Z
+        JP FS_PARKP
 
 ; Select output or error for a one-value operation.  The value remains in the
 ; first packet record; an optional second record carries the port token.
@@ -151,9 +146,9 @@ OUT_PICK:
         CALL PKT_VAL
         CALL PORT_CHK
         JP C,ERROR
-        LD A,L                     ; PORT_CHK left a token in F008H..F00CH.
-        CP 0CH                     ; File output uses the CP/M file adapter.
-        JR Z,.FILE
+        LD A,L                     ; PORT_CHK left a token in F008H..F00EH.
+        CP 0BH                     ; File output uses the CP/M file adapter.
+        JR NC,.FILE
         SUB 9                      ; Output F009H and error F00AH share the hook.
         CP 2
         JP NC,ERROR                ; Input ports cannot be written.
@@ -161,10 +156,9 @@ OUT_PICK:
         LD (OUT_SEL),A
         RET
 .FILE:
-        LD A,(OUT_FILE)            ; An open file is flagged with exactly one.
-        OR A
-        JP Z,ERROR                 ; A closed file token cannot be written.
-        LD (OUT_SEL),A             ; One selects the file adapter.
+        LD A,2                     ; A file port must be an open output.
+        CALL FS_OPEN
+        LD (OUT_SEL),A             ; Its slot selects the file adapter.
         RET
 
 ; The three predicates validate without contacting CP/M.
@@ -177,22 +171,28 @@ IN_IS:
         CALL PKT_ONE
         CALL PORT_CHK
         JP C,PKT_NO
-        LD A,L                     ; PORT_CHK left a token in F008H..F00CH.
+        LD A,L                     ; PORT_CHK left a token in F008H..F00EH.
         CP 8                       ; Standard input is an input port.
         JP Z,PKT_YES
-        CP 0BH                     ; So is the file input token.
+        CP 0BH                     ; So is a file opened for input.
+        JP C,PKT_NO
+        CALL FS_WAY
+        DEC A
         JP Z,PKT_YES
         JP PKT_NO
 OUT_IS:
         CALL PKT_ONE
         CALL PORT_CHK
         JP C,PKT_NO
-        LD A,L                     ; PORT_CHK left a token in F008H..F00CH.
+        LD A,L                     ; PORT_CHK left a token in F008H..F00EH.
         CP 8                       ; Standard input is not an output port.
         JP Z,PKT_NO
-        CP 0BH                     ; Neither is the file input token.
-        JP Z,PKT_NO
-        JP PKT_YES                 ; Output, error and file output remain.
+        CP 0BH                     ; Output and error are.
+        JP C,PKT_YES
+        CALL FS_WAY                ; So is a file opened for output.
+        CP 2
+        JP Z,PKT_YES
+        JP PKT_NO
 
 ; Standard records are owned by the runtime and cannot be closed. File records
 ; call the matching CP/M adapter and then become unavailable.
@@ -203,23 +203,10 @@ PORT_END:
         CALL PKT_ONE
         CALL PORT_CHK
         JP C,ERROR
-        LD A,L                     ; PORT_CHK left a token in F008H..F00CH.
-        CP 0BH                     ; Close the file input stream.
-        JR Z,.INPUT
-        CP 0CH                     ; Standard ports cannot be closed.
-        JP NZ,ERROR
-.OUTPUT:
-        LD A,(OUT_FILE)            ; Closing a closed port does nothing, and
-        OR A                       ; only the I/O module opens files.
-        JP Z,PKT_VOID
-        CALL OUT_SHUT
+        LD A,L                     ; PORT_CHK left a token in F008H..F00EH.
+        CP 0BH                     ; Standard ports cannot be closed.
         JP C,ERROR
-        JP PKT_VOID
-.INPUT:
-        LD A,(IN_FILE)
-        OR A
-        JP Z,PKT_VOID
-        CALL IN_SHUT
+        CALL FS_END                ; Only the I/O module makes file tokens.
         JP C,ERROR
         JP PKT_VOID
 
@@ -311,9 +298,8 @@ IN_CHAR:
         RET
 
 IN_EOF:
-        LD A,(CPM_RERR)
-        OR A
-        JP NZ,ERROR                   ; A BDOS read failure is not a clean EOF.
+        OR A                          ; FILE_GET's A: zero is a clean EOF and
+        JP NZ,ERROR                   ; anything else a BDOS read failure.
         LD A,2
         LD (IN_STATE),A
         XOR A
@@ -325,7 +311,7 @@ IN_BIN:
 
 IN_STATE:  DB 0                    ; Empty, pending byte or sticky EOF.
 IN_PEEK:  DB 0                      ; Logical byte retained by datum lookahead.
-IN_SRC:  DB 0                       ; Zero selects console input; one selects a file.
-IN_OLD:  DW 0                       ; Parked state and pending byte of the idle source.
-IN_OLDCR:  DB 0                     ; Parked pending-CR flag of the idle source.
-OUT_SEL: DB 0                     ; Zero selects console output; one selects a file.
+IN_CR:   DB 0                       ; A returned CR: consume a following LF.
+IN_CON:  DS 3                       ; The console's parked copy of those three.
+IN_SRC:  DB 0                       ; Zero selects console input, else a file slot.
+OUT_SEL: DB 0                     ; Zero selects console output, else a file slot.

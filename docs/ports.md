@@ -31,8 +31,12 @@ end-of-file state.
 
 `open-input-file` and `open-output-file` open text files.
 `open-input-binary-file` and `open-output-binary-file` preserve physical bytes.
-The native adapter permits one input and one output file at a time, with
-sequential access and current-drive CP/M 8.3 names. Lowercase names are folded
+The native adapter permits four files open at a time, in any mix of input and
+output, with sequential access and current-drive CP/M 8.3 names.  Each open
+file takes one 256-byte heap page for its FCB, record buffer and lookahead,
+and closing it returns the page, so a program pays for a file only while it
+is open.  Each input keeps its own lookahead and end-of-file state, so reads
+from several inputs can be interleaved freely. Lowercase names are folded
 to uppercase. Drive prefixes, wildcards, directories, spaces and the CP/M
 delimiters `<>=,;[]|` are rejected, as is opening for output the file that is
 currently open for input.
@@ -48,8 +52,8 @@ of the separate host file provider.
 Use `close-port` explicitly; closing a file port that is already closed does
 nothing. An open output file is also flushed and closed when the program ends
 or stops with a runtime error. Invalid directions, operations on closed ports
-and failed file operations take the checked runtime-error path. Append, seeking and multiple
-simultaneous handles per direction are not implemented.
+and failed file operations take the checked runtime-error path. Opening a fifth file is a
+runtime error.  Append and seeking are not implemented.
 
 ## Source helpers
 

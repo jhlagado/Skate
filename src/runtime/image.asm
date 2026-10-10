@@ -48,7 +48,6 @@
 %INCLUDE "primitives/parse.asm"
 %INCLUDE "../compiler/decimal.asm"
 %INCLUDE "io-start.asm"
-%INCLUDE "../compiler/cpm-transport.asm"
 %INCLUDE "file-ports.asm"
 %INCLUDE "datum-reader.asm"
 %INCLUDE "datum-strings.asm"

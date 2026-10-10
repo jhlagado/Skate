@@ -13,8 +13,8 @@ lists and vectors. It provides lexical `let`, `let*`, `letrec` and named
 fixed-arity procedures, dotted rest parameters, bounded `apply`, closures,
 internal definitions, proper tail calls and one-shot `call/ec`. Standard input,
 output and error ports support character and datum I/O. Sequential text and
-binary file ports use CP/M files, with one input and one output file open at a
-time. Text input treats Control-Z as EOF. Decimal points and exponents select
+binary file ports use CP/M files, with up to four open at a time in either
+direction. Text input treats Control-Z as EOF. Decimal points and exponents select
 24-bit floats (17 significant bits, about 5 decimal digits, range ±1.8E19;
 see [docs/float24.md](docs/float24.md)), and mixed arithmetic retains
 fractional results.

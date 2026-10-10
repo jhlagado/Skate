@@ -454,6 +454,21 @@ const cases = [
     "ok",
   ],
   [
+    "MULTI.SK8",
+    '(let ((a (open-input-file "INPUT.TXT")) (b (open-input-file "CRLF.TXT")) (o (open-output-file "MERGE.TXT")) (l (open-output-file "LOG.TXT"))) (write-char (read-char a) o) (write-char (read-char b) o) (write-char (read-char a) o) (read-char b) (write-char (read-char b) o) (display "x" l) (close-port a) (close-port b) (close-port o) (close-port l) (let ((m (open-input-file "MERGE.TXT"))) (write (read m)) (close-port m)) (newline))',
+    "AABB\r\n",
+  ],
+  [
+    "PARKED.SK8",
+    '(let ((a (open-input-file "DATUM.TXT")) (b (open-input-file "INPUT.TXT"))) (write (list (read a) (read b) (read a) (input-port? b) (output-port? b))) (close-port a) (close-port b) (newline))',
+    "((1 2) AB foo #t #f)\r\n",
+  ],
+  [
+    "REOPEN.SK8",
+    '(do ((i 0 (+ i 1))) ((= i 9) (display "ok")) (close-port (open-input-file "INPUT.TXT")) (close-port (open-output-file "AGAIN.TXT")))',
+    "ok",
+  ],
+  [
     "CLOSE2.SK8",
     '(let ((p (open-output-file "TWICE.TXT")) (q (open-input-file "INPUT.TXT"))) (close-port p) (close-port p) (close-port q) (close-port q) (display "ok"))',
     "ok",
@@ -478,6 +493,10 @@ const errorCases = [
   ["FILESPC.SK8", '(open-output-file "A B.TXT")'],
   ["FILEDLM.SK8", '(open-output-file "A<B.TXT")'],
   ["FILECOMA.SK8", '(open-output-file "A,B")'],
+  [
+    "FILE5.SK8",
+    '(define (in) (open-input-file "INPUT.TXT")) (list (in) (in) (in) (in) (in))',
+  ],
   [
     "FILESAME.SK8",
     '(let ((p (open-input-file "INPUT.TXT"))) (open-output-file "input.txt"))',

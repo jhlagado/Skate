@@ -28,12 +28,11 @@ DR_SIZE: DB 0                        ; Decoded byte count, bounded at 255.
 DR_TMP: DB 0                         ; One-byte scratch for append and escapes.
 
 ; File ports.
-FILE_BIN: DB 0
-IN_FILE:    DB 0
-OUT_FILE:   DB 0
-IN_MODE:    DB 0
-OUT_MODE:  DB 0
-OUT_CR:       DB 0
+FILE_BIN: DB 0                       ; Nonzero opens a binary stream.
+FILE_DIR: DB 0                       ; 1 opens an input, 2 an output.
+FILE_SL: DB 0                      ; The slot being opened.
+FS_OUTS:  DB 0                       ; Open output streams, flushed at exit.
+IN_MODE:    DB 0                     ; Nonzero while a binary file is read.
 FILE_LEN:     DB 0
 FILE_DOT:      DB 0
 FILE_POS:     DB 0

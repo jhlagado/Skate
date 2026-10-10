@@ -54,7 +54,7 @@ which they should be dealt with.
 | Size of a `do` | 1,504 reader events for the form and its rewrite: a body of about 140 short forms | Keep | The replay buffer now lives in the staging window (§6.1) |
 | Elements per level of a quoted list or vector | 63 | Raise | Tied to the 255-record runtime quote stack; raise to 255 with a nesting check |
 | Active `call/ec` escapes | 8 | Raise | 21 bytes a slot; 16 slots cost 168 bytes |
-| Open file ports | 1 input and 1 output | Raise | One FCB and one 128-byte record buffer a port |
+| Open file ports | 4, in either direction | Done | Each open stream takes one heap page (its FCB, record buffer and parked lookahead), returned at close; a fifth open is a `RUNTIME ERROR` (pinned by `MULTI`, `PARKED`, `REOPEN`, `FILE5`) |
 | String length | 255 | Keep | One length byte; a Language limit, like Basie's 253 |
 | Global names | 256 | Keep for now | One-byte slot operands in generated code; a Rework if programs grow past it |
 
@@ -252,7 +252,7 @@ Remaining:
 
 9. **`call/ec` token generations wrap after 512 reopenings,** so a stale
    escape can be accepted again; a stale file-port token reaches the file
-   opened after it.
+   later opened in its slot.
 
 Losses that are intended, and are not failures under the rule: float
 overflow and underflow, precision lost in `/` and `exact->inexact`, the
@@ -284,8 +284,7 @@ tables in use (`TABLES`, `SYMS600`), a late `include` (`LATEINC`), `string-ref` 
 (`STRREFW`), `equal?` depth (`DEEPEQ`, `EQDEPTH`) and refused source names.
 
 Not pinned: 640 fixups, the replay buffer, 128 tail calls, `cond` clauses
-and branches, 255 quoted constants, 8 escapes, the file
-ports, the runtime symbol area and the `read` limits. Each limit that is kept
+and branches, 255 quoted constants, 8 escapes, the runtime symbol area and the `read` limits. Each limit that is kept
 should get a test at its boundary, and each that is raised a test at the new
 one.
 
@@ -312,7 +311,7 @@ In order of value to a programmer:
    `vector-fill!`, `list-copy`, `string->number` (integers) and
    `string-append` of any number of strings, vectors of 255 elements, and
    the R7RS character names in `write` and `read`. Still to do:
-   more file ports and escapes.  The radix prefixes `#b`, `#o`, `#d` and
+   more escapes.  Four file ports, in either direction, and the radix prefixes `#b`, `#o`, `#d` and
    `#x` are done.  Decimal `string->number`, `read` of floats, and `read` of lists of any
    length and vectors of 255 are done.  Character names, `#true` and
    `#false`, and strings that span lines are done.

@@ -79,10 +79,8 @@ RT_BOOT:                          ; START in entry.asm set the boot stack.
         LD (IN_STATE),A            ; No datum-reader lookahead is pending at entry.
         LD (IN_SRC),A               ; Start with the direct console input adapter.
         LD (OUT_SEL),A              ; Start with the direct console output adapter.
-        LD (IN_FILE),A             ; No CP/M input file is open at program entry.
-        LD (OUT_FILE),A           ; No CP/M output file is open at program entry.
+        LD (FS_OUTS),A             ; No CP/M file is open at program entry.
         LD (IN_MODE),A              ; Inactive file modes default to text.
-        LD (OUT_MODE),A
         LD (ROOT_TOP),A            ; No generated operands are pending at entry.
         LD (ROOT_TOP+1),A
         LD HL,CL_FREE               ; Empty every rounded closure size class.
@@ -114,11 +112,11 @@ RT_CALL:
 
 ; Leave the program after flushing and closing any open output file, so text
 ; written without close-port survives a normal exit.  Only the I/O module can
-; have opened one, and it is present whenever OUT_FILE is set.
+; have opened one, and it is present whenever FS_OUTS is nonzero.
 .EXIT:
-        LD A,(OUT_FILE)
+        LD A,(FS_OUTS)
         OR A
-        CALL NZ,OUT_SHUT           ; A close failure cannot be reported here.
+        CALL NZ,FS_ALL             ; A close failure cannot be reported here.
         JP 0                       ; Return to CP/M through the warm start.
 
 ; Refuse to run when CP/M's BDOS starts below RT_TOP.  Nothing above the loaded image
