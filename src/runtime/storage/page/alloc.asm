@@ -81,9 +81,10 @@ PAGE_NEW:
         ADD A,L
         LD B,A                     ; B: the page after the run.
         LD A,(PAGE_HRD)           ; Until a collection has run, the heap stays
-        OR A                       ; below RT_SOFT, leaving the stack 4 KB.
-        JR NZ,.HARD
-        LD A,RT_SOFT/256
+        OR A                       ; RT_SOFT pages below HEAP_LIM, leaving
+        JR NZ,.HARD                ; the stack 4 KB.
+        LD A,(HEAP_LIM+1)
+        SUB RT_SOFT
         CP B
         JP C,PAGE_OUT
 .HARD:
@@ -136,17 +137,6 @@ PAGE_NEW:
 ; Convert a virtual page index to the physical page address in HL.
 .MAP:
         LD HL,(PAGE_IDX)           ; Read the candidate or committed page index.
-        LD DE,(PAGE_LO)            ; The first high-extent index follows the low gap.
-        OR A                       ; Clear carry before selecting an extent.
-        SBC HL,DE                  ; A carry means that the index is in the low gap.
-        JR C,.LOW                  ; Low pages are based at the rounded image end.
-        LD A,L                     ; High-extent offsets fit in the low byte.
-        ADD A,RT_HPAGE             ; The managed high band starts at RT_HIGH.
-        LD H,A                     ; Return a page-aligned address in the high extent.
-        LD L,0                     ; Every managed page address ends at byte zero.
-        RET                        ; The caller receives the mapped high page.
-.LOW:
-        LD HL,(PAGE_IDX)           ; Recover the original low-extent index.
         LD A,L                     ; Low-extent indices are below the page count.
         LD DE,(PAGE_ORG)           ; Add the rounded image base page.
         ADD A,D                    ; Construct the physical low-extent page number.
@@ -170,28 +160,11 @@ PAGE_REL:
         LD A,L                     ; Every page address must be 256-byte aligned.
         OR A                       ; A nonzero low byte names an interior address.
         JP NZ,PAGE_BAD             ; Reject it before touching the directory.
-        LD HL,(PAGE_PTR)           ; Select the low or high physical extent.
-        LD DE,RT_LOEND            ; Addresses below 9000H belong to the low gap.
-        OR A                       ; Clear carry before the extent comparison.
-        SBC HL,DE                  ; A carry selects the low physical extent.
-        JR C,.LOW_ADDR             ; Validate and map a page in the low gap.
-        LD HL,(PAGE_PTR)           ; Reject addresses in the protected upper region.
-        LD DE,(HEAP_LIM)           ; The selected ceiling bounds managed pages.
-        OR A                       ; Clear carry before the upper-bound comparison.
-        SBC HL,DE                  ; A nonnegative value lies at or above C000.
-        JP NC,PAGE_BAD             ; Neither the stack nor page zero is managed.
-        LD HL,(PAGE_PTR)           ; Check the lower bound of the high extent.
-        LD DE,RT_HIGH              ; The managed high extent begins after the maps.
-        OR A                       ; Clear carry before the high-extent comparison.
-        SBC HL,DE                  ; A carry lies in the protected closure gap.
-        JP C,PAGE_BAD              ; Do not release an address between the extents.
-        LD A,H                     ; The high-byte difference is the high offset.
-        LD L,A                     ; Widen that offset to a virtual page index.
-        XOR A                      ; The high extent offset has no high byte.
-        LD H,A                     ; Add the low-extent page count below.
-        LD DE,(PAGE_LO)            ; High virtual indices follow every low page.
-        ADD HL,DE                  ; Map RT_HIGH to the first high-extent index.
-        JR .INDEX                  ; Validate the mapped run below.
+        LD HL,(PAGE_PTR)           ; The page must lie below the heap's end.
+        LD DE,(HEAP_LIM)
+        OR A
+        SBC HL,DE
+        JP NC,PAGE_BAD
 .LOW_ADDR:
         LD HL,(PAGE_PTR)           ; Convert the low page address to an index.
         LD DE,(PAGE_ORG)           ; Subtract the rounded image base.

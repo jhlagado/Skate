@@ -9,7 +9,7 @@ GC_VAR:
         OR L
         RET Z
         LD (BND_CELL),HL
-        LD DE,RT_HEAP
+        LD DE,(PAGE_ORG)
         OR A
         SBC HL,DE
         JR C,.BAD
@@ -81,7 +81,7 @@ GC_VALUE:
 ; an object's payload or into a binding cell that happens to look similar.
 GC_OBJOK:
         LD HL,(CL_OBJ)
-        LD DE,RT_HEAP
+        LD DE,(PAGE_ORG)
         OR A
         SBC HL,DE
         JR C,.BAD
@@ -155,9 +155,9 @@ GC_OBJOK:
         RET
 
 ; Compute the byte index and single-bit mask for an even closure address.
-; The address is measured in two-byte units from RT_HEAP.
+; The address is measured in two-byte units from PAGE_ORG.
 GC_OBJAT:
-        LD DE,RT_HEAP
+        LD DE,(PAGE_ORG)
         OR A
         SBC HL,DE
         SRL H
@@ -189,7 +189,7 @@ GC_ISOBJ:
         LD HL,(CL_OBJ)
         CALL GC_OBJAT
         LD C,A
-        LD DE,CL_MAP
+        LD DE,(CL_MAP)
         ADD HL,DE
         LD A,(HL)
         AND C
@@ -200,7 +200,7 @@ GC_SEEN:
         LD HL,(CL_OBJ)
         CALL GC_OBJAT
         LD C,A
-        LD DE,GC_MARKS
+        LD DE,(GC_MARKS)
         ADD HL,DE
         LD A,(HL)
         AND C
@@ -211,7 +211,7 @@ GC_VISIT:
         LD HL,(CL_OBJ)
         CALL GC_OBJAT
         LD C,A
-        LD DE,GC_MARKS
+        LD DE,(GC_MARKS)
         ADD HL,DE
         LD A,(HL)
         OR C
@@ -225,7 +225,7 @@ GC_OBJON:
         LD HL,(FRM_CLOS)
         CALL GC_OBJAT
         LD C,A
-        LD DE,CL_MAP
+        LD DE,(CL_MAP)
         ADD HL,DE
         LD A,(HL)
         OR C
@@ -234,8 +234,8 @@ GC_OBJON:
 
 ; Clear all closure marks at the beginning of a collection.
 GC_RESET:
-        LD HL,GC_MARKS
-        LD BC,0900H
+        LD HL,(GC_MARKS)
+        LD BC,(MAP_LEN)
 .LOOP:
         LD A,(HL)
         AND 0AAH                   ; Preserve odd vector-type marker bits.
@@ -363,14 +363,14 @@ GC_CAPS:
 ; the scan without recursing through the native stack.
 GC_OBJS:
         LD HL,(HEAP_LIM)           ; Scan only the configured managed address span.
-        LD DE,RT_HEAP
+        LD DE,(PAGE_ORG)
         OR A
         SBC HL,DE
         SRL H
         RR L
         LD B,H                     ; Each visit tests one even closure address.
         LD C,L
-        LD HL,RT_HEAP
+        LD HL,(PAGE_ORG)
         LD (CL_SCANP),HL
 .LOOP:
         LD HL,(CL_SCANP)

@@ -6,6 +6,13 @@ const PAIRS_PER_SLAB = 32;
 const CAR_META = 3;
 const CDR_PAYLOAD = 4;
 const CDR_META = 7;
+// A hand-built layout: the maps cover 3000H..C000H, as PAGE_INI would lay
+// them out for a heap of that span.
+const heapBase = 0x3000;
+const clMap = 0xb800;
+const gcMarks = 0xc100;
+const bndMap = 0xca00;
+const mapLen = 0x900;
 
 function writeWord(memory: Uint8Array, address: number, value: number) {
   memory[address] = value & 255;
@@ -20,29 +27,26 @@ async function rootRuntime() {
   const cpu = assembled.runtime.cpu;
   assert.ok(assembled.image.end <= 0x7000, "runtime overlaps fixture scratch");
   const pairBase = 0x8000;
-  const heapBase = assembled.address("RT_HEAP");
   const descriptor = assembled.address("PS_TABLE");
   const imageEnd = (assembled.image.end + 0xff) & 0xff00;
-  const closureMapBytes = assembled.address("GC_MARKS") -
-    assembled.address("CL_MAP");
-  const bindingMapBytes = assembled.address("RT_HIGH") -
-    assembled.address("BND_MAP");
+  const closureMapBytes = mapLen;
+  const bindingMapBytes = mapLen / 2;
 
   memory.fill(0, imageEnd, 0xe000);
   memory.fill(
     0,
-    assembled.address("CL_MAP"),
-    assembled.address("CL_MAP") + closureMapBytes,
+    clMap,
+    clMap + closureMapBytes,
   );
   memory.fill(
     0,
-    assembled.address("GC_MARKS"),
-    assembled.address("GC_MARKS") + closureMapBytes,
+    gcMarks,
+    gcMarks + closureMapBytes,
   );
   memory.fill(
     0,
-    assembled.address("BND_MAP"),
-    assembled.address("BND_MAP") + bindingMapBytes,
+    bndMap,
+    bndMap + bindingMapBytes,
   );
   memory.fill(
     0,
@@ -74,6 +78,12 @@ async function rootRuntime() {
   }
 
   writeWord(memory, assembled.address("HEAP_LIM"), 0xc000);
+  writeWord(memory, assembled.address("PAGE_ORG"), heapBase);
+  writeWord(memory, assembled.address("CL_MAP"), clMap);
+  writeWord(memory, assembled.address("GC_MARKS"), gcMarks);
+  writeWord(memory, assembled.address("BND_MAP"), bndMap);
+  writeWord(memory, assembled.address("MAP_LEN"), mapLen);
+  memory[assembled.address("MAP_PGS")] = (0xc000 - heapBase) >> 8;
   writeWord(memory, assembled.address("RT_LIMIT"), 0xe400);
   writeWord(memory, assembled.address("G_BASE"), 0);
   writeWord(memory, assembled.address("G_END"), 0);
@@ -116,12 +126,12 @@ async function rootRuntime() {
 
   function bindingStart(address: number) {
     const cell = (address - heapBase) >> 2;
-    memory[assembled.address("BND_MAP") + (cell >> 3)] |= 1 << (cell & 7);
+    memory[bndMap + (cell >> 3)] |= 1 << (cell & 7);
   }
 
   function closureStart(address: number) {
     const unit = (address - heapBase) >> 1;
-    memory[assembled.address("CL_MAP") + (unit >> 3)] |= 1 << (unit & 7);
+    memory[clMap + (unit >> 3)] |= 1 << (unit & 7);
   }
 
   function bindingPages(...pages: number[]) {
@@ -349,7 +359,7 @@ Deno.test("closure roots drain a full worklist without reporting an error", asyn
     const closure = closureBase + index * 4;
     writeWord(memory, closure, descriptor);
     const unit = ((closureBase - heapBase) >> 1) + index * 2;
-    const bit = assembled.address("CL_MAP") + (unit >> 3);
+    const bit = clMap + (unit >> 3);
     memory[bit] |= 1 << (unit & 7);
     const root = roots + index * 4;
     writeWord(memory, root, closure);
@@ -359,7 +369,7 @@ Deno.test("closure roots drain a full worklist without reporting an error", asyn
   call("GC");
   for (let index = 0; index < count; index++) {
     const unit = ((closureBase - heapBase) >> 1) + index * 2;
-    const mark = assembled.address("CL_MAP") + (unit >> 3);
+    const mark = clMap + (unit >> 3);
     assert.ok(
       memory[mark] & (1 << (unit & 7)),
       `closure ${index} was not traced`,
@@ -436,12 +446,18 @@ Deno.test("closure overflow fallback stays within the native stack", async () =>
   writeWord(memory, assembled.address("G_BASE"), roots);
   writeWord(memory, assembled.address("G_END"), roots + 512 * 4);
   writeWord(memory, assembled.address("HEAP_LIM"), 0xc000);
+  writeWord(memory, assembled.address("PAGE_ORG"), heapBase);
+  writeWord(memory, assembled.address("CL_MAP"), clMap);
+  writeWord(memory, assembled.address("GC_MARKS"), gcMarks);
+  writeWord(memory, assembled.address("BND_MAP"), bndMap);
+  writeWord(memory, assembled.address("MAP_LEN"), mapLen);
+  memory[assembled.address("MAP_PGS")] = (0xc000 - heapBase) >> 8;
   const result = call("GC");
   assert.equal(result.carry, 0);
   assert.equal(memory[assembled.address("CL_FULL")], 1);
   for (let index = 0; index < chainCount; index++) {
     const unit = ((chainBase - heapBase) >> 1) + index * 4;
-    const mark = assembled.address("CL_MAP") + (unit >> 3);
+    const mark = clMap + (unit >> 3);
     assert.ok(memory[mark] & (1 << (unit & 7)), `chain closure ${index}`);
   }
 });
@@ -481,6 +497,12 @@ Deno.test("a descriptor extent that wraps the address space is rejected", async 
   fixture.closureStart(closure);
   writeWord(memory, assembled.address("CL_OBJ"), closure);
   writeWord(memory, assembled.address("HEAP_LIM"), 0xc000);
+  writeWord(memory, assembled.address("PAGE_ORG"), heapBase);
+  writeWord(memory, assembled.address("CL_MAP"), clMap);
+  writeWord(memory, assembled.address("GC_MARKS"), gcMarks);
+  writeWord(memory, assembled.address("BND_MAP"), bndMap);
+  writeWord(memory, assembled.address("MAP_LEN"), mapLen);
+  memory[assembled.address("MAP_PGS")] = (0xc000 - heapBase) >> 8;
   writeWord(memory, assembled.address("RT_LIMIT"), 0xe400);
   writeWord(memory, closure, descriptor);
   writeWord(memory, descriptor, 0x4000);
@@ -493,6 +515,12 @@ Deno.test("a binding extent that wraps the address space is rejected", async () 
   const fixture = await rootRuntime();
   const { assembled, memory, call } = fixture;
   writeWord(memory, assembled.address("HEAP_LIM"), 0xc000);
+  writeWord(memory, assembled.address("PAGE_ORG"), heapBase);
+  writeWord(memory, assembled.address("CL_MAP"), clMap);
+  writeWord(memory, assembled.address("GC_MARKS"), gcMarks);
+  writeWord(memory, assembled.address("BND_MAP"), bndMap);
+  writeWord(memory, assembled.address("MAP_LEN"), mapLen);
+  memory[assembled.address("MAP_PGS")] = (0xc000 - heapBase) >> 8;
   memory[0xb5ff] = 0x80;
   memory[0x0001] = 1;
   call("GC_VAR", 0xfffe);

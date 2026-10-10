@@ -23,6 +23,8 @@ export const triptychHost = require(
 );
 export const { TriptychCpu } = triptychHost;
 
+export { predictHeapLimit } from "./heap-layout.mjs";
+
 /** CP/M 2.2 data directory: 64 entries of 32 bytes after the system tracks. */
 export const directoryOffset = 52 * 128;
 export const directoryEntries = 64;

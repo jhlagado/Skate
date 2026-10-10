@@ -61,7 +61,7 @@ VEC_TEST:
         LD HL,(CL_OBJ)
         CALL GC_OBJAT
         LD C,A
-        LD DE,GC_MARKS
+        LD DE,(GC_MARKS)
         ADD HL,DE
         LD A,C
         ADD A,A
@@ -76,7 +76,7 @@ VEC_SETM:
         LD (CL_OBJ),HL
         CALL GC_OBJAT
         LD C,A
-        LD DE,GC_MARKS
+        LD DE,(GC_MARKS)
         ADD HL,DE
         LD A,C
         ADD A,A

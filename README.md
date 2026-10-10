@@ -127,7 +127,7 @@ limit, its reason and what is planned for it.
 | String length | 255 |
 | Vector length | 255 |
 | Non-tail recursion | bounded by free memory: about 1,500 levels in a small program, fewer as the heap grows |
-| Program size | 45,056 bytes of `.COM`; a larger image is `CAP`. The heap and the stack share what the program leaves below `B800H` |
+| Program size | 45,056 bytes of `.COM`; a larger image is `CAP`. The heap and the stack share what the program and the collector maps leave below `CF00H`, and the maps use the TPA above `E400H` when there is one |
 
 The runtime is loaded in one of four sizes: the core alone, the core and the
 standard procedures, those and the numeric procedures (`sqrt`, `expt`,

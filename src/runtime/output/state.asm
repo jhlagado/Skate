@@ -15,11 +15,13 @@ ROOT_RET:       DW 0               ; ARG_PUSH's continuation while it pushes.
 ; B800H..CF00H, just below the transient bands.  Below them the heap grows up
 ; from the image and the stack down from B800H.
 ROOT_VAL:     DW 0                 ; ARG_PUSH's payload while it pushes.
-; These maps cover the full 3000H..C000H address span, including images
-; below 4000H.
-CL_MAP      EQU 0B800H            ; 2304 bytes mark every allocated closure start.
-GC_MARKS      EQU 0C100H          ; 2304 bytes: even marks, odd vector type bits.
-BND_MAP       EQU 0CA00H          ; 1152 bytes: one bit per four-byte binding cell.
+; The collector maps cover the heap from its first page, PAGE_ORG, to
+; HEAP_LIM.  PAGE_INI sizes and places them for each program.
+CL_MAP:       DW 0                 ; Two bits a 4-byte unit: closure start, string.
+GC_MARKS:     DW 0                 ; The same size: marks, and vector type bits.
+BND_MAP:      DW 0                 ; Half that: one bit per four-byte binding cell.
+MAP_LEN:      DW 0                 ; Bytes in CL_MAP, and in GC_MARKS.
+MAP_PGS:      DB 0                 ; Heap pages the maps cover.
 NUM_LEFT:     DB 0                 ; Remaining values in an arithmetic or compare fold.
 NUM_ATAG:     DB 0                 ; Accumulator tag for a variadic numeric fold.
 NUM_AEXT:     DB 0                 ; Accumulator byte 2 for a variadic numeric fold.
@@ -44,11 +46,11 @@ ENV_RET:      DW 0                 ; Caller environment restored at return.
 ENV_RCNT:     DB 0                 ; Active caller-map slot count for exact roots.
 DESC_NEW:      DW 0                ; Descriptor being copied into a closure.
 ENV_DST:    DW 0                 ; Destination map during closure creation.
-HEAP_LIM:     DW RT_HIEND          ; Exclusive end of the closure/binding pool.
+HEAP_LIM:     DW 0                 ; End of the heap and the start of the stack.
 FRM_CLEN:     DW 0                 ; Two-byte closure-map extent for the active shape.
 FRM_MLEN:      DW 0                ; Four-byte active-map extent for the active shape.
 FRM_SP:     DW 0                   ; Stack boundary before an activation map.
-RT_LOWSP:     DW RT_STK            ; Lowest native stack boundary observed.
+RT_LOWSP:     DW 0                 ; Lowest native stack boundary observed.
 STK_FLR:    DW 0                 ; The stack may not come below this: one page
                                    ; above the highest heap page.
 CNT_BIND:      DW 0                ; Successful managed binding allocations.

@@ -22,27 +22,12 @@ const compiler = await loadAssembly("src/compiler/scope/compiler.asm");
 const provider = await loadAssembly(
   "src/runtime/image.asm",
 );
-const ceilingArgument = Deno.args.find((argument) =>
-  argument.startsWith("--ceiling=")
-);
-// The heap and the stack share memory up to RT_HIEND; a lower ceiling is
-// not supported.
-const managedCeiling = ceilingArgument === undefined
-  ? provider.address("RT_HIEND")
-  : Number.parseInt(ceilingArgument.slice("--ceiling=".length), 16);
-assert.ok(
-  managedCeiling === provider.address("RT_HIEND"),
-  "the managed ceiling must be RT_HIEND",
-);
 assert.equal(compiler.image.base, 0);
 assert.ok(compiler.address("CMD_MAIN") === 0x0100);
 assert.ok(compiler.address("W_IMGEND") < 0x10000);
 const runtimeLength = provider.image.bytes.length - 0x0100;
 assert.equal(runtimeLength, compiler.address("RT_SIZE"));
 const runtimeImage = Uint8Array.from(provider.image.bytes);
-const ceilingAddress = provider.address("HEAP_LIM");
-runtimeImage[ceilingAddress] = managedCeiling & 0xff;
-runtimeImage[ceilingAddress + 1] = managedCeiling >>> 8;
 let disk = installCpm22File(backing, {
   name: "SKATE.COM",
   bytes: compiler.image.bytes.slice(0x0100),
@@ -514,7 +499,6 @@ try {
       compilerBytes: compiler.image.bytes.length - 0x100,
       imageEnd: compiler.image.end,
       runtimeBytes: runtimeLength,
-      managedCeiling,
       cases: selectedCases.map(([name]) => name),
       largestComBytes: Math.max(
         ...measurements.map(({ comBytes }) => comBytes),

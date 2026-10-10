@@ -34,7 +34,7 @@ const runtimeLength = provider.image.bytes.length - 0x0100;
 assert.equal(runtimeLength, compiler.address("RT_SIZE"));
 const heapPointerAddress = provider.address("STK_FLR");
 const pageMinAddress = provider.address("PAGE_MIN");
-const stackStart = provider.address("RT_STK");
+const stackStartAddress = provider.address("HEAP_LIM");
 const lowStackAddress = provider.address("RT_LOWSP");
 const bindingAllocationAddress = provider.address("CNT_BIND");
 const closureAllocationAddress = provider.address("CNT_CLOS");
@@ -65,9 +65,9 @@ if (Deno.args.includes("--data")) {
 }
 
 // Pin the live-pair ceiling of four-byte pair cells.  This program loads only
-// the core runtime and keeps 3,232 pairs (101 full 32-record pair pages) live;
+// the core runtime and keeps 3,616 pairs (113 full 32-record pair pages) live;
 // one more pair must stop with RUNTIME ERROR rather than corrupt the heap.
-const livePairCeiling = 3232;
+const livePairCeiling = 3616;
 function livePairSource(count) {
   return `(define build (lambda (n acc) (if (zero? n) acc (build (- n 1) (cons n acc))))) (define len (lambda (l n) (if (null? l) n (len (cdr l) (+ n 1))))) (define keep (build ${count} '())) (begin (write (len keep 0)) (newline))`;
 }
@@ -1379,7 +1379,10 @@ try {
       nativeLowSp >= readWord(machine, pageMinAddress),
       `${name}: native stack reached the heap`,
     );
-    assert.ok(heapEnd <= stackStart, `${name}: the heap reached the stack`);
+    assert.ok(
+      heapEnd <= readWord(machine, stackStartAddress),
+      `${name}: the heap reached the stack`,
+    );
     measurements.push({
       name,
       result: expected,

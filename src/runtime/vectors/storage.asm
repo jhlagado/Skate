@@ -58,7 +58,7 @@ VEC_SIZE:
 ; Carry clear returns the object base in HL. Scratch registers are clobbered.
 VEC_CHK:
         LD (CL_OBJ),HL             ; Preserve the candidate across range checks.
-        LD DE,RT_HEAP              ; Reject values below the managed pool.
+        LD DE,(PAGE_ORG)              ; Reject values below the managed pool.
         OR A
         SBC HL,DE
         JP C,.BAD

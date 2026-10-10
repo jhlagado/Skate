@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { managedRuntime, writeWord } from "./scope-runtime-fixture.ts";
+import {
+  managedRuntime,
+  readWord,
+  writeWord,
+} from "./scope-runtime-fixture.ts";
 
 Deno.test("a stale released base cannot shadow a live closure page", async () => {
   const { assembled, memory, call } = await managedRuntime();
@@ -67,10 +71,11 @@ Deno.test("released closure pages clear their physical base entries", async () =
 
 Deno.test("closure validation rejects an address two bytes past alignment", async () => {
   const { assembled, memory, call } = await managedRuntime();
-  const startMap = assembled.address("CL_MAP");
+  const startMap = readWord(memory, assembled.address("CL_MAP"));
+  const heapBase = readWord(memory, assembled.address("PAGE_ORG"));
   const descriptor = assembled.address("START");
   for (const object of [0x8000, 0x8002]) {
-    const unit = (object - 0x3000) >> 1;
+    const unit = (object - heapBase) >> 1;
     memory[startMap + (unit >> 3)] |= 1 << (unit & 7);
     writeWord(memory, object, descriptor);
   }

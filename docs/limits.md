@@ -49,7 +49,7 @@ which they should be dealt with.
 
 | Limit | Today | Verdict | Proposal |
 | --- | --- | --- | --- |
-| Runnable program size | 45,056 bytes of `.COM` (an image ending at `B100H`); a larger image is `CAP` | Keep | The heap and the stack share what the program leaves below `B800H`. Sizing the collector maps to the heap, not to `3000H`–`C000H`, would add about 5 KB more (§6.2) |
+| Runnable program size | 45,056 bytes of `.COM` (an image ending at `B100H`); a larger image is `CAP` | Raise | The heap and the stack share what the program and the collector maps leave below `CF00H` (§6.2). An image ending at `B100H` now has 6–7 KB of heap and stack, so the compiler could accept larger images |
 | Non-tail recursion depth | Bounded by the memory the heap is not using: about 15 bytes a level for a one-argument procedure, so 1,500 levels in a small program (measured); each 8 KB of heap in use costs about 550 levels | Keep | The stack and the heap share one region (§6.2) |
 | Size of a `do` | 1,504 reader events for the form and its rewrite: a body of about 140 short forms | Keep | The replay buffer now lives in the staging window (§6.1) |
 | Elements per level of a quoted list or vector | 63 | Raise | Tied to the 255-record runtime quote stack; raise to 255 with a nesting check |
@@ -140,15 +140,15 @@ The compiler works in fixed tables between `W_STAGE` (`5800H`) and its stack
 
 ### 5.2 Runtime
 
-The runtime's memory map is fixed at assembly time (§6.2). Nothing in it
-grows with a larger TPA.
+The fixed bands are placed at assembly time; the heap, the stack and the
+collector maps are laid out at start-up for each program and each TPA (§6.2).
 
 | Capacity | Value | Where | When exceeded | Verdict |
 | --- | --- | --- | --- | --- |
-| Runnable image | Ends at `B100H` at most: 45,056 bytes of `.COM` | `RT_LOEND`, `page/init.asm`; the compiler applies the same rule | `CAP` at compile time (pinned by `test:cpm:full-image`, which runs a 45,056-byte image and refuses one byte more) | Keep. Such a program has one heap page and 1 KB of stack |
+| Runnable image | Ends at `B100H` at most: 45,056 bytes of `.COM` | `RT_LOEND`, `page/init.asm`; the compiler applies the same rule | `CAP` at compile time (pinned by `test:cpm:full-image`, which runs a 45,056-byte image and refuses one byte more) | Raise. The compiler still applies the old rule; under the new layout such a program has 6–7 KB of heap and stack, so a larger image would run |
 | Runtime size | Core 18,410 bytes, with standard procedures 20,849, with numeric procedures 22,479, full 26,145 | `RT_CORE`, `RT_STD`, `RT_NUMS`, `RT_SIZE` | — | Each 256 bytes of runtime or program costs one heap page (32 pairs) |
-| Live pairs | 3,232 with the core runtime and a small program that recurses only shallowly | 8 bytes a pair, 32 a page; pages from the image end up towards the stack | `RUNTIME ERROR` after a collection | Raise by sizing the maps to the heap. Pinned by `PAIR3232` and `PAIR3233`. The heap stays 4 KB below the stack's start until a collection has run; after one, a page may come up to a page below the stack pointer |
-| Native stack | From `B800H` down to a page above the highest heap page | `RT_STK`, `STK_FLR`; `PAGE_NEW` keeps each new page a page below the stack pointer | `RUNTIME ERROR` | Keep |
+| Live pairs | 3,616 with the core runtime and a small program that recurses only shallowly | 8 bytes a pair, 32 a page; pages from the image end up towards the stack | `RUNTIME ERROR` after a collection | Keep. Pinned by `PAIR3616` and `PAIR3617`. The heap stays 4 KB below the stack's start until a collection has run; after one, a page may come up to a page below the stack pointer |
+| Native stack | From `HEAP_LIM` down to a page above the highest heap page | `HEAP_LIM`, `STK_FLR`; `PAGE_NEW` keeps each new page a page below the stack pointer | `RUNTIME ERROR` | Keep |
 | Non-tail recursion | About 15 bytes a level for `(+ 1 (f (- n 1)))`: 1,500 levels measured in a small program | A frame is 6 bytes (the caller's return, environment and descriptor) plus 4 for each slot, and each pending operand 6; a body ends with `JP FRM_RET`, which finds the frame's boundary from its map | `RUNTIME ERROR` | Keep. Pinned by `DEEPOK`, `DEEPREC` and `FRAMES` |
 | Pending operand roots | No fixed limit | `ARG_PUSH` links each pending operand's record through the native stack (`ROOT_TOP`); the collector follows the links | — | Keep |
 | Operator side stack | 255 records | `CF00H`–`D300H` | `RUNTIME ERROR` | Keep; bounds nesting through computed-operator calls, `case` and `map` |
@@ -187,23 +187,40 @@ memory in the workspace, not in code.
 | Range | Contents |
 | --- | --- |
 | `0100H` | Runtime (by tier), the 1 KB global area, generated code, descriptors, quoted data, literals |
-| Image end, rounded to a page (at least `3000H`), up to `B800H` | Shared: heap pages grow up from the image (the first holds page metadata) and the native stack grows down from `B800H` |
-| `B800H`–`CF00H` | Closure map, GC marks and binding map |
+| Image end, rounded to a page, up to `HEAP_LIM` | Shared: heap pages grow up from the image (the first holds page metadata) and the native stack grows down from `HEAP_LIM` |
+| `HEAP_LIM` up to `CF00H` | The collector maps that do not fit above the bands |
 | `CF00H`–`DF00H` | Operator side stack, page tables, argument packet, quote stack, datum reader, runtime symbols |
 | `DF00H`–`E400H` | GC worklist and a spare page |
+| `E400H` up to the BDOS | The collector maps, as many as fit |
+
+`PAGE_INI` lays the variable part out at start-up.  The three collector maps
+(closure starts and string markers, marks and vector types, binding starts)
+cover exactly the heap's pages, 40 bytes for each page.  Each goes above the
+fixed bands, between `E400H` and the BDOS, if it fits there, and below
+`CF00H` otherwise; the heap ends at `HEAP_LIM`, the highest page that leaves
+room for the maps below the bands, and the stack starts there.  So the maps
+cost nothing for the image's own pages, and a larger TPA gives their room
+back to the heap and the stack.  A program's heap and stack, against the
+old fixed layout (heap and stack below `B800H`, maps at `B800H`–`CF00H`):
+
+| Image end | TPA to `E406H` | TPA to `EC06H` |
+| --- | ---: | ---: |
+| `4900H` | 29,440 (+1,024) | 31,232 (+2,816) |
+| `6000H` | 24,576 (+2,048) | 25,856 (+3,328) |
+| `8000H` | 17,408 (+3,072) | 18,944 (+4,608) |
+| `A000H` | 10,240 (+4,096) | 12,032 (+5,888) |
+| `B100H` | 6,400 (+4,608) | 7,680 (+5,888) |
 
 The heap and the stack meet wherever the program needs.  The heap grows
-only to `RT_SOFT` (`A800H`), 4 KB below the stack's start, until a collection has run;
+only to `RT_SOFT` pages (4 KB) below the stack's start until a collection has run;
 the allocation retried after a collection may take a page past it, up to a
 page below the stack pointer.  So garbage is collected before the heap takes
 memory the stack may want, and a program that keeps more live data than the
 soft line allows still gets it.  Every frame and nested runtime call checks
 the stack against `STK_FLR`, a page above the highest heap page.  A page, once
-used, is rarely returned, so stack space the heap has taken stays taken.  A program trades code for heap and stack byte
-for byte up to the 45,056-byte limit.  Sizing the collector maps to the
-actual heap rather than to all of `3000H`–`C000H` (they take 5.8 KB, about 5
-KB more than a small heap needs) would give still more room, as would
-placing the bands from the BDOS entry down on a larger TPA.
+used, is rarely returned, so stack space the heap has taken stays taken.  A
+program trades code for heap and stack byte for byte, less the maps' 40
+bytes a page, up to the 45,056-byte limit.
 
 ## 7. Silent failures
 
@@ -286,9 +303,10 @@ In order of value to a programmer:
    `cond` and tail stacks are all at least twice their former size.
 5. **One region for heap and stack.** Done: frames are 6 bytes, pending
    operands are linked through the stack instead of a 255-entry table, and the
-   heap and stack share the memory below `B800H`, so recursion is bounded by
-   free memory and programs can be 45,056 bytes. Still to do: sizing the maps
-   to the heap, and using a larger TPA.
+   heap and stack share the memory the program leaves, so recursion is
+   bounded by free memory and programs can be 45,056 bytes.  The collector
+   maps are sized to the heap at start-up and use the TPA above `E400H`
+   when there is one, which gives a program 1–6 KB more.
 6. **Missing standard procedures.** Done: `list->vector`, `vector->list`,
    `string->list`, `list->string`, `make-string`, `string-set!`,
    `vector-fill!`, `list-copy`, `string->number` (integers) and

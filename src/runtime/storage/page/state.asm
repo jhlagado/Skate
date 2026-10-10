@@ -16,6 +16,10 @@ PAGE_RUN: DW 0                     ; Scratch requested run length.
 PAGE_POS: DW 0                     ; Successful run start index for address output.
 PAGE_PTR: DW 0                     ; Scratch release address.
 PAGE_END: DW 0                     ; Scratch exclusive end for extent checks.
+MAP_SZ:   DW 0                     ; Size of the map being placed.
+MAP_HCUR: DW 0                     ; Next free byte above the fixed bands.
+MAP_HTOP: DW 0                     ; End of the free memory above them.
+MAP_LCUR: DW 0                     ; Next free byte below them.
 PAGE_OK:  DB 0                     ; Nonzero after a successful page-domain init.
 PAGE_HRD:  DB 0                    ; Nonzero lets the next page pass the soft line.
 PAGE_BIT:  DB 0                    ; Selected bit mask for the current page.

@@ -3,16 +3,17 @@
 ; Included in runtime order by ../roots.asm.
 
 ; Convert an aligned binding byte address to its bitmap byte and bit mask.
-; The map holds one bit per four-byte cell from RT_HEAP.
+; The map holds one bit per four-byte cell from PAGE_ORG.
 GC_VARAT:
         LD HL,(BND_CELL)
-        LD DE,RT_HEAP
+        LD DE,(PAGE_ORG)
         OR A
         SBC HL,DE
         JR C,.BAD
-        LD A,H
-        CP 90H
-        JR NC,.BAD
+        LD A,(MAP_PGS)             ; The cell must lie in the mapped pages.
+        DEC A
+        CP H
+        JR C,.BAD
         LD A,L
         AND 3
         JR NZ,.BAD
@@ -40,7 +41,7 @@ GC_VARAT:
         RR L
         SRL H
         RR L
-        LD DE,BND_MAP
+        LD DE,(BND_MAP)
         ADD HL,DE
         OR A
         RET
@@ -76,7 +77,7 @@ GC_DROP:
         LD HL,(CL_OBJ)
         CALL GC_OBJAT
         LD C,A
-        LD DE,CL_MAP
+        LD DE,(CL_MAP)
         ADD HL,DE
         LD A,C
         ADD A,A                    ; Include the string marker bit.
@@ -93,7 +94,7 @@ GC_UNSEE:
         LD HL,(CL_OBJ)
         CALL GC_OBJAT
         LD C,A
-        LD DE,GC_MARKS
+        LD DE,(GC_MARKS)
         ADD HL,DE
         LD A,C
         CPL

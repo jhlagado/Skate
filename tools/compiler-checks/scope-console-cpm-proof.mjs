@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { loadAssembly } from "../../tests/z80.ts";
 import { validateAso } from "./aso-proof.mjs";
+import { predictHeapLimit } from "./cpm-harness.mjs";
 import { assembleTriptychCpuFirmware } from "../../../triptych/tools/cpm22-native-image.mjs";
 import {
   installCpm22File,
@@ -38,7 +39,6 @@ assert.equal(compiler.image.base, 0);
 assert.equal(provider.image.bytes.length - 0x100, compiler.address("RT_SIZE"));
 const heapPointerAddress = provider.address("STK_FLR");
 const pageMinAddress = provider.address("PAGE_MIN");
-const stackStart = provider.address("RT_STK");
 const lowStackAddress = provider.address("RT_LOWSP");
 const bindingAllocationAddress = provider.address("CNT_BIND");
 const closureAllocationAddress = provider.address("CNT_CLOS");
@@ -46,9 +46,11 @@ const pairAllocationAddress = provider.address("CNT_PAIR");
 const collectionCountAddress = provider.address("CNT_GC");
 const frameCountAddress = provider.address("CNT_MAPS");
 // The 4 KB below the stack's start, watched for stack writes; small console
-// programs keep their heap pages far below it.
-const stackTop = provider.address("RT_STK");
-const stackGuardBase = stackTop - 0x1000;
+// programs keep their heap pages far below it.  The start depends on the
+// program's size, so it is predicted at entry and checked after the run.
+const heapLimitAddress = provider.address("HEAP_LIM");
+let stackTop = 0;
+let stackGuardBase = 0;
 let disk = installCpm22File(backing, {
   name: "SKATE.COM",
   bytes: compiler.image.bytes.slice(0x100),
@@ -508,6 +510,13 @@ function readWord(address) {
   return bytes[0] | bytes[1] << 8;
 }
 function prepareStackMeasurement() {
+  stackTop = predictHeapLimit(
+    readWord(provider.address("RT_LIMIT")),
+    readWord(0x0006),
+    provider.address("RT_OPLO"),
+    provider.address("RT_TOP"),
+  );
+  stackGuardBase = stackTop - 0x1000;
   machine.write_ram(
     stackGuardBase,
     new Uint8Array(stackTop - stackGuardBase).fill(0xa5),
@@ -693,7 +702,12 @@ function runCase([name, , expected, input = "", exact = true], measurements) {
     observedLowSp < stackTop,
     `${name}: no stack writes were observed`,
   );
-  assert.ok(heapEnd <= stackStart, `${name}: the heap reached the stack`);
+  assert.equal(
+    readWord(heapLimitAddress),
+    stackTop,
+    `${name}: the stack did not start where predicted`,
+  );
+  assert.ok(heapEnd <= stackTop, `${name}: the heap reached the stack`);
   measurements[measurements.length - 1].lowSp = nativeLowSp;
   measurements[measurements.length - 1].observedLowSp = observedLowSp;
   measurements[measurements.length - 1].heapEnd = heapEnd;

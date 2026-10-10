@@ -10,6 +10,23 @@ export function readWord(memory: Uint8Array, address: number) {
   return memory[address] | memory[address + 1] << 8;
 }
 
+/**
+ * Give a hand-built fixture the layout PAGE_INI would make for a heap from
+ * 3000H to B800H, with the maps at B800H, C100H and CA00H.
+ */
+export function fixedLayout(
+  assembled: { address: (label: string) => number },
+  memory: Uint8Array,
+) {
+  writeWord(memory, assembled.address("PAGE_ORG"), 0x3000);
+  writeWord(memory, assembled.address("HEAP_LIM"), 0xb800);
+  writeWord(memory, assembled.address("CL_MAP"), 0xb800);
+  writeWord(memory, assembled.address("GC_MARKS"), 0xc100);
+  writeWord(memory, assembled.address("BND_MAP"), 0xca00);
+  writeWord(memory, assembled.address("MAP_LEN"), 0x900);
+  memory[assembled.address("MAP_PGS")] = 0x90;
+}
+
 export async function managedRuntime(withPairs = false) {
   const assembled = await loadAssembly(
     "src/runtime/image.asm",
@@ -17,26 +34,7 @@ export async function managedRuntime(withPairs = false) {
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
   const imageEnd = (assembled.image.end + 0xff) & 0xff00;
-  const closureMapBytes = assembled.address("GC_MARKS") -
-    assembled.address("CL_MAP");
-  const bindingMapBytes = assembled.address("RT_HIGH") -
-    assembled.address("BND_MAP");
   memory.fill(0, imageEnd, 0xe000);
-  memory.fill(
-    0,
-    assembled.address("CL_MAP"),
-    assembled.address("CL_MAP") + closureMapBytes,
-  );
-  memory.fill(
-    0,
-    assembled.address("GC_MARKS"),
-    assembled.address("GC_MARKS") + closureMapBytes,
-  );
-  memory.fill(
-    0,
-    assembled.address("BND_MAP"),
-    assembled.address("BND_MAP") + bindingMapBytes,
-  );
   memory.fill(
     0,
     assembled.address("CL_FREE"),
@@ -64,11 +62,6 @@ export async function managedRuntime(withPairs = false) {
   );
   writeWord(memory, assembled.address("CL_TOP"), 0);
   writeWord(memory, assembled.address("BND_TOP"), 0);
-  writeWord(
-    memory,
-    assembled.address("HEAP_LIM"),
-    assembled.address("RT_HIEND"),
-  );
   // Test descriptors live in the transient area, beyond the assembled image.
   // Keep the published-image bound above them while the allocator still uses
   // the real image end for its first managed page.

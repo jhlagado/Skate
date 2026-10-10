@@ -2,12 +2,7 @@
 ; Entry points: RT_BOOT, RT_LOAD/RT_STORE and RT_ADD/RT_SUB/RT_MUL.
 ; Included in runtime order by ../core.asm.
 
-RT_HEAP    EQU 03000H              ; Base used by the full-pool allocation maps.
-RT_LOEND EQU 0B800H              ; The heap and the stack share memory up to here.
-RT_STK   EQU 0B800H               ; The stack starts here and grows down to the heap.
-RT_HIGH  EQU 0B800H               ; No high band: the maps start at RT_HIEND.
-RT_HPAGE  EQU 0B8H                ; High byte of RT_HIGH for page mapping.
-RT_HIEND  EQU 0B800H              ; Managed objects stop below the stack's start.
+RT_LOEND EQU 0B800H              ; The compiler keeps a program's image below here.
 RT_EPAGE   EQU 0E0H               ; Pair tag-seven values above this byte are escapes.
 RT_ESC   EQU 0E000H               ; Escape generations occupy the non-heap range.
 RT_OPLO EQU 0CF00H             ; Operator values use the next transient band.
@@ -21,7 +16,8 @@ RT_DRFHI   EQU 0DD00H             ; Reader frame stack end, exclusive.
 RT_GCLO  EQU 0DF00H              ; Collector mark worklist starts here.
 RT_GCHI  EQU 0E300H              ; Collector mark worklist ends here.
 RT_SPARE  EQU 00100H              ; Keep one page between the stack and the heap.
-RT_SOFT  EQU RT_STK-01000H         ; The heap passes this only after a collection.
+RT_SOFT  EQU 010H                ; Until a collection has run, the heap stays
+                                  ; this many pages below HEAP_LIM.
 RT_EXTRA EQU 0                   ; The external map band needs no extra pool pages.
 RT_TOP   EQU 0E400H               ; The TPA must extend at least this far.
 ; A descriptor's owned and capture masks are each W bytes, where the width W
@@ -41,10 +37,8 @@ RT_BOOT:                          ; START in entry.asm set the boot stack.
         SBC HL,DE
         JP C,RT_NOMEM             ; A smaller TPA would let the stack overwrite BDOS.
 .TPA_OK:
-        LD SP,RT_STK              ; The stack grows down from the fixed bands.
+        LD SP,RT_GCHI             ; The idle GC worklist holds the start-up stack.
         CALL RST_SET              ; Install the RST vectors generated code uses.
-        LD HL,RT_STK              ; The native stack begins below the fixed bands.
-        LD (RT_LOWSP),HL          ; Record its low-water mark for qualification.
         LD HL,0                    ; Reset the runtime counters for this program.
         LD (CNT_BIND),HL
         LD (CNT_CLOS),HL
@@ -52,8 +46,11 @@ RT_BOOT:                          ; START in entry.asm set the boot stack.
         LD (CNT_GC),HL
         LD (CNT_MAPS),HL
         LD HL,(RT_LIMIT)          ; Recover the compiler's final loaded image end.
-        CALL PAGE_INI              ; Derive and initialise the page-domain metadata.
+        CALL PAGE_INI              ; Lay out the heap, maps and page metadata.
         JP C,ERROR                 ; Refuse to enter generated code without pages.
+        LD HL,(HEAP_LIM)           ; The stack grows down from the heap's end.
+        LD SP,HL
+        LD (RT_LOWSP),HL           ; Record its low-water mark for qualification.
         LD HL,(PAGE_MIN)           ; The stack may come down to a page above the
         INC H                      ; highest heap page; PAGE_NEW raises this.
         LD (STK_FLR),HL
@@ -88,21 +85,6 @@ RT_BOOT:                          ; START in entry.asm set the boot stack.
         LD (OUT_MODE),A
         LD (ROOT_TOP),A            ; No generated operands are pending at entry.
         LD (ROOT_TOP+1),A
-        LD HL,CL_MAP               ; Clear closure-start metadata for this run.
-        LD DE,CL_MAP+1
-        LD BC,08FFH
-        LD (HL),A
-        LDIR
-        LD HL,GC_MARKS             ; Clear closure mark metadata for this run.
-        LD DE,GC_MARKS+1
-        LD BC,08FFH
-        LD (HL),A
-        LDIR
-        LD HL,BND_MAP              ; Clear binding allocation-start metadata.
-        LD DE,BND_MAP+1
-        LD BC,047FH
-        LD (HL),A
-        LDIR
         LD HL,CL_FREE               ; Empty every rounded closure size class.
         LD DE,CL_FREE+1
         LD BC,129
@@ -114,7 +96,7 @@ RT_BOOT:                          ; START in entry.asm set the boot stack.
         LD BC,CL_LIMIT-CL_OWNER-1   ; assigned: the four tables are one block.
         LD (HL),A
         LDIR
-        LD HL,RT_HEAP               ; Keep a map base for the first allocation.
+        LD HL,(PAGE_ORG)           ; Keep a map base for the first allocation.
         LD (CL_TOP),HL
         LD HL,0                     ; Binding pages supply their own cursors.
         LD (BND_TOP),HL

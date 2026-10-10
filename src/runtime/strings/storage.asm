@@ -63,7 +63,7 @@ STR_TEST:
         LD HL,(CL_OBJ)
         CALL GC_OBJAT
         LD C,A
-        LD DE,CL_MAP
+        LD DE,(CL_MAP)
         ADD HL,DE
         LD A,(HL)
         AND C
@@ -81,7 +81,7 @@ STR_SETM:
         LD (CL_OBJ),HL
         CALL GC_OBJAT
         LD C,A
-        LD DE,CL_MAP
+        LD DE,(CL_MAP)
         ADD HL,DE
         LD A,C
         ADD A,A
@@ -96,7 +96,7 @@ STR_CLRM:
         LD HL,(CL_OBJ)
         CALL GC_OBJAT
         LD C,A
-        LD DE,CL_MAP
+        LD DE,(CL_MAP)
         ADD HL,DE
         LD A,C
         ADD A,A
@@ -112,7 +112,7 @@ STR_CLRM:
 ; Validate a managed string's start, class extent and length byte.
 STR_CHK:
         LD (CL_OBJ),HL
-        LD DE,RT_HEAP
+        LD DE,(PAGE_ORG)
         OR A
         SBC HL,DE
         JP C,.BAD

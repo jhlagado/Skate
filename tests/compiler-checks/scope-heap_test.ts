@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { loadAssembly } from "../z80.ts";
+import { fixedLayout } from "./scope-runtime-fixture.ts";
 
 const PAIR_BYTES = 8;
 const PAIRS_PER_SLAB = 32;
@@ -46,6 +47,7 @@ async function collectorFixture(rootCount: number) {
   const memory = assembled.runtime.hardware.memory;
   const cpu = assembled.runtime.cpu;
   memory.fill(0, 0x8000, 0x9000);
+  fixedLayout(assembled, memory);
   const slabBase = (assembled.image.end + 0xff) & 0xff00;
   const slabCount = 17;
   assert.ok(slabBase + slabCount * 0x100 <= 0x8000, "slabs overlap roots");
